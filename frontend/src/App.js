@@ -1,53 +1,95 @@
-import { useEffect } from "react";
-import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from '@/lib/AuthContext';
+import { Toaster } from '@/components/ui/sonner';
+import '@/App.css';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+// Pages
+import LoginPage from '@/pages/LoginPage';
+import SuperAdminDashboard from '@/pages/SuperAdminDashboard';
+import TeamDashboard from '@/pages/TeamDashboard';
+import AuctionDisplay from '@/pages/AuctionDisplay';
+import EventManagement from '@/pages/EventManagement';
+import TeamManagement from '@/pages/TeamManagement';
+import PlayerManagement from '@/pages/PlayerManagement';
+import AuctionControl from '@/pages/AuctionControl';
+import Analytics from '@/pages/Analytics';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
 function App() {
   return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
+    <AuthProvider>
+      <div className="App">
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/display/:eventId" element={<AuctionDisplay />} />
+            
+            {/* Super Admin Routes */}
+            <Route 
+              path="/admin" 
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <SuperAdminDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/events" 
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <EventManagement />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/teams/:eventId" 
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <TeamManagement />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/players/:eventId" 
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <PlayerManagement />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/auction/:eventId" 
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <AuctionControl />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/analytics/:eventId" 
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <Analytics />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Team Routes */}
+            <Route 
+              path="/team" 
+              element={
+                <ProtectedRoute>
+                  <TeamDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            
+            <Route path="/" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </BrowserRouter>
+        <Toaster position="top-right" />
+      </div>
+    </AuthProvider>
   );
 }
 
