@@ -75,7 +75,7 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 relative overflow-hidden">
       {/* Navigation */}
-      <nav className="bg-black/20 backdrop-blur-md border-b border-white/10">
+      <nav className="bg-black/20 backdrop-blur-md border-b border-white/10 relative z-50">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -104,7 +104,7 @@ const LandingPage = () => {
       </nav>
 
       {/* Background Sports Images */}
-      <div className="absolute inset-0 opacity-10">
+      <div className="absolute inset-0 opacity-10 z-0 pointer-events-none">
         <div className="absolute top-10 left-10 w-32 h-32 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 blur-xl"></div>
         <div className="absolute top-40 right-20 w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-blue-500 blur-xl"></div>
         <div className="absolute bottom-20 left-1/4 w-40 h-40 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 blur-xl"></div>
@@ -115,7 +115,7 @@ const LandingPage = () => {
       <section className="py-20 px-6 relative z-10">
         {/* Hero Background Image */}
         <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-20"
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-20 pointer-events-none"
           style={{
             backgroundImage: 'url(/images/sports/hero-img.jpg)',
             backgroundPosition: 'center center',
@@ -123,7 +123,7 @@ const LandingPage = () => {
           }}
         ></div>
         {/* Dark overlay for better text readability */}
-        <div className="absolute inset-0 bg-black/40"></div>
+        <div className="absolute inset-0 bg-black/40 pointer-events-none"></div>
         
         <div className="container mx-auto text-center relative z-10">
           <div className="max-w-4xl mx-auto">
