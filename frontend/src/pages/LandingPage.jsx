@@ -80,7 +80,10 @@ const LandingPage = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Trophy className="w-8 h-8 text-yellow-400" />
-              <span className="text-2xl font-bold text-white">AuctionPro</span>
+              <div className="flex flex-col">
+                <span className="text-2xl font-bold text-white">PowerAuctions</span>
+                <span className="text-xs text-white/60">powered by Turgut</span>
+              </div>
             </div>
             <div className="flex items-center space-x-4">
               <Link 
@@ -110,7 +113,19 @@ const LandingPage = () => {
 
       {/* Hero Section */}
       <section className="py-20 px-6 relative z-10">
-        <div className="container mx-auto text-center">
+        {/* Hero Background Image */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-20"
+          style={{
+            backgroundImage: 'url(/images/sports/hero-img.jpg)',
+            backgroundPosition: 'center center',
+            backgroundSize: 'cover'
+          }}
+        ></div>
+        {/* Dark overlay for better text readability */}
+        <div className="absolute inset-0 bg-black/40"></div>
+        
+        <div className="container mx-auto text-center relative z-10">
           <div className="max-w-4xl mx-auto">
             {/* Hero Image */}
             <div className="mb-8 flex justify-center">
@@ -214,7 +229,7 @@ const LandingPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div>
               <h2 className="text-4xl md:text-5xl font-bold text-white mb-8">
-                Why Choose AuctionPro?
+                Why Choose PowerAuctions?
               </h2>
               <div className="space-y-4">
                 {benefits.map((benefit, index) => (
@@ -241,6 +256,15 @@ const LandingPage = () => {
                 <div className="text-8xl absolute top-4 left-4">🏟️</div>
                 <div className="text-6xl absolute bottom-8 right-8">🎯</div>
               </div>
+              {/* Hero image as subtle background */}
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-5 rounded-3xl"
+                style={{
+                  backgroundImage: 'url(/images/sports/hero-img.jpg)',
+                  backgroundPosition: 'center center',
+                  backgroundSize: 'cover'
+                }}
+              ></div>
               
               <div className="bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-3xl p-8 backdrop-blur-md border border-white/20 relative z-10">
                 {/* Central trophy image */}
@@ -307,7 +331,7 @@ const LandingPage = () => {
               Trusted by Sports Leaders
             </h2>
             <p className="text-xl text-white/70 max-w-2xl mx-auto">
-              See what sports organizations are saying about AuctionPro
+              See what sports organizations are saying about PowerAuctions
             </p>
           </div>
           
@@ -379,7 +403,7 @@ const LandingPage = () => {
               Ready to Transform Your Auctions?
             </h2>
             <p className="text-xl text-white/70 mb-8">
-              Join hundreds of sports organizations already using AuctionPro to run successful auctions
+              Join hundreds of sports organizations already using PowerAuctions to run successful auctions
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Link 
@@ -405,14 +429,16 @@ const LandingPage = () => {
             <div className="col-span-1 md:col-span-2">
               <div className="flex items-center space-x-2 mb-4">
                 <Trophy className="w-8 h-8 text-yellow-400" />
-                <span className="text-2xl font-bold text-white">AuctionPro</span>
+                <div className="flex flex-col">
+                  <span className="text-2xl font-bold text-white">PowerAuctions</span>
+                  <span className="text-xs text-white/60">powered by Turgut</span>
+                </div>
               </div>
               <p className="text-white/60 max-w-md">
                 The most advanced sports auction platform designed for professional leagues, 
                 tournaments, and sports organizations worldwide.
               </p>
             </div>
-            
             <div>
               <h4 className="text-white font-semibold mb-4">Product</h4>
               <ul className="space-y-2 text-white/60">
@@ -435,7 +461,7 @@ const LandingPage = () => {
           </div>
           
           <div className="border-t border-white/10 mt-8 pt-8 text-center text-white/60">
-            <p>&copy; 2024 AuctionPro. All rights reserved.</p>
+            <p>&copy; 2024 PowerAuctions. All rights reserved.</p>
           </div>
         </div>
       </footer>

@@ -140,7 +140,7 @@ const TeamManagement = () => {
       <div className="container mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Team Management</h1>
+            <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Team Management</h1>
             <p className="text-white/80">{event?.name || 'Loading...'}</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); }}>

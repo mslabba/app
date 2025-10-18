@@ -140,7 +140,7 @@ const CategoryManagement = () => {
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="mb-6">
-          <h1 className="text-4xl font-bold text-white mb-2">Category Management</h1>
+          <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Category Management</h1>
           {event && (
             <p className="text-white/80">Managing categories for: <span className="font-semibold">{event.name}</span></p>
           )}

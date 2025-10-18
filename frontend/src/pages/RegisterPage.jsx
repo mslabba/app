@@ -46,8 +46,8 @@ const RegisterPage = () => {
       <div className="w-full max-w-md fade-in">
         <Card className="glass border-white/20 shadow-2xl">
           <CardHeader className="text-center space-y-2">
-            <CardTitle className="text-3xl font-bold text-white">Create Account</CardTitle>
-            <CardDescription className="text-white/80">Join the sports auction platform</CardDescription>
+            <CardTitle className="text-3xl font-bold text-white">PowerAuctions</CardTitle>
+            <CardDescription className="text-white/80">powered by Turgut - Join the sports auction platform</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <form onSubmit={handleSubmit} className="space-y-4">

@@ -36,8 +36,8 @@ const SuperAdminDashboard = () => {
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8" data-testid="admin-dashboard">
-          <h1 className="text-4xl font-bold text-white mb-2">Super Admin Dashboard</h1>
-          <p className="text-white/80">Manage your sports auction events</p>
+          <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Super Admin</h1>
+          <p className="text-white/80">powered by Turgut - Manage your sports auction events</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
