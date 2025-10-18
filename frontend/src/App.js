@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/sonner';
 import '@/App.css';
 
 // Pages
+import LandingPage from '@/pages/LandingPage';
 import LoginPage from '@/pages/LoginPage';
 import RegisterPage from '@/pages/RegisterPage';
 import SuperAdminDashboard from '@/pages/SuperAdminDashboard';
@@ -17,8 +18,8 @@ import AuctionControl from '@/pages/AuctionControl';
 import Analytics from '@/pages/Analytics';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
-// Role-based redirect component
-const RoleBasedRedirect = () => {
+// Dashboard redirect component for authenticated users
+const DashboardRedirect = () => {
   const { isAuthenticated, isSuperAdmin, userProfile, loading } = useAuth();
   
   if (loading) {
@@ -33,7 +34,7 @@ const RoleBasedRedirect = () => {
   }
   
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
   
   console.log('User profile in redirect:', userProfile);
@@ -52,9 +53,14 @@ function App() {
       <div className="App">
         <BrowserRouter>
           <Routes>
+            {/* Public Routes */}
+            <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/display/:eventId" element={<AuctionDisplay />} />
+            
+            {/* Dashboard redirect for authenticated users */}
+            <Route path="/dashboard" element={<DashboardRedirect />} />
             
             {/* Super Admin Routes */}
             <Route 
@@ -123,8 +129,6 @@ function App() {
                 </ProtectedRoute>
               } 
             />
-            
-            <Route path="/" element={<RoleBasedRedirect />} />
           </Routes>
         </BrowserRouter>
         <Toaster position="top-right" />

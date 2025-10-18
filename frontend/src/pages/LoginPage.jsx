@@ -21,8 +21,8 @@ const LoginPage = () => {
     try {
       await signInWithEmail(email, password);
       toast.success('Login successful!');
-      // Navigate to home and let role-based redirect handle it
-      navigate('/');
+      // Navigate to dashboard for role-based redirect
+      navigate('/dashboard');
     } catch (error) {
       console.error('Login error:', error);
       toast.error(error.message || 'Failed to login');
@@ -36,8 +36,8 @@ const LoginPage = () => {
     try {
       await signInWithGoogle();
       toast.success('Login successful!');
-      // Navigate to home and let role-based redirect handle it
-      navigate('/');
+      // Navigate to dashboard for role-based redirect
+      navigate('/dashboard');
     } catch (error) {
       console.error('Google login error:', error);
       toast.error('Failed to login with Google');
