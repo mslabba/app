@@ -87,17 +87,26 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         if db:
             user_doc = db.collection('users').document(current_user['uid']).get()
             if user_doc.exists:
-                return UserResponse(**user_doc.to_dict())
+                user_data = user_doc.to_dict()
+                print(f"User data from Firestore: {user_data}")  # Debug log
+                return UserResponse(**user_data)
         
-        # Fallback to token data
-        return UserResponse(
-            uid=current_user['uid'],
-            email=current_user.get('email', ''),
-            role=UserRole(current_user.get('role', 'viewer')),
-            display_name=current_user.get('name', ''),
-            team_id=current_user.get('team_id')
-        )
+        # If user doesn't exist in Firestore, create them with default role
+        user_data = {
+            'uid': current_user['uid'],
+            'email': current_user.get('email', ''),
+            'role': 'team_admin',  # Default role
+            'display_name': current_user.get('name', current_user.get('email', '').split('@')[0]),
+            'team_id': None
+        }
+        
+        # Save to Firestore
+        if db:
+            db.collection('users').document(current_user['uid']).set(user_data)
+        
+        return UserResponse(**user_data)
     except Exception as e:
+        print(f"Error in get_me: {str(e)}")  # Debug log
         raise HTTPException(status_code=400, detail=str(e))
 
 # ============= EVENT ROUTES =============
@@ -114,6 +123,8 @@ async def create_event(event_data: EventCreate, current_user: dict = Depends(req
             'status': AuctionStatus.NOT_STARTED.value,
             'rules': event_data.rules.model_dump(),
             'description': event_data.description,
+            'logo_url': event_data.logo_url,
+            'banner_url': event_data.banner_url,
             'created_at': datetime.now(timezone.utc).isoformat(),
             'created_by': current_user['uid']
         }
@@ -167,7 +178,9 @@ async def update_event(event_id: str, event_data: EventCreate, current_user: dic
             'name': event_data.name,
             'date': event_data.date,
             'rules': event_data.rules.model_dump(),
-            'description': event_data.description
+            'description': event_data.description,
+            'logo_url': event_data.logo_url,
+            'banner_url': event_data.banner_url
         })
         
         return {"message": "Event updated successfully"}
@@ -205,6 +218,71 @@ async def get_event_categories(event_id: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@api_router.get("/events/{event_id}/categories", response_model=List[Category])
+async def get_categories_for_event(event_id: str):
+    """Get categories for an event (alternative endpoint)"""
+    try:
+        if not db:
+            return []
+        
+        categories = db.collection('categories').where('event_id', '==', event_id).stream()
+        return [Category(**cat.to_dict()) for cat in categories]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/categories/{category_id}", response_model=Category)
+async def update_category(category_id: str, category_data: CategoryCreate, current_user: dict = Depends(require_super_admin)):
+    """Update a category"""
+    try:
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        # Check if category exists
+        category_doc = db.collection('categories').document(category_id).get()
+        if not category_doc.exists:
+            raise HTTPException(status_code=404, detail="Category not found")
+        
+        # Update category data
+        updated_data = {
+            'name': category_data.name,
+            'description': category_data.description,
+            'min_price': category_data.min_price,
+            'max_price': category_data.max_price,
+            'event_id': category_data.event_id
+        }
+        
+        db.collection('categories').document(category_id).update(updated_data)
+        
+        # Get updated category
+        updated_doc = db.collection('categories').document(category_id).get()
+        return Category(**updated_doc.to_dict())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/categories/{category_id}")
+async def delete_category(category_id: str, current_user: dict = Depends(require_super_admin)):
+    """Delete a category"""
+    try:
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        # Check if category exists
+        category_doc = db.collection('categories').document(category_id).get()
+        if not category_doc.exists:
+            raise HTTPException(status_code=404, detail="Category not found")
+        
+        # Delete all players in this category first
+        players = db.collection('players').where('category_id', '==', category_id).stream()
+        for player in players:
+            db.collection('players').document(player.id).delete()
+        
+        # Delete the category
+        db.collection('categories').document(category_id).delete()
+        
+        return {"message": "Category and associated players deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 # ============= TEAM ROUTES =============
 
 @api_router.post("/teams", response_model=Team)
@@ -212,6 +290,19 @@ async def create_team(team_data: TeamCreate, current_user: dict = Depends(requir
     """Create a new team"""
     try:
         team_id = str(uuid.uuid4())
+        admin_uid = None
+        
+        # If admin_email is provided, find the user and get their UID
+        if team_data.admin_email and db:
+            users = db.collection('users').where('email', '==', team_data.admin_email).limit(1).stream()
+            user_list = list(users)
+            if user_list:
+                admin_uid = user_list[0].to_dict().get('uid')
+                # Update user's team_id
+                db.collection('users').document(admin_uid).update({'team_id': team_id})
+            else:
+                raise HTTPException(status_code=404, detail=f"User with email {team_data.admin_email} not found")
+        
         team_doc = {
             'id': team_id,
             'name': team_data.name,
@@ -222,7 +313,8 @@ async def create_team(team_data: TeamCreate, current_user: dict = Depends(requir
             'max_squad_size': team_data.max_squad_size,
             'logo_url': team_data.logo_url,
             'color': team_data.color,
-            'admin_uid': None,
+            'admin_uid': admin_uid,
+            'admin_email': team_data.admin_email,
             'players_count': 0
         }
         
@@ -230,6 +322,66 @@ async def create_team(team_data: TeamCreate, current_user: dict = Depends(requir
             db.collection('teams').document(team_id).set(team_doc)
         
         return Team(**team_doc)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/teams/{team_id}", response_model=Team)
+async def update_team(team_id: str, team_data: TeamCreate, current_user: dict = Depends(require_super_admin)):
+    """Update a team"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Check if team exists
+        team_doc = db.collection('teams').document(team_id).get()
+        if not team_doc.exists:
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        admin_uid = None
+        old_team_data = team_doc.to_dict()
+        
+        # Handle admin assignment changes
+        if team_data.admin_email:
+            if team_data.admin_email != old_team_data.get('admin_email'):
+                # New admin assignment
+                users = db.collection('users').where('email', '==', team_data.admin_email).limit(1).stream()
+                user_list = list(users)
+                if user_list:
+                    admin_uid = user_list[0].to_dict().get('uid')
+                    # Update new admin's team_id
+                    db.collection('users').document(admin_uid).update({'team_id': team_id})
+                    
+                    # Clear old admin's team_id if exists
+                    if old_team_data.get('admin_uid'):
+                        db.collection('users').document(old_team_data['admin_uid']).update({'team_id': None})
+                else:
+                    raise HTTPException(status_code=404, detail=f"User with email {team_data.admin_email} not found")
+            else:
+                admin_uid = old_team_data.get('admin_uid')
+        else:
+            # Clear admin assignment
+            if old_team_data.get('admin_uid'):
+                db.collection('users').document(old_team_data['admin_uid']).update({'team_id': None})
+        
+        # Update team document
+        update_data = {
+            'name': team_data.name,
+            'budget': team_data.budget,
+            'remaining': team_data.budget - old_team_data.get('spent', 0),
+            'max_squad_size': team_data.max_squad_size,
+            'logo_url': team_data.logo_url,
+            'color': team_data.color,
+            'admin_uid': admin_uid,
+            'admin_email': team_data.admin_email
+        }
+        
+        db.collection('teams').document(team_id).update(update_data)
+        
+        # Return updated team
+        updated_team_doc = db.collection('teams').document(team_id).get()
+        return Team(**updated_team_doc.to_dict())
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -242,6 +394,26 @@ async def get_event_teams(event_id: str):
         
         teams = db.collection('teams').where('event_id', '==', event_id).stream()
         return [Team(**team.to_dict()) for team in teams]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/users/available-admins", response_model=List[UserResponse])
+async def get_available_team_admins(current_user: dict = Depends(require_super_admin)):
+    """Get users who can be assigned as team admins"""
+    try:
+        if not db:
+            return []
+        
+        # Get users with role 'team_admin' who don't have a team assigned
+        users = db.collection('users').where('role', '==', 'team_admin').stream()
+        available_users = []
+        
+        for user in users:
+            user_data = user.to_dict()
+            if not user_data.get('team_id'):  # User not assigned to any team
+                available_users.append(UserResponse(**user_data))
+        
+        return available_users
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -328,6 +500,90 @@ async def get_player(player_id: str):
         return Player(**player_data)
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/events/{event_id}/players", response_model=List[Player])
+async def get_event_players(event_id: str):
+    """Get all players for an event"""
+    try:
+        if not db:
+            return []
+        
+        # Get all categories for this event
+        categories = db.collection('categories').where('event_id', '==', event_id).stream()
+        category_ids = [cat.id for cat in categories]
+        
+        if not category_ids:
+            return []
+        
+        # Get all players for these categories
+        result = []
+        for category_id in category_ids:
+            players = db.collection('players').where('category_id', '==', category_id).stream()
+            for player in players:
+                player_data = player.to_dict()
+                if player_data.get('stats'):
+                    player_data['stats'] = PlayerStats(**player_data['stats'])
+                result.append(Player(**player_data))
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/players/{player_id}", response_model=Player)
+async def update_player(player_id: str, player_data: PlayerCreate, current_user: dict = Depends(require_super_admin)):
+    """Update a player"""
+    try:
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        # Check if player exists
+        player_doc = db.collection('players').document(player_id).get()
+        if not player_doc.exists:
+            raise HTTPException(status_code=404, detail="Player not found")
+        
+        # Update player data
+        updated_data = {
+            'name': player_data.name,
+            'category_id': player_data.category_id,
+            'base_price': player_data.base_price,
+            'photo_url': player_data.photo_url,
+            'age': player_data.age,
+            'position': player_data.position,
+            'specialty': player_data.specialty,
+            'stats': player_data.stats.model_dump() if player_data.stats else None,
+            'previous_team': player_data.previous_team
+        }
+        
+        db.collection('players').document(player_id).update(updated_data)
+        
+        # Get updated player
+        updated_doc = db.collection('players').document(player_id).get()
+        player_data_updated = updated_doc.to_dict()
+        if player_data_updated.get('stats'):
+            player_data_updated['stats'] = PlayerStats(**player_data_updated['stats'])
+        
+        return Player(**player_data_updated)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/players/{player_id}")
+async def delete_player(player_id: str, current_user: dict = Depends(require_super_admin)):
+    """Delete a player"""
+    try:
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        # Check if player exists
+        player_doc = db.collection('players').document(player_id).get()
+        if not player_doc.exists:
+            raise HTTPException(status_code=404, detail="Player not found")
+        
+        # Delete the player
+        db.collection('players').document(player_id).delete()
+        
+        return {"message": "Player deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

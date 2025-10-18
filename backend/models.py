@@ -58,6 +58,8 @@ class EventCreate(BaseModel):
     date: str
     rules: EventRules
     description: Optional[str] = None
+    logo_url: Optional[str] = None
+    banner_url: Optional[str] = None
 
 class Event(BaseModel):
     id: str
@@ -66,6 +68,8 @@ class Event(BaseModel):
     status: AuctionStatus = AuctionStatus.NOT_STARTED
     rules: EventRules
     description: Optional[str] = None
+    logo_url: Optional[str] = None
+    banner_url: Optional[str] = None
     created_at: str
     created_by: str
 
@@ -110,6 +114,7 @@ class Team(BaseModel):
     logo_url: Optional[str] = None
     color: Optional[str] = None
     admin_uid: Optional[str] = None
+    admin_email: Optional[str] = None
     players_count: int = 0
 
 # Player Models

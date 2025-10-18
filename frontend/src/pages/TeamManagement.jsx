@@ -6,10 +6,12 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Users, DollarSign } from 'lucide-react';
+import { Plus, Users, DollarSign, Edit } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
+import ImageUpload from '@/components/ImageUpload';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -20,17 +22,21 @@ const TeamManagement = () => {
   const [event, setEvent] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [editingTeam, setEditingTeam] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     budget: 10000000,
     max_squad_size: 18,
     color: '#667eea',
-    logo_url: ''
+    logo_url: '',
+    admin_email: ''
   });
+  const [availableAdmins, setAvailableAdmins] = useState([]);
 
   useEffect(() => {
     fetchEvent();
     fetchTeams();
+    fetchAvailableAdmins();
   }, [eventId]);
 
   const fetchEvent = async () => {
@@ -51,35 +57,72 @@ const TeamManagement = () => {
     }
   };
 
+  const fetchAvailableAdmins = async () => {
+    try {
+      const response = await axios.get(`${API}/users/available-admins`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setAvailableAdmins(response.data);
+    } catch (error) {
+      console.error('Failed to load available admins:', error);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      await axios.post(`${API}/teams`, {
-        ...formData,
-        event_id: eventId
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      toast.success('Team created successfully!');
-      setIsDialogOpen(false);
+      if (editingTeam) {
+        await axios.put(`${API}/teams/${editingTeam.id}`, {
+          ...formData,
+          event_id: eventId
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        toast.success('Team updated successfully!');
+      } else {
+        await axios.post(`${API}/teams`, {
+          ...formData,
+          event_id: eventId
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        toast.success('Team created successfully!');
+      }
       fetchTeams();
+      fetchAvailableAdmins(); // Refresh available admins
       resetForm();
     } catch (error) {
-      toast.error('Failed to create team');
+      toast.error(error.response?.data?.detail || (editingTeam ? 'Failed to update team' : 'Failed to create team'));
     } finally {
       setLoading(false);
     }
   };
 
+  const handleEdit = (team) => {
+    setEditingTeam(team);
+    setFormData({
+      name: team.name,
+      budget: team.budget,
+      max_squad_size: team.max_squad_size,
+      color: team.color || '#667eea',
+      logo_url: team.logo_url || '',
+      admin_email: team.admin_email || ''
+    });
+    setIsDialogOpen(true);
+  };
+
   const resetForm = () => {
+    setEditingTeam(null);
+    setIsDialogOpen(false);
     setFormData({
       name: '',
       budget: 10000000,
       max_squad_size: 18,
       color: '#667eea',
-      logo_url: ''
+      logo_url: '',
+      admin_email: ''
     });
   };
 
@@ -94,22 +137,22 @@ const TeamManagement = () => {
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
       <Navbar />
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-4xl font-bold text-white mb-2">Team Management</h1>
             <p className="text-white/80">{event?.name || 'Loading...'}</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); }}>
             <DialogTrigger asChild>
-              <Button className="bg-white text-purple-700 hover:bg-white/90" data-testid="create-team-button">
+              <Button className="bg-white text-purple-700 hover:bg-white/90">
                 <Plus className="w-4 h-4 mr-2" />
                 Create Team
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-white">
+            <DialogContent>
               <DialogHeader>
-                <DialogTitle>Create New Team</DialogTitle>
+                <DialogTitle>{editingTeam ? 'Edit Team' : 'Create New Team'}</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4" data-testid="team-form">
                 <div className="space-y-2">
@@ -151,8 +194,31 @@ const TeamManagement = () => {
                     onChange={(e) => setFormData({...formData, color: e.target.value})}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="admin_email">Team Admin (Optional)</Label>
+                  <Select value={formData.admin_email || "none"} onValueChange={(value) => setFormData({...formData, admin_email: value === "none" ? "" : value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a team admin" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No admin assigned</SelectItem>
+                      {availableAdmins.map((admin) => (
+                        <SelectItem key={admin.uid} value={admin.email}>
+                          {admin.display_name} ({admin.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <ImageUpload
+                  label="Team Logo"
+                  value={formData.logo_url}
+                  onChange={(url) => setFormData({...formData, logo_url: url})}
+                  placeholder="Upload team logo or enter URL"
+                  sampleType={{ type: 'teams', subtype: 'logos' }}
+                />
                 <Button type="submit" className="w-full" disabled={loading} data-testid="submit-team-button">
-                  {loading ? 'Creating...' : 'Create Team'}
+                  {loading ? (editingTeam ? 'Updating...' : 'Creating...') : (editingTeam ? 'Update Team' : 'Create Team')}
                 </Button>
               </form>
             </DialogContent>
@@ -162,10 +228,32 @@ const TeamManagement = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {teams.map((team) => (
             <Card key={team.id} className="glass border-white/20 card-hover" style={{ borderTopColor: team.color, borderTopWidth: '4px' }}>
-              <CardHeader>
+              <CardHeader className="pb-3">
+                {team.logo_url && (
+                  <div className="flex justify-center mb-4">
+                    <img 
+                      src={team.logo_url} 
+                      alt={`${team.name} logo`}
+                      className="w-16 h-16 rounded-xl object-cover border-2 border-white/30 shadow-lg bg-white/10 p-1"
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  </div>
+                )}
                 <CardTitle className="text-white flex items-center justify-between">
-                  <span>{team.name}</span>
-                  <Users className="w-5 h-5" />
+                  <div className="flex items-center">
+                    <span className="text-lg font-bold">{team.name}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                      onClick={() => handleEdit(team)}
+                    >
+                      <Edit className="w-3 h-3" />
+                    </Button>
+                    <Users className="w-5 h-5" />
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -189,9 +277,16 @@ const TeamManagement = () => {
                     />
                   </div>
                 </div>
-                <div className="flex justify-between items-center pt-2 border-t border-white/10">
-                  <span className="text-white/60 text-sm">Players: {team.players_count}/{team.max_squad_size}</span>
-                  <DollarSign className="w-5 h-5 text-white/60" />
+                <div className="space-y-1 pt-2 border-t border-white/10">
+                  <div className="flex justify-between items-center">
+                    <span className="text-white/60 text-sm">Players: {team.players_count}/{team.max_squad_size}</span>
+                    <DollarSign className="w-5 h-5 text-white/60" />
+                  </div>
+                  {team.admin_email && (
+                    <div className="text-white/60 text-xs">
+                      Admin: {team.admin_email}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

@@ -128,9 +128,19 @@ const SuperAdminDashboard = () => {
                     className="flex items-center justify-between p-4 bg-white/10 rounded-lg border border-white/10"
                     data-testid={`event-item-${event.id}`}
                   >
-                    <div className="flex-1">
-                      <h4 className="text-white font-semibold">{event.name}</h4>
-                      <p className="text-white/60 text-sm">{event.date}</p>
+                    <div className="flex items-center flex-1">
+                      {event.logo_url && (
+                        <img 
+                          src={event.logo_url} 
+                          alt={`${event.name} logo`}
+                          className="w-10 h-10 rounded-lg object-cover mr-3 border border-white/20"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      )}
+                      <div>
+                        <h4 className="text-white font-semibold">{event.name}</h4>
+                        <p className="text-white/60 text-sm">{event.date}</p>
+                      </div>
                     </div>
                     <div className="flex items-center space-x-2">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -140,10 +150,22 @@ const SuperAdminDashboard = () => {
                       }`}>
                         {event.status.replace('_', ' ').toUpperCase()}
                       </span>
+                      <Link to={`/admin/categories/${event.id}`}>
+                        <Button size="sm" variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
+                          <Users className="w-4 h-4 mr-1" />
+                          Categories
+                        </Button>
+                      </Link>
                       <Link to={`/admin/teams/${event.id}`}>
                         <Button size="sm" variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
                           <Users className="w-4 h-4 mr-1" />
                           Teams
+                        </Button>
+                      </Link>
+                      <Link to={`/admin/players/${event.id}`}>
+                        <Button size="sm" variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
+                          <Users className="w-4 h-4 mr-1" />
+                          Players
                         </Button>
                       </Link>
                       <Link to={`/admin/auction/${event.id}`}>

@@ -43,6 +43,7 @@ export const AuthProvider = ({ children }) => {
             }
           });
           
+          console.log('User profile loaded:', response.data);
           setUserProfile(response.data);
         } catch (error) {
           console.error('Error fetching user profile:', error);

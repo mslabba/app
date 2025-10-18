@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { signInWithEmail, signInWithGoogle } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,8 @@ const LoginPage = () => {
     try {
       await signInWithEmail(email, password);
       toast.success('Login successful!');
-      navigate('/admin');
+      // Navigate to home and let role-based redirect handle it
+      navigate('/');
     } catch (error) {
       console.error('Login error:', error);
       toast.error(error.message || 'Failed to login');
@@ -35,7 +36,8 @@ const LoginPage = () => {
     try {
       await signInWithGoogle();
       toast.success('Login successful!');
-      navigate('/admin');
+      // Navigate to home and let role-based redirect handle it
+      navigate('/');
     } catch (error) {
       console.error('Google login error:', error);
       toast.error('Failed to login with Google');
@@ -118,9 +120,15 @@ const LoginPage = () => {
               Sign in with Google
             </Button>
 
-            <div className="text-center text-sm text-white/60">
+            <div className="text-center text-sm text-white/60 space-y-2">
               <p>Demo Credentials:</p>
               <p className="text-xs">Email: admin@auction.com | Password: admin123</p>
+              <div className="pt-2 border-t border-white/20">
+                <p>Don't have an account?</p>
+                <Link to="/register" className="text-white hover:text-white/80 underline">
+                  Create Account
+                </Link>
+              </div>
             </div>
           </CardContent>
         </Card>
