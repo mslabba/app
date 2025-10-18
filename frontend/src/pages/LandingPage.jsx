@@ -73,7 +73,7 @@ const LandingPage = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 relative overflow-hidden">
       {/* Navigation */}
       <nav className="bg-black/20 backdrop-blur-md border-b border-white/10">
         <div className="container mx-auto px-6 py-4">
@@ -100,10 +100,38 @@ const LandingPage = () => {
         </div>
       </nav>
 
+      {/* Background Sports Images */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-10 left-10 w-32 h-32 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 blur-xl"></div>
+        <div className="absolute top-40 right-20 w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-blue-500 blur-xl"></div>
+        <div className="absolute bottom-20 left-1/4 w-40 h-40 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 blur-xl"></div>
+        <div className="absolute bottom-40 right-10 w-28 h-28 rounded-full bg-gradient-to-br from-red-400 to-yellow-500 blur-xl"></div>
+      </div>
+
       {/* Hero Section */}
-      <section className="py-20 px-6">
+      <section className="py-20 px-6 relative z-10">
         <div className="container mx-auto text-center">
           <div className="max-w-4xl mx-auto">
+            {/* Hero Image */}
+            <div className="mb-8 flex justify-center">
+              <div className="relative">
+                <div className="w-32 h-32 mx-auto mb-6 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-2xl">
+                  <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center">
+                    <Gavel className="w-12 h-12 text-purple-600" />
+                  </div>
+                </div>
+                {/* Floating sports icons */}
+                <div className="absolute -top-4 -left-8 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center shadow-lg animate-bounce">
+                  <Trophy className="w-6 h-6 text-white" />
+                </div>
+                <div className="absolute -top-2 -right-6 w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center shadow-lg animate-pulse">
+                  <Target className="w-5 h-5 text-white" />
+                </div>
+                <div className="absolute -bottom-2 -left-4 w-8 h-8 bg-red-500 rounded-full flex items-center justify-center shadow-lg animate-bounce delay-300">
+                  <Users className="w-4 h-4 text-white" />
+                </div>
+              </div>
+            </div>
             <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
               The Future of
               <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent"> Sports Auctions</span>
@@ -132,9 +160,23 @@ const LandingPage = () => {
       </section>
 
       {/* Features Section */}
-      <section className="py-20 px-6 bg-black/20">
-        <div className="container mx-auto">
+      <section className="py-20 px-6 bg-black/20 relative">
+        {/* Sports equipment background */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute top-20 left-10 text-6xl">🏏</div>
+          <div className="absolute top-40 right-20 text-5xl">⚽</div>
+          <div className="absolute bottom-40 left-1/4 text-7xl">🏀</div>
+          <div className="absolute bottom-20 right-10 text-4xl">🏆</div>
+          <div className="absolute top-60 left-1/2 text-5xl">🥇</div>
+        </div>
+        
+        <div className="container mx-auto relative z-10">
           <div className="text-center mb-16">
+            <div className="flex justify-center mb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center shadow-xl">
+                <BarChart3 className="w-8 h-8 text-white" />
+              </div>
+            </div>
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
               Powerful Features
             </h2>
@@ -147,10 +189,12 @@ const LandingPage = () => {
             {features.map((feature, index) => (
               <div 
                 key={index}
-                className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 hover:bg-white/15 transition-all duration-300 hover:scale-105"
+                className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 hover:bg-white/15 transition-all duration-300 hover:scale-105 group"
               >
-                <div className="text-purple-400 mb-4">
-                  {feature.icon}
+                <div className="text-purple-400 mb-4 group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-16 h-16 bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-xl flex items-center justify-center mb-2">
+                    {feature.icon}
+                  </div>
                 </div>
                 <h3 className="text-xl font-semibold text-white mb-3">
                   {feature.title}
@@ -192,21 +236,46 @@ const LandingPage = () => {
             </div>
             
             <div className="relative">
-              <div className="bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-3xl p-8 backdrop-blur-md border border-white/20">
+              {/* Sports stadium background */}
+              <div className="absolute inset-0 opacity-10">
+                <div className="text-8xl absolute top-4 left-4">🏟️</div>
+                <div className="text-6xl absolute bottom-8 right-8">🎯</div>
+              </div>
+              
+              <div className="bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-3xl p-8 backdrop-blur-md border border-white/20 relative z-10">
+                {/* Central trophy image */}
+                <div className="flex justify-center mb-8">
+                  <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-xl">
+                    <Trophy className="w-10 h-10 text-white" />
+                  </div>
+                </div>
+                
                 <div className="grid grid-cols-2 gap-6">
-                  <div className="text-center">
+                  <div className="text-center group hover:scale-105 transition-transform">
+                    <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Gavel className="w-6 h-6 text-green-400" />
+                    </div>
                     <div className="text-3xl font-bold text-white mb-2">500+</div>
                     <div className="text-white/70">Successful Auctions</div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center group hover:scale-105 transition-transform">
+                    <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Users className="w-6 h-6 text-blue-400" />
+                    </div>
                     <div className="text-3xl font-bold text-white mb-2">50+</div>
                     <div className="text-white/70">Sports Organizations</div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center group hover:scale-105 transition-transform">
+                    <div className="w-12 h-12 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Target className="w-6 h-6 text-purple-400" />
+                    </div>
                     <div className="text-3xl font-bold text-white mb-2">10K+</div>
                     <div className="text-white/70">Players Auctioned</div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center group hover:scale-105 transition-transform">
+                    <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Zap className="w-6 h-6 text-red-400" />
+                    </div>
                     <div className="text-3xl font-bold text-white mb-2">99.9%</div>
                     <div className="text-white/70">Uptime</div>
                   </div>
@@ -218,9 +287,22 @@ const LandingPage = () => {
       </section>
 
       {/* Testimonials Section */}
-      <section className="py-20 px-6 bg-black/20">
-        <div className="container mx-auto">
+      <section className="py-20 px-6 bg-black/20 relative">
+        {/* Sports background elements */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute top-10 left-20 text-4xl">🏏</div>
+          <div className="absolute top-32 right-10 text-5xl">⚽</div>
+          <div className="absolute bottom-20 left-10 text-6xl">🏀</div>
+          <div className="absolute bottom-40 right-32 text-3xl">🏆</div>
+        </div>
+        
+        <div className="container mx-auto relative z-10">
           <div className="text-center mb-16">
+            <div className="flex justify-center mb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center shadow-xl">
+                <Users className="w-8 h-8 text-white" />
+              </div>
+            </div>
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
               Trusted by Sports Leaders
             </h2>
@@ -233,19 +315,34 @@ const LandingPage = () => {
             {testimonials.map((testimonial, index) => (
               <div 
                 key={index}
-                className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20"
+                className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 hover:bg-white/15 transition-all duration-300 group"
               >
-                <div className="flex items-center mb-4">
-                  {[...Array(testimonial.rating)].map((_, i) => (
-                    <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
-                  ))}
+                {/* Sports icon for each testimonial */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center">
+                    {[...Array(testimonial.rating)].map((_, i) => (
+                      <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
+                    ))}
+                  </div>
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                    {index === 0 ? (
+                      <div className="text-2xl">🏏</div>
+                    ) : (
+                      <div className="text-2xl">⚽</div>
+                    )}
+                  </div>
                 </div>
                 <p className="text-white/80 text-lg mb-6 leading-relaxed">
                   "{testimonial.content}"
                 </p>
-                <div>
-                  <div className="font-semibold text-white">{testimonial.name}</div>
-                  <div className="text-white/60">{testimonial.role}</div>
+                <div className="flex items-center">
+                  <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mr-4">
+                    <Trophy className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <div className="font-semibold text-white">{testimonial.name}</div>
+                    <div className="text-white/60">{testimonial.role}</div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -254,9 +351,30 @@ const LandingPage = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 px-6">
-        <div className="container mx-auto text-center">
+      <section className="py-20 px-6 relative">
+        {/* Sports celebration background */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-10 left-10 text-6xl animate-bounce">🏆</div>
+          <div className="absolute top-20 right-20 text-5xl animate-pulse">🥇</div>
+          <div className="absolute bottom-20 left-1/4 text-4xl animate-bounce delay-300">🎉</div>
+          <div className="absolute bottom-10 right-10 text-7xl animate-pulse delay-500">🏟️</div>
+        </div>
+        
+        <div className="container mx-auto text-center relative z-10">
           <div className="max-w-3xl mx-auto">
+            {/* Championship trophy visual */}
+            <div className="flex justify-center mb-8">
+              <div className="relative">
+                <div className="w-24 h-24 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-2xl animate-pulse">
+                  <Trophy className="w-12 h-12 text-white" />
+                </div>
+                {/* Celebration sparkles */}
+                <div className="absolute -top-2 -left-2 w-6 h-6 bg-yellow-400 rounded-full animate-ping"></div>
+                <div className="absolute -top-1 -right-3 w-4 h-4 bg-orange-400 rounded-full animate-ping delay-300"></div>
+                <div className="absolute -bottom-1 -left-3 w-5 h-5 bg-yellow-300 rounded-full animate-ping delay-500"></div>
+              </div>
+            </div>
+            
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
               Ready to Transform Your Auctions?
             </h2>
