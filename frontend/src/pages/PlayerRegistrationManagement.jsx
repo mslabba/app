@@ -299,7 +299,7 @@ const PlayerRegistrationManagement = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {pendingRegistrations.map((registration) => (
-                    <Card key={registration.id} className="bg-white/10 border-white/20">
+                    <Card key={registration.id} className="bg-white/95 backdrop-blur-sm border-white/30">
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center space-x-2">
@@ -308,8 +308,8 @@ const PlayerRegistrationManagement = () => {
                               onCheckedChange={(checked) => handleRegistrationSelect(registration.id, checked)}
                             />
                             <div>
-                              <h3 className="font-semibold text-white">{registration.name}</h3>
-                              <p className="text-sm text-white/70">
+                              <h3 className="font-semibold text-gray-800">{registration.name}</h3>
+                              <p className="text-sm text-gray-600">
                                 {registration.age && `Age: ${registration.age}`}
                                 {registration.position && ` • ${registration.position}`}
                               </p>
@@ -326,7 +326,7 @@ const PlayerRegistrationManagement = () => {
                           />
                         )}
 
-                        <div className="text-sm text-white/80 mb-3">
+                        <div className="text-sm text-gray-700 mb-3">
                           {registration.email && <div>📧 {registration.email}</div>}
                           {registration.contact_number && <div>📱 {registration.contact_number}</div>}
                           {registration.previous_team && <div>🏆 {registration.previous_team}</div>}
@@ -433,7 +433,7 @@ const PlayerRegistrationManagement = () => {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {players.map((player) => (
-                    <Card key={player.id} className="bg-white/10 border-white/20">
+                    <Card key={player.id} className="bg-white/95 backdrop-blur-sm border-white/30">
                       <CardContent className="p-4">
                         <div className="text-center">
                           {player.photo_url && (
@@ -443,11 +443,11 @@ const PlayerRegistrationManagement = () => {
                               className="w-20 h-20 rounded-full object-cover mx-auto mb-3"
                             />
                           )}
-                          <h3 className="font-semibold text-white mb-1">{player.name}</h3>
-                          <p className="text-sm text-white/70 mb-2">
+                          <h3 className="font-semibold text-gray-800 mb-1">{player.name}</h3>
+                          <p className="text-sm text-gray-600 mb-2">
                             Base Price: ₹{player.base_price?.toLocaleString()}
                           </p>
-                          <Badge variant="outline" className="text-white border-white/30">
+                          <Badge variant="outline" className="text-gray-700 border-gray-300">
                             {categories.find(c => c.id === player.category_id)?.name || 'Unknown'}
                           </Badge>
                         </div>
