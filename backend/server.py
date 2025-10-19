@@ -483,7 +483,7 @@ async def get_event_registrations(event_id: str, current_user: dict = Depends(re
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/registrations/{registration_id}/approve")
-async def approve_player_registration(registration_id: str, category_id: str, base_price: int, current_user: dict = Depends(require_super_admin)):
+async def approve_player_registration(registration_id: str, approval_data: ApprovalRequest, current_user: dict = Depends(require_super_admin)):
     """Approve a player registration and convert to actual player"""
     try:
         if not db:
@@ -501,16 +501,16 @@ async def approve_player_registration(registration_id: str, category_id: str, ba
         player_doc = {
             'id': player_id,
             'name': reg_data['name'],
-            'category_id': category_id,
-            'base_price': base_price,
+            'category_id': approval_data.category_id,
+            'base_price': approval_data.base_price,
             'age': reg_data.get('age'),
             'position': reg_data.get('position'),
             'specialty': reg_data.get('specialty'),
             'previous_team': reg_data.get('previous_team'),
             'cricheroes_link': reg_data.get('cricheroes_link'),
             'stats': reg_data.get('stats'),
-            'status': 'AVAILABLE',
-            'photo_url': None,
+            'status': PlayerStatus.AVAILABLE.value,
+            'photo_url': reg_data.get('photo_url'),
             'current_price': None,
             'sold_to_team_id': None,
             'sold_price': None
@@ -594,6 +594,11 @@ async def get_category_players(category_id: str):
             player_data = player.to_dict()
             if player_data.get('stats'):
                 player_data['stats'] = PlayerStats(**player_data['stats'])
+            
+            # Normalize status to lowercase for compatibility
+            if player_data.get('status'):
+                player_data['status'] = player_data['status'].lower()
+            
             result.append(Player(**player_data))
         return result
     except Exception as e:
@@ -613,6 +618,11 @@ async def get_player(player_id: str):
         player_data = player_doc.to_dict()
         if player_data.get('stats'):
             player_data['stats'] = PlayerStats(**player_data['stats'])
+        
+        # Normalize status to lowercase for compatibility
+        if player_data.get('status'):
+            player_data['status'] = player_data['status'].lower()
+        
         return Player(**player_data)
     except HTTPException:
         raise
@@ -641,6 +651,11 @@ async def get_event_players(event_id: str):
                 player_data = player.to_dict()
                 if player_data.get('stats'):
                     player_data['stats'] = PlayerStats(**player_data['stats'])
+                
+                # Normalize status to lowercase for compatibility
+                if player_data.get('status'):
+                    player_data['status'] = player_data['status'].lower()
+                
                 result.append(Player(**player_data))
         
         return result
@@ -679,6 +694,10 @@ async def update_player(player_id: str, player_data: PlayerCreate, current_user:
         player_data_updated = updated_doc.to_dict()
         if player_data_updated.get('stats'):
             player_data_updated['stats'] = PlayerStats(**player_data_updated['stats'])
+        
+        # Normalize status to lowercase for compatibility
+        if player_data_updated.get('status'):
+            player_data_updated['status'] = player_data_updated['status'].lower()
         
         return Player(**player_data_updated)
     except Exception as e:

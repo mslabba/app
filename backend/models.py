@@ -170,6 +170,11 @@ class PublicPlayerRegistration(BaseModel):
     photo_url: Optional[str] = None
     stats: Optional[PlayerStats] = None
 
+# Approval Request Model
+class ApprovalRequest(BaseModel):
+    category_id: str
+    base_price: int
+
 # Bid Models
 class BidCreate(BaseModel):
     player_id: str

@@ -90,6 +90,22 @@ const PlayerRegistrationManagement = () => {
     }
   };
 
+  const handleCategoryChange = (categoryId, isBulk = true) => {
+    const selectedCategory = categories.find(c => c.id === categoryId);
+    const basePrice = selectedCategory ? selectedCategory.base_price_min : '';
+    
+    if (isBulk) {
+      setBulkCategory(categoryId);
+      setBulkBasePrice(basePrice.toString());
+      
+      if (selectedCategory) {
+        toast.info(`Base price auto-filled to ₹${basePrice.toLocaleString()} (category minimum)`);
+      }
+    }
+    
+    return basePrice;
+  };
+
   const handleBulkApprove = async () => {
     if (!bulkCategory || !bulkBasePrice) {
       toast.error('Please select category and base price for bulk approval');
@@ -98,6 +114,11 @@ const PlayerRegistrationManagement = () => {
 
     try {
       setLoading(true);
+      console.log('Bulk approval data:', {
+        category_id: bulkCategory,
+        base_price: parseInt(bulkBasePrice)
+      });
+      
       const promises = selectedRegistrations.map(regId =>
         axios.post(`${API}/registrations/${regId}/approve`, {
           category_id: bulkCategory,
@@ -123,6 +144,12 @@ const PlayerRegistrationManagement = () => {
 
   const handleIndividualApprove = async (registrationId, categoryId, basePrice) => {
     try {
+      console.log('Individual approval data:', {
+        registrationId,
+        category_id: categoryId,
+        base_price: parseInt(basePrice)
+      });
+      
       await axios.post(`${API}/registrations/${registrationId}/approve`, {
         category_id: categoryId,
         base_price: parseInt(basePrice)
@@ -221,25 +248,32 @@ const PlayerRegistrationManagement = () => {
                   </CardTitle>
                   {selectedRegistrations.length > 0 && (
                     <div className="flex items-center space-x-4">
-                      <Select value={bulkCategory} onValueChange={setBulkCategory}>
+                      <Select value={bulkCategory} onValueChange={(value) => handleCategoryChange(value, true)}>
                         <SelectTrigger className="w-48">
                           <SelectValue placeholder="Select category" />
                         </SelectTrigger>
                         <SelectContent>
                           {categories.map((category) => (
                             <SelectItem key={category.id} value={category.id}>
-                              {category.name}
+                              {category.name} (₹{category.base_price_min?.toLocaleString()} - ₹{category.base_price_max?.toLocaleString()})
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <Input
-                        type="number"
-                        placeholder="Base price"
-                        value={bulkBasePrice}
-                        onChange={(e) => setBulkBasePrice(e.target.value)}
-                        className="w-32"
-                      />
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          placeholder="Base price"
+                          value={bulkBasePrice}
+                          onChange={(e) => setBulkBasePrice(e.target.value)}
+                          className="w-32"
+                        />
+                        {bulkCategory && (
+                          <div className="absolute top-full left-0 mt-1 text-xs text-white/70 whitespace-nowrap">
+                            Range: ₹{categories.find(c => c.id === bulkCategory)?.base_price_min?.toLocaleString()} - ₹{categories.find(c => c.id === bulkCategory)?.base_price_max?.toLocaleString()}
+                          </div>
+                        )}
+                      </div>
                       <Button 
                         onClick={handleBulkApprove}
                         disabled={loading || !bulkCategory || !bulkBasePrice}
@@ -567,25 +601,32 @@ const PlayerRegistrationManagement = () => {
                 {viewingRegistration.status === 'pending_approval' && (
                   <div className="flex space-x-4 pt-4 border-t">
                     <div className="flex space-x-2 flex-1">
-                      <Select onValueChange={(value) => setBulkCategory(value)}>
+                      <Select onValueChange={(value) => handleCategoryChange(value, true)}>
                         <SelectTrigger className="flex-1">
                           <SelectValue placeholder="Select category" />
                         </SelectTrigger>
                         <SelectContent>
                           {categories.map((category) => (
                             <SelectItem key={category.id} value={category.id}>
-                              {category.name}
+                              {category.name} (₹{category.base_price_min?.toLocaleString()} - ₹{category.base_price_max?.toLocaleString()})
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <Input
-                        type="number"
-                        placeholder="Base price"
-                        value={bulkBasePrice}
-                        onChange={(e) => setBulkBasePrice(e.target.value)}
-                        className="w-32"
-                      />
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          placeholder="Base price"
+                          value={bulkBasePrice}
+                          onChange={(e) => setBulkBasePrice(e.target.value)}
+                          className="w-32"
+                        />
+                        {bulkCategory && (
+                          <div className="absolute top-full left-0 mt-1 text-xs text-gray-500 whitespace-nowrap">
+                            Range: ₹{categories.find(c => c.id === bulkCategory)?.base_price_min?.toLocaleString()} - ₹{categories.find(c => c.id === bulkCategory)?.base_price_max?.toLocaleString()}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <Button
                       onClick={() => handleIndividualApprove(viewingRegistration.id, bulkCategory, bulkBasePrice)}
