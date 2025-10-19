@@ -16,6 +16,7 @@ import TeamManagement from '@/pages/TeamManagement';
 import PlayerManagement from '@/pages/PlayerManagement';
 import AuctionControl from '@/pages/AuctionControl';
 import Analytics from '@/pages/Analytics';
+import PublicPlayerRegistration from '@/pages/PublicPlayerRegistration';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 // Dashboard redirect component for authenticated users
@@ -58,6 +59,7 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/display/:eventId" element={<AuctionDisplay />} />
+            <Route path="/events/:eventId/register" element={<PublicPlayerRegistration />} />
             
             {/* Dashboard redirect for authenticated users */}
             <Route path="/dashboard" element={<DashboardRedirect />} />

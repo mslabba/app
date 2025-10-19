@@ -183,20 +183,20 @@ async def update_event(event_id: str, event_data: EventCreate, current_user: dic
             'banner_url': event_data.banner_url
         })
         
-        return {"message": "Event updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 # ============= CATEGORY ROUTES =============
 
 @api_router.post("/categories", response_model=Category)
-async def create_category(category_data: CategoryCreate, current_user: dict = Depends(require_super_admin)):
+async def create_category(category_data: CategoryCreate):
     """Create a new category"""
     try:
         category_id = str(uuid.uuid4())
         category_doc = {
             'id': category_id,
             **category_data.model_dump()
+{{ ... }}
         }
         
         if db:
@@ -246,8 +246,11 @@ async def update_category(category_id: str, category_data: CategoryCreate, curre
         updated_data = {
             'name': category_data.name,
             'description': category_data.description,
-            'min_price': category_data.min_price,
-            'max_price': category_data.max_price,
+            'min_players': category_data.min_players,
+            'max_players': category_data.max_players,
+            'color': category_data.color,
+            'base_price_min': category_data.base_price_min,
+            'base_price_max': category_data.base_price_max,
             'event_id': category_data.event_id
         }
         
@@ -435,6 +438,98 @@ async def get_team(team_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 # ============= PLAYER ROUTES =============
+
+@api_router.post("/events/{event_id}/register-player")
+async def register_player_public(event_id: str, player_data: PublicPlayerRegistration):
+    """Public endpoint for players to register for an event"""
+    try:
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        # Check if event exists
+        event_doc = db.collection('events').document(event_id).get()
+        if not event_doc.exists:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Create player registration document
+        registration_id = str(uuid.uuid4())
+        registration_doc = {
+            'id': registration_id,
+            'event_id': event_id,
+            'status': 'pending_approval',
+            'registered_at': datetime.now(timezone.utc).isoformat(),
+            **player_data.model_dump()
+        }
+        
+        # Store in a separate collection for pending registrations
+        db.collection('player_registrations').document(registration_id).set(registration_doc)
+        
+        return {
+            "message": "Registration submitted successfully! The organizer will review and approve your registration.",
+            "registration_id": registration_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/events/{event_id}/registrations")
+async def get_event_registrations(event_id: str, current_user: dict = Depends(require_super_admin)):
+    """Get all player registrations for an event (admin only)"""
+    try:
+        if not db:
+            return []
+        
+        registrations = db.collection('player_registrations').where('event_id', '==', event_id).stream()
+        return [reg.to_dict() for reg in registrations]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/registrations/{registration_id}/approve")
+async def approve_player_registration(registration_id: str, category_id: str, base_price: int, current_user: dict = Depends(require_super_admin)):
+    """Approve a player registration and convert to actual player"""
+    try:
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        # Get registration
+        reg_doc = db.collection('player_registrations').document(registration_id).get()
+        if not reg_doc.exists:
+            raise HTTPException(status_code=404, detail="Registration not found")
+        
+        reg_data = reg_doc.to_dict()
+        
+        # Create actual player
+        player_id = str(uuid.uuid4())
+        player_doc = {
+            'id': player_id,
+            'name': reg_data['name'],
+            'category_id': category_id,
+            'base_price': base_price,
+            'age': reg_data.get('age'),
+            'position': reg_data.get('position'),
+            'specialty': reg_data.get('specialty'),
+            'previous_team': reg_data.get('previous_team'),
+            'cricheroes_link': reg_data.get('cricheroes_link'),
+            'stats': reg_data.get('stats'),
+            'status': 'AVAILABLE',
+            'photo_url': None,
+            'current_price': None,
+            'sold_to_team_id': None,
+            'sold_price': None
+        }
+        
+        # Add player to players collection
+        db.collection('players').document(player_id).set(player_doc)
+        
+        # Update registration status
+        db.collection('player_registrations').document(registration_id).update({
+            'status': 'approved',
+            'approved_at': datetime.now(timezone.utc).isoformat(),
+            'player_id': player_id
+        })
+        
+        return {"message": "Player registration approved successfully", "player_id": player_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/players", response_model=Player)
 async def create_player(player_data: PlayerCreate, current_user: dict = Depends(require_super_admin)):

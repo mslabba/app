@@ -76,6 +76,7 @@ class Event(BaseModel):
 # Category Models
 class CategoryCreate(BaseModel):
     name: str
+    description: Optional[str] = None
     event_id: str
     min_players: int
     max_players: int
@@ -86,6 +87,7 @@ class CategoryCreate(BaseModel):
 class Category(BaseModel):
     id: str
     name: str
+    description: Optional[str] = None
     event_id: str
     min_players: int
     max_players: int
@@ -136,6 +138,7 @@ class PlayerCreate(BaseModel):
     specialty: Optional[str] = None
     stats: Optional[PlayerStats] = None
     previous_team: Optional[str] = None
+    cricheroes_link: Optional[str] = None
 
 class Player(BaseModel):
     id: str
@@ -152,6 +155,19 @@ class Player(BaseModel):
     sold_to_team_id: Optional[str] = None
     sold_price: Optional[int] = None
     previous_team: Optional[str] = None
+    cricheroes_link: Optional[str] = None
+
+# Public Player Registration Model
+class PublicPlayerRegistration(BaseModel):
+    name: str
+    age: Optional[int] = None
+    position: Optional[str] = None
+    specialty: Optional[str] = None
+    previous_team: Optional[str] = None
+    cricheroes_link: Optional[str] = None
+    contact_number: Optional[str] = None
+    email: Optional[str] = None
+    stats: Optional[PlayerStats] = None
 
 # Bid Models
 class BidCreate(BaseModel):

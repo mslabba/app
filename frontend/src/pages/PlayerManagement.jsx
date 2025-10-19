@@ -34,6 +34,7 @@ const PlayerManagement = () => {
     specialty: '',
     previous_team: '',
     photo_url: '',
+    cricheroes_link: '',
     stats: {
       matches: '',
       runs: '',
@@ -119,6 +120,7 @@ const PlayerManagement = () => {
       specialty: player.specialty || '',
       previous_team: player.previous_team || '',
       photo_url: player.photo_url || '',
+      cricheroes_link: player.cricheroes_link || '',
       stats: {
         matches: player.stats?.matches?.toString() || '',
         runs: player.stats?.runs?.toString() || '',
@@ -155,6 +157,7 @@ const PlayerManagement = () => {
       specialty: '',
       previous_team: '',
       photo_url: '',
+      cricheroes_link: '',
       stats: {
         matches: '',
         runs: '',
@@ -306,6 +309,16 @@ const PlayerManagement = () => {
                       onChange={(e) => handleChange('previous_team', e.target.value)}
                     />
                   </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="cricheroes_link">CricHeroes Profile Link</Label>
+                  <Input
+                    id="cricheroes_link"
+                    value={formData.cricheroes_link}
+                    onChange={(e) => handleChange('cricheroes_link', e.target.value)}
+                    placeholder="https://cricheroes.com/profile/..."
+                  />
                 </div>
 
                 <ImageUpload

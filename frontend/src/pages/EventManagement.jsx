@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Calendar, Settings } from 'lucide-react';
+import { Plus, Calendar, Settings, Share2, Copy } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
@@ -101,6 +101,15 @@ const EventManagement = () => {
         timer_duration: 60,
         rtm_cards_per_team: 2
       }
+    });
+  };
+
+  const copyRegistrationLink = (eventId) => {
+    const registrationUrl = `${window.location.origin}/events/${eventId}/register`;
+    navigator.clipboard.writeText(registrationUrl).then(() => {
+      toast.success('Registration link copied to clipboard!');
+    }).catch(() => {
+      toast.error('Failed to copy link');
     });
   };
 
@@ -277,27 +286,37 @@ const EventManagement = () => {
                       Edit
                     </Button>
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="space-y-2">
+                    <div className="flex space-x-2">
+                      <Button 
+                        size="sm" 
+                        className="flex-1 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
+                        onClick={() => window.location.href = `/admin/categories/${event.id}`}
+                      >
+                        Categories
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="flex-1 bg-green-500/20 text-green-300 hover:bg-green-500/30"
+                        onClick={() => window.location.href = `/admin/teams/${event.id}`}
+                      >
+                        Teams
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="flex-1 bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
+                        onClick={() => window.location.href = `/admin/players/${event.id}`}
+                      >
+                        Players
+                      </Button>
+                    </div>
                     <Button 
                       size="sm" 
-                      className="flex-1 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
-                      onClick={() => window.location.href = `/admin/categories/${event.id}`}
+                      className="w-full bg-orange-500/20 text-orange-300 hover:bg-orange-500/30 flex items-center justify-center"
+                      onClick={() => copyRegistrationLink(event.id)}
                     >
-                      Categories
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      className="flex-1 bg-green-500/20 text-green-300 hover:bg-green-500/30"
-                      onClick={() => window.location.href = `/admin/teams/${event.id}`}
-                    >
-                      Teams
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      className="flex-1 bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
-                      onClick={() => window.location.href = `/admin/players/${event.id}`}
-                    >
-                      Players
+                      <Share2 className="w-4 h-4 mr-2" />
+                      Share Registration Link
                     </Button>
                   </div>
                 </div>

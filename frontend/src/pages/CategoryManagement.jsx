@@ -25,6 +25,7 @@ const CategoryManagement = () => {
   const [editingCategory, setEditingCategory] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
+    description: '',
     min_players: '',
     max_players: '',
     color: '#3B82F6',
@@ -61,24 +62,50 @@ const CategoryManagement = () => {
     setLoading(true);
 
     try {
+      // Validate required fields
+      if (!formData.name.trim()) {
+        toast.error('Category name is required');
+        setLoading(false);
+        return;
+      }
+
       const categoryData = {
-        ...formData,
+        name: formData.name.trim(),
+        description: formData.description.trim() || null,
         event_id: eventId,
         min_players: parseInt(formData.min_players) || 1,
         max_players: parseInt(formData.max_players) || 50,
+        color: formData.color || '#3B82F6',
         base_price_min: parseInt(formData.base_price_min) || 10000,
         base_price_max: parseInt(formData.base_price_max) || 1000000,
       };
 
+      // Validate min/max values
+      if (categoryData.min_players > categoryData.max_players) {
+        toast.error('Maximum players must be greater than or equal to minimum players');
+        setLoading(false);
+        return;
+      }
+
+      if (categoryData.base_price_min >= categoryData.base_price_max) {
+        toast.error('Maximum base price must be greater than minimum base price');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Submitting category data:', categoryData);
+
       if (editingCategory) {
-        await axios.put(`${API}/categories/${editingCategory.id}`, categoryData, {
+        const response = await axios.put(`${API}/categories/${editingCategory.id}`, categoryData, {
           headers: { Authorization: `Bearer ${token}` }
         });
+        console.log('Update response:', response.data);
         toast.success('Category updated successfully!');
       } else {
-        await axios.post(`${API}/categories`, categoryData, {
+        const response = await axios.post(`${API}/categories`, categoryData, {
           headers: { Authorization: `Bearer ${token}` }
         });
+        console.log('Create response:', response.data);
         toast.success('Category added successfully!');
       }
 
@@ -86,7 +113,10 @@ const CategoryManagement = () => {
       resetForm();
       fetchCategories();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to save category');
+      console.error('Category save error:', error);
+      console.error('Error response:', error.response?.data);
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to save category';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -96,6 +126,7 @@ const CategoryManagement = () => {
     setEditingCategory(category);
     setFormData({
       name: category.name,
+      description: category.description || '',
       min_players: category.min_players?.toString() || '',
       max_players: category.max_players?.toString() || '',
       color: category.color || '#3B82F6',
@@ -123,6 +154,7 @@ const CategoryManagement = () => {
     setEditingCategory(null);
     setFormData({
       name: '',
+      description: '',
       min_players: '',
       max_players: '',
       color: '#3B82F6',
@@ -150,7 +182,10 @@ const CategoryManagement = () => {
           <div className="text-white/60">
             <p>Categories define player types (e.g., Batsmen, Bowlers, All-rounders)</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => { 
+            if (!open) resetForm(); 
+            setIsDialogOpen(open); 
+          }}>
             <DialogTrigger asChild>
               <Button 
                 className="bg-white text-purple-700 hover:bg-white/90"
@@ -175,6 +210,17 @@ const CategoryManagement = () => {
                     onChange={(e) => handleChange('name', e.target.value)}
                     placeholder="e.g., Batsmen, Bowlers, All-rounders"
                     required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    value={formData.description}
+                    onChange={(e) => handleChange('description', e.target.value)}
+                    placeholder="Brief description of this category (optional)"
+                    rows={3}
                   />
                 </div>
 
