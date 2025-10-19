@@ -17,6 +17,8 @@ import PlayerManagement from '@/pages/PlayerManagement';
 import AuctionControl from '@/pages/AuctionControl';
 import Analytics from '@/pages/Analytics';
 import PublicPlayerRegistration from '@/pages/PublicPlayerRegistration';
+import PlayerRegistrationManagement from '@/pages/PlayerRegistrationManagement';
+import TestPage from '@/pages/TestPage';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 // Dashboard redirect component for authenticated users
@@ -49,6 +51,12 @@ const DashboardRedirect = () => {
 };
 
 function App() {
+  console.log('App component rendering...');
+  console.log('Environment check:', {
+    REACT_APP_FIREBASE_API_KEY: process.env.REACT_APP_FIREBASE_API_KEY ? 'SET' : 'NOT SET',
+    REACT_APP_BACKEND_URL: process.env.REACT_APP_BACKEND_URL ? 'SET' : 'NOT SET'
+  });
+  
   return (
     <AuthProvider>
       <div className="App">
@@ -56,6 +64,7 @@ function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
+            <Route path="/test" element={<TestPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/display/:eventId" element={<AuctionDisplay />} />
@@ -102,6 +111,14 @@ function App() {
               element={
                 <ProtectedRoute requireSuperAdmin>
                   <PlayerManagement />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/registrations/:eventId" 
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <PlayerRegistrationManagement />
                 </ProtectedRoute>
               } 
             />

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Trophy, User, CheckCircle, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import ImageUpload from '@/components/ImageUpload';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -25,6 +26,7 @@ const PublicPlayerRegistration = () => {
     cricheroes_link: '',
     contact_number: '',
     email: '',
+    photo_url: '',
     stats: {
       matches: '',
       runs: '',
@@ -81,6 +83,7 @@ const PublicPlayerRegistration = () => {
         cricheroes_link: formData.cricheroes_link.trim() || null,
         contact_number: formData.contact_number.trim() || null,
         email: formData.email.trim() || null,
+        photo_url: formData.photo_url.trim() || null,
         stats: {
           matches: formData.stats.matches ? parseInt(formData.stats.matches) : null,
           runs: formData.stats.runs ? parseInt(formData.stats.runs) : null,
@@ -251,6 +254,18 @@ const PublicPlayerRegistration = () => {
                     placeholder="https://cricheroes.com/profile/..."
                   />
                 </div>
+              </div>
+
+              {/* Photo Upload */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">Player Photo</h3>
+                <ImageUpload
+                  label="Upload Your Photo"
+                  value={formData.photo_url}
+                  onChange={(url) => handleChange('photo_url', url)}
+                  placeholder="Upload your photo or enter URL"
+                  sampleType={{ type: 'players', subtype: 'photos' }}
+                />
               </div>
 
               {/* Statistics */}

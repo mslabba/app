@@ -287,27 +287,34 @@ const EventManagement = () => {
                     </Button>
                   </div>
                   <div className="space-y-2">
-                    <div className="flex space-x-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <Button 
                         size="sm" 
-                        className="flex-1 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
+                        className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
                         onClick={() => window.location.href = `/admin/categories/${event.id}`}
                       >
                         Categories
                       </Button>
                       <Button 
                         size="sm" 
-                        className="flex-1 bg-green-500/20 text-green-300 hover:bg-green-500/30"
+                        className="bg-green-500/20 text-green-300 hover:bg-green-500/30"
                         onClick={() => window.location.href = `/admin/teams/${event.id}`}
                       >
                         Teams
                       </Button>
                       <Button 
                         size="sm" 
-                        className="flex-1 bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
+                        className="bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
                         onClick={() => window.location.href = `/admin/players/${event.id}`}
                       >
                         Players
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30"
+                        onClick={() => window.location.href = `/admin/registrations/${event.id}`}
+                      >
+                        Registrations
                       </Button>
                     </div>
                     <Button 

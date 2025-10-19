@@ -196,7 +196,6 @@ async def create_category(category_data: CategoryCreate):
         category_doc = {
             'id': category_id,
             **category_data.model_dump()
-{{ ... }}
         }
         
         if db:
@@ -528,6 +527,28 @@ async def approve_player_registration(registration_id: str, category_id: str, ba
         })
         
         return {"message": "Player registration approved successfully", "player_id": player_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/registrations/{registration_id}/reject")
+async def reject_player_registration(registration_id: str, current_user: dict = Depends(require_super_admin)):
+    """Reject a player registration"""
+    try:
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        # Get registration
+        reg_doc = db.collection('player_registrations').document(registration_id).get()
+        if not reg_doc.exists:
+            raise HTTPException(status_code=404, detail="Registration not found")
+        
+        # Update registration status
+        db.collection('player_registrations').document(registration_id).update({
+            'status': 'rejected',
+            'rejected_at': datetime.now(timezone.utc).isoformat()
+        })
+        
+        return {"message": "Player registration rejected"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

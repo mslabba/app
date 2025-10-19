@@ -167,6 +167,7 @@ class PublicPlayerRegistration(BaseModel):
     cricheroes_link: Optional[str] = None
     contact_number: Optional[str] = None
     email: Optional[str] = None
+    photo_url: Optional[str] = None
     stats: Optional[PlayerStats] = None
 
 # Bid Models
