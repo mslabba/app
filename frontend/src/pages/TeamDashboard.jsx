@@ -83,7 +83,7 @@ const TeamDashboard = () => {
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Team Dashboard</h1>
+          <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Team Dashboard</h1>
           {team ? (
             <p className="text-white/80">Welcome to {team.name}</p>
           ) : (

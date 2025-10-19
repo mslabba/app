@@ -66,6 +66,6 @@ sudo supervisorctl restart backend frontend
 ✅ Responsive design
 
 ## Access
-- Login Page: https://athletic-bidder.preview.emergentagent.com/login
+- Login Page: Available when deployed
 - Super Admin Dashboard: `/admin`
 - Team Dashboard: `/team`

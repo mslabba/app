@@ -110,8 +110,8 @@ const EventManagement = () => {
       <div className="container mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Event Management</h1>
-            <p className="text-white/80">Create and manage auction events</p>
+            <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Event Management</h1>
+            <p className="text-white/80">powered by Turgut - Create and manage auction events</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); }}>
             <DialogTrigger asChild>

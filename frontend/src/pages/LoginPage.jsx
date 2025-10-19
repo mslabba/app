@@ -21,8 +21,8 @@ const LoginPage = () => {
     try {
       await signInWithEmail(email, password);
       toast.success('Login successful!');
-      // Navigate to home and let role-based redirect handle it
-      navigate('/');
+      // Navigate to dashboard for role-based redirect
+      navigate('/dashboard');
     } catch (error) {
       console.error('Login error:', error);
       toast.error(error.message || 'Failed to login');
@@ -36,8 +36,8 @@ const LoginPage = () => {
     try {
       await signInWithGoogle();
       toast.success('Login successful!');
-      // Navigate to home and let role-based redirect handle it
-      navigate('/');
+      // Navigate to dashboard for role-based redirect
+      navigate('/dashboard');
     } catch (error) {
       console.error('Google login error:', error);
       toast.error('Failed to login with Google');
@@ -51,8 +51,8 @@ const LoginPage = () => {
       <div className="w-full max-w-md fade-in">
         <Card className="glass border-white/20 shadow-2xl" data-testid="login-card">
           <CardHeader className="text-center space-y-2">
-            <CardTitle className="text-3xl font-bold text-white">Sports Auction</CardTitle>
-            <CardDescription className="text-white/80">Sign in to manage your auction</CardDescription>
+            <CardTitle className="text-3xl font-bold text-white">PowerAuctions</CardTitle>
+            <CardDescription className="text-white/80">powered by Turgut - Sign in to manage your auction</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <form onSubmit={handleEmailLogin} className="space-y-4" data-testid="login-form">

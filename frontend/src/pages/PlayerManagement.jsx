@@ -187,7 +187,7 @@ const PlayerManagement = () => {
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-white">Player Management</h1>
+          <h1 className="text-4xl font-bold text-white">PowerAuctions - Player Management</h1>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button 
