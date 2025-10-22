@@ -109,6 +109,24 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         print(f"Error in get_me: {str(e)}")  # Debug log
         raise HTTPException(status_code=400, detail=str(e))
 
+@api_router.post("/auth/promote-to-admin")
+async def promote_to_admin(current_user: dict = Depends(get_current_user)):
+    """Temporary endpoint to promote current user to super admin"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Update user role to super_admin
+        user_ref = db.collection('users').document(current_user['uid'])
+        user_ref.update({'role': 'super_admin'})
+        
+        print(f"Promoted user {current_user['uid']} to super_admin")
+        
+        return {"message": "User promoted to super admin successfully"}
+    except Exception as e:
+        print(f"Error promoting user: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 # ============= EVENT ROUTES =============
 
 @api_router.post("/events", response_model=Event)
@@ -791,6 +809,13 @@ async def next_player(event_id: str, player_id: str, current_user: dict = Depend
         
         player_data = player_doc.to_dict()
         
+        # First, clear any existing CURRENT players for this event
+        current_players = db.collection('players').where('event_id', '==', event_id).where('status', '==', PlayerStatus.CURRENT.value).get()
+        for current_player_doc in current_players:
+            db.collection('players').document(current_player_doc.id).update({
+                'status': PlayerStatus.AVAILABLE.value
+            })
+        
         # Update auction state
         auction_state_id = f"auction_{event_id}"
         db.collection('auction_state').document(auction_state_id).update({
@@ -807,7 +832,50 @@ async def next_player(event_id: str, player_id: str, current_user: dict = Depend
             'status': PlayerStatus.CURRENT.value
         })
         
-        return {"message": "Next player set", "player_id": player_id}
+        return {
+            "message": f"Player {player_data['name']} set as current for bidding",
+            "player_id": player_id,
+            "player_name": player_data['name'],
+            "base_price": player_data['base_price']
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/events/{event_id}/fix-current-players")
+async def fix_current_players(event_id: str, current_user: dict = Depends(require_super_admin)):
+    """Fix multiple CURRENT players by resetting all to AVAILABLE except the one in auction state"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Get auction state to find the actual current player
+        auction_state_id = f"auction_{event_id}"
+        state_doc = db.collection('auction_state').document(auction_state_id).get()
+        actual_current_player_id = None
+        
+        if state_doc.exists:
+            state_data = state_doc.to_dict()
+            actual_current_player_id = state_data.get('current_player_id')
+        
+        # Find all players with CURRENT status
+        current_players = db.collection('players').where('event_id', '==', event_id).where('status', '==', PlayerStatus.CURRENT.value).get()
+        
+        fixed_count = 0
+        for current_player_doc in current_players:
+            player_id = current_player_doc.id
+            
+            # If this is not the actual current player, reset to available
+            if player_id != actual_current_player_id:
+                db.collection('players').document(player_id).update({
+                    'status': PlayerStatus.AVAILABLE.value
+                })
+                fixed_count += 1
+        
+        return {
+            "message": f"Fixed {fixed_count} players with incorrect CURRENT status",
+            "fixed_count": fixed_count,
+            "actual_current_player": actual_current_player_id
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -963,16 +1031,250 @@ async def finalize_bid(player_id: str, event_id: str, current_user: dict = Depen
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@api_router.post("/players/{player_id}/sell")
+async def sell_player_directly(
+    player_id: str, 
+    team_id: str, 
+    price: int, 
+    event_id: str, 
+    current_user: dict = Depends(require_super_admin)
+):
+    """Directly sell a player to a team (super admin only)"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Validate player exists and is available for sale
+        player_doc = db.collection('players').document(player_id).get()
+        if not player_doc.exists:
+            raise HTTPException(status_code=404, detail="Player not found")
+        
+        player_data = player_doc.to_dict()
+        if player_data.get('status') not in [PlayerStatus.AVAILABLE.value, PlayerStatus.CURRENT.value]:
+            raise HTTPException(status_code=400, detail="Player not available for sale")
+        
+        # Validate team exists
+        team_doc = db.collection('teams').document(team_id).get()
+        if not team_doc.exists:
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        team_data = team_doc.to_dict()
+        
+        # Check if team has enough budget
+        if team_data.get('remaining', 0) < price:
+            raise HTTPException(status_code=400, detail="Team has insufficient budget")
+        
+        # Update player status
+        db.collection('players').document(player_id).update({
+            'status': PlayerStatus.SOLD.value,
+            'sold_to_team_id': team_id,
+            'sold_price': price
+        })
+        
+        # Update team budget
+        new_remaining = team_data['remaining'] - price
+        db.collection('teams').document(team_id).update({
+            'remaining': new_remaining
+        })
+        
+        # Clear auction state if this was the current player
+        auction_state_id = f"auction_{event_id}"
+        state_doc = db.collection('auction_state').document(auction_state_id).get()
+        if state_doc.exists:
+            state_data = state_doc.to_dict()
+            if state_data.get('current_player_id') == player_id:
+                db.collection('auction_state').document(auction_state_id).update({
+                    'current_player_id': None,
+                    'current_bid': 0,
+                    'current_team_id': None,
+                    'current_team_name': None,
+                    'bid_history': []
+                })
+        
+        return {
+            "message": f"Player sold successfully to {team_data['name']} for ₹{price:,}",
+            "player_id": player_id,
+            "team_id": team_id,
+            "team_name": team_data['name'],
+            "price": price
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/players/{player_id}/mark-unsold")
+async def mark_player_unsold(
+    player_id: str, 
+    event_id: str, 
+    current_user: dict = Depends(require_super_admin)
+):
+    """Mark a player as unsold (super admin only)"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Validate player exists
+        player_doc = db.collection('players').document(player_id).get()
+        if not player_doc.exists:
+            raise HTTPException(status_code=404, detail="Player not found")
+        
+        player_data = player_doc.to_dict()
+        
+        # Update player status to unsold
+        db.collection('players').document(player_id).update({
+            'status': PlayerStatus.UNSOLD.value
+        })
+        
+        # Clear auction state if this was the current player
+        auction_state_id = f"auction_{event_id}"
+        state_doc = db.collection('auction_state').document(auction_state_id).get()
+        if state_doc.exists:
+            state_data = state_doc.to_dict()
+            if state_data.get('current_player_id') == player_id:
+                db.collection('auction_state').document(auction_state_id).update({
+                    'current_player_id': None,
+                    'current_bid': 0,
+                    'current_team_id': None,
+                    'current_team_name': None,
+                    'bid_history': []
+                })
+        
+        return {
+            "message": f"Player {player_data['name']} marked as unsold",
+            "player_id": player_id,
+            "player_name": player_data['name']
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/players/{player_id}/make-available")
+async def make_player_available(player_id: str, current_user: dict = Depends(require_super_admin)):
+    """Make an unsold player available for auction again"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Get player document
+        player_doc = db.collection('players').document(player_id).get()
+        if not player_doc.exists:
+            raise HTTPException(status_code=404, detail="Player not found")
+        
+        player_data = player_doc.to_dict()
+        
+        # Check if player is unsold
+        if player_data.get('status') != PlayerStatus.UNSOLD.value:
+            raise HTTPException(status_code=400, detail="Player is not unsold")
+        
+        # Update player status to available
+        db.collection('players').document(player_id).update({
+            'status': PlayerStatus.AVAILABLE.value
+        })
+        
+        return {"message": "Player made available for auction"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/events/{event_id}/make-all-unsold-available")
+async def make_all_unsold_available(event_id: str, current_user: dict = Depends(require_super_admin)):
+    """Make all unsold players in an event available for auction again"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Get all players for the event through categories
+        categories = db.collection('categories').where('event_id', '==', event_id).stream()
+        category_ids = [cat.id for cat in categories]
+        
+        if not category_ids:
+            return {"message": "No categories found for this event", "updated_count": 0}
+        
+        # Get all unsold players in these categories
+        updated_count = 0
+        for category_id in category_ids:
+            players = db.collection('players').where('category_id', '==', category_id).where('status', '==', PlayerStatus.UNSOLD.value).stream()
+            
+            for player in players:
+                db.collection('players').document(player.id).update({
+                    'status': PlayerStatus.AVAILABLE.value
+                })
+                updated_count += 1
+        
+        return {"message": f"Made {updated_count} unsold players available for auction", "updated_count": updated_count}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/events/{event_id}/fix-current-players")
+async def fix_current_players(event_id: str, current_user: dict = Depends(require_super_admin)):
+    """Fix multiple CURRENT players by resetting all to AVAILABLE except the one in auction state"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Get auction state to find the actual current player
+        auction_state_id = f"auction_{event_id}"
+        state_doc = db.collection('auction_state').document(auction_state_id).get()
+        actual_current_player_id = None
+        
+        if state_doc.exists:
+            state_data = state_doc.to_dict()
+            actual_current_player_id = state_data.get('current_player_id')
+        
+        # Get all players for the event through categories
+        categories = db.collection('categories').where('event_id', '==', event_id).stream()
+        category_ids = [cat.id for cat in categories]
+        
+        if not category_ids:
+            return {"message": "No categories found for this event", "fixed_count": 0}
+        
+        # Find all players with CURRENT status
+        fixed_count = 0
+        for category_id in category_ids:
+            current_players = db.collection('players').where('category_id', '==', category_id).where('status', '==', PlayerStatus.CURRENT.value).stream()
+            
+            for current_player_doc in current_players:
+                player_id = current_player_doc.id
+                
+                # If this is not the actual current player, reset to available
+                if player_id != actual_current_player_id:
+                    db.collection('players').document(player_id).update({
+                        'status': PlayerStatus.AVAILABLE.value
+                    })
+                    fixed_count += 1
+        
+        return {
+            "message": f"Fixed {fixed_count} players with incorrect CURRENT status",
+            "fixed_count": fixed_count,
+            "actual_current_player": actual_current_player_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 # ============= SPONSOR ROUTES =============
 
 @api_router.post("/sponsors", response_model=Sponsor)
 async def create_sponsor(sponsor_data: SponsorCreate, current_user: dict = Depends(require_super_admin)):
-    """Create a sponsor"""
+    """Create a new sponsor"""
     try:
         sponsor_id = str(uuid.uuid4())
         sponsor_doc = {
             'id': sponsor_id,
-            **sponsor_data.model_dump()
+            'name': sponsor_data.name,
+            'description': sponsor_data.description,
+            'logo_url': sponsor_data.logo_url,
+            'website': sponsor_data.website,
+            'contact_email': sponsor_data.contact_email,
+            'contact_phone': sponsor_data.contact_phone,
+            'address': sponsor_data.address,
+            'sponsorship_amount': sponsor_data.sponsorship_amount,
+            'tier': sponsor_data.tier,
+            'is_active': sponsor_data.is_active,
+            'event_id': sponsor_data.event_id,
+            'created_at': datetime.now(timezone.utc).isoformat()
         }
         
         if db:
@@ -984,17 +1286,86 @@ async def create_sponsor(sponsor_data: SponsorCreate, current_user: dict = Depen
 
 @api_router.get("/sponsors/event/{event_id}", response_model=List[Sponsor])
 async def get_event_sponsors(event_id: str):
-    """Get sponsors for an event"""
+    """Get all sponsors for an event"""
     try:
         if not db:
             return []
         
-        sponsors = db.collection('sponsors').where('event_id', '==', event_id).order_by('priority').stream()
+        sponsors = db.collection('sponsors').where('event_id', '==', event_id).stream()
         return [Sponsor(**sponsor.to_dict()) for sponsor in sponsors]
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-# ============= ANALYTICS ROUTES =============
+@api_router.get("/sponsors/{sponsor_id}", response_model=Sponsor)
+async def get_sponsor(sponsor_id: str):
+    """Get sponsor by ID"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        sponsor_doc = db.collection('sponsors').document(sponsor_id).get()
+        if not sponsor_doc.exists:
+            raise HTTPException(status_code=404, detail="Sponsor not found")
+        
+        return Sponsor(**sponsor_doc.to_dict())
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/sponsors/{sponsor_id}", response_model=Sponsor)
+async def update_sponsor(sponsor_id: str, sponsor_data: SponsorCreate, current_user: dict = Depends(require_super_admin)):
+    """Update a sponsor"""
+    try:
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        # Check if sponsor exists
+        sponsor_doc = db.collection('sponsors').document(sponsor_id).get()
+        if not sponsor_doc.exists:
+            raise HTTPException(status_code=404, detail="Sponsor not found")
+        
+        # Update sponsor data
+        updated_data = {
+            'name': sponsor_data.name,
+            'description': sponsor_data.description,
+            'logo_url': sponsor_data.logo_url,
+            'website': sponsor_data.website,
+            'contact_email': sponsor_data.contact_email,
+            'contact_phone': sponsor_data.contact_phone,
+            'address': sponsor_data.address,
+            'sponsorship_amount': sponsor_data.sponsorship_amount,
+            'tier': sponsor_data.tier,
+            'is_active': sponsor_data.is_active,
+            'event_id': sponsor_data.event_id
+        }
+        
+        db.collection('sponsors').document(sponsor_id).update(updated_data)
+        
+        # Get updated sponsor
+        updated_doc = db.collection('sponsors').document(sponsor_id).get()
+        return Sponsor(**updated_doc.to_dict())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/sponsors/{sponsor_id}")
+async def delete_sponsor(sponsor_id: str, current_user: dict = Depends(require_super_admin)):
+    """Delete a sponsor"""
+    try:
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        # Check if sponsor exists
+        sponsor_doc = db.collection('sponsors').document(sponsor_id).get()
+        if not sponsor_doc.exists:
+            raise HTTPException(status_code=404, detail="Sponsor not found")
+        
+        # Delete the sponsor
+        db.collection('sponsors').document(sponsor_id).delete()
+        
+        return {"message": "Sponsor deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.get("/analytics/event/{event_id}", response_model=AuctionAnalytics)
 async def get_event_analytics(event_id: str):

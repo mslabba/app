@@ -206,18 +206,31 @@ class AuctionState(BaseModel):
 # Sponsor Models
 class SponsorCreate(BaseModel):
     name: str
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+    website: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    address: Optional[str] = None
+    sponsorship_amount: Optional[int] = None
+    tier: Optional[str] = 'bronze'  # platinum, gold, silver, bronze
+    is_active: bool = True
     event_id: str
-    logo_url: str
-    display_duration: int = 5
-    priority: int = 1
 
 class Sponsor(BaseModel):
     id: str
     name: str
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+    website: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    address: Optional[str] = None
+    sponsorship_amount: Optional[int] = None
+    tier: Optional[str] = 'bronze'
+    is_active: bool = True
     event_id: str
-    logo_url: str
-    display_duration: int
-    priority: int
+    created_at: Optional[str] = None
 
 # Analytics Models
 class TeamAnalytics(BaseModel):

@@ -287,7 +287,7 @@ const EventManagement = () => {
                     </Button>
                   </div>
                   <div className="space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                       <Button 
                         size="sm" 
                         className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
@@ -315,6 +315,20 @@ const EventManagement = () => {
                         onClick={() => window.location.href = `/admin/registrations/${event.id}`}
                       >
                         Registrations
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30"
+                        onClick={() => window.location.href = `/admin/sponsors/${event.id}`}
+                      >
+                        Sponsors
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                        onClick={() => window.location.href = `/admin/auction/${event.id}`}
+                      >
+                        🎯 Auction Control
                       </Button>
                     </div>
                     <Button 

@@ -15,10 +15,12 @@ import CategoryManagement from '@/pages/CategoryManagement';
 import TeamManagement from '@/pages/TeamManagement';
 import PlayerManagement from '@/pages/PlayerManagement';
 import AuctionControl from '@/pages/AuctionControl';
+import SponsorManagement from '@/pages/SponsorManagement';
 import Analytics from '@/pages/Analytics';
 import PublicPlayerRegistration from '@/pages/PublicPlayerRegistration';
 import PlayerRegistrationManagement from '@/pages/PlayerRegistrationManagement';
 import TestPage from '@/pages/TestPage';
+import PromoteToAdmin from '@/pages/PromoteToAdmin';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 // Dashboard redirect component for authenticated users
@@ -67,6 +69,7 @@ function App() {
             <Route path="/test" element={<TestPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/promote-to-admin" element={<PromoteToAdmin />} />
             <Route path="/display/:eventId" element={<AuctionDisplay />} />
             <Route path="/events/:eventId/register" element={<PublicPlayerRegistration />} />
             
@@ -127,6 +130,14 @@ function App() {
               element={
                 <ProtectedRoute requireSuperAdmin>
                   <AuctionControl />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/sponsors/:eventId" 
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <SponsorManagement />
                 </ProtectedRoute>
               } 
             />

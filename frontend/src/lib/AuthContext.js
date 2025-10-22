@@ -88,6 +88,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   console.log('AuthProvider rendering, loading:', loading);
+  console.log('AuthProvider state:', {
+    currentUser: !!currentUser,
+    userProfile,
+    isAuthenticated: !!currentUser,
+    isSuperAdmin: userProfile?.role === 'super_admin',
+    loading
+  });
 
   return (
     <AuthContext.Provider value={value}>

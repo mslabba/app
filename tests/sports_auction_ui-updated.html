@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sports Auction Live</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #2a1f3a 100%);
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .animated-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(255, 0, 150, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 50%, rgba(0, 150, 255, 0.1) 0%, transparent 50%);
+            animation: pulse 8s ease-in-out infinite;
+            z-index: 0;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 0.8; }
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            height: 100vh;
+            padding: 20px;
+            display: grid;
+            grid-template-rows: auto 1fr auto auto;
+            gap: 15px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 30px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tournament-logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo-circle {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #ff006e, #fb5607);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 24px;
+            box-shadow: 0 0 30px rgba(255, 0, 110, 0.5);
+        }
+
+        .tournament-name {
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(90deg, #ff006e, #ffbe0b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 20px;
+            background: rgba(255, 0, 0, 0.2);
+            border-radius: 50px;
+            border: 2px solid #ff0000;
+        }
+
+        .live-dot {
+            width: 10px;
+            height: 10px;
+            background: #ff0000;
+            border-radius: 50%;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Main Content */
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            height: 100%;
+        }
+
+        /* Player Section */
+        .player-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .player-main {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border-radius: 25px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 30px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .player-main::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255, 0, 110, 0.1) 0%, transparent 70%);
+            animation: rotate 10s linear infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .player-image-container {
+            position: relative;
+            z-index: 1;
+        }
+
+        .player-image {
+            width: 100%;
+            height: 380px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 100px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .player-image::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.4) 100%);
+        }
+
+        .player-badge {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            padding: 8px 16px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 50px;
+            font-size: 13px;
+            font-weight: bold;
+            text-transform: uppercase;
+            z-index: 2;
+        }
+
+        .player-details {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .player-header h1 {
+            font-size: 42px;
+            font-weight: 900;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #00f5ff, #0099ff, #ff006e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .player-meta {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            font-size: 16px;
+            flex-wrap: wrap;
+        }
+
+        .player-meta span {
+            padding: 6px 14px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+            border-color: rgba(0, 245, 255, 0.5);
+            transform: translateY(-3px);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 26px;
+            font-weight: bold;
+            background: linear-gradient(90deg, #00f5ff, #ffffff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .price-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .price-box {
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            text-align: center;
+        }
+
+        .price-box.base {
+            border-color: rgba(0, 245, 255, 0.5);
+        }
+
+        .price-box.final {
+            border-color: rgba(255, 185, 11, 0.5);
+            background: linear-gradient(135deg, rgba(255, 185, 11, 0.1), rgba(255, 0, 110, 0.1));
+        }
+
+        .price-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .price-value {
+            font-size: 36px;
+            font-weight: 900;
+            background: linear-gradient(90deg, #ffbe0b, #ff006e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Teams Section */
+        .teams-section {
+            padding: 15px 30px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: linear-gradient(90deg, #00f5ff, #0099ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .teams-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+
+        .team-card {
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .team-card:hover {
+            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .team-logo {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .team-logo.t1 { background: linear-gradient(135deg, #ff006e, #d62828); }
+        .team-logo.t2 { background: linear-gradient(135deg, #0096c7, #023e8a); }
+        .team-logo.t3 { background: linear-gradient(135deg, #ffbe0b, #fb5607); }
+        .team-logo.t4 { background: linear-gradient(135deg, #06ffa5, #059669); }
+        .team-logo.t5 { background: linear-gradient(135deg, #a855f7, #6366f1); }
+        .team-logo.t6 { background: linear-gradient(135deg, #ec4899, #be123c); }
+        .team-logo.t7 { background: linear-gradient(135deg, #14b8a6, #0891b2); }
+        .team-logo.t8 { background: linear-gradient(135deg, #f97316, #ea580c); }
+
+        .team-info h3 {
+            font-size: 14px;
+            margin-bottom: 4px;
+            font-weight: bold;
+        }
+
+        .team-info p {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        /* Sponsors Section */
+        .sponsors-section {
+            padding: 12px 30px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sponsors-scroll {
+            display: flex;
+            gap: 15px;
+            overflow-x: auto;
+            padding: 10px 0;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+        }
+
+        .sponsors-scroll::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .sponsors-scroll::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+
+        .sponsors-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+        }
+
+        .sponsor-card {
+            min-width: 140px;
+            height: 80px;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+
+        .sponsor-card:hover {
+            transform: scale(1.05);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Control Panel */
+        .control-panel {
+            display: flex;
+            gap: 15px;
+            padding: 15px 30px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            flex-wrap: wrap;
+        }
+
+        .price-input-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .price-input-group label {
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 14px;
+        }
+
+        .price-input-group input {
+            flex: 1;
+            padding: 12px 18px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .price-input-group input:focus {
+            border-color: #00f5ff;
+            box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+        }
+
+        .btn-sell {
+            background: linear-gradient(135deg, #06ffa5, #059669);
+            color: white;
+        }
+
+        .btn-sell:hover {
+            box-shadow: 0 8px 25px rgba(6, 255, 165, 0.5);
+        }
+
+        .btn-add {
+            background: linear-gradient(135deg, #ffbe0b, #fb5607);
+            color: white;
+        }
+
+        .btn-add:hover {
+            box-shadow: 0 8px 25px rgba(255, 190, 11, 0.5);
+        }
+
+        .btn-next {
+            background: linear-gradient(135deg, #0096c7, #023e8a);
+            color: white;
+            padding: 12px 50px;
+        }
+
+        .btn-next:hover {
+            box-shadow: 0 8px 25px rgba(0, 150, 199, 0.5);
+        }
+
+        .team-select {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .team-btn {
+            padding: 12px 20px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .team-btn:hover {
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .team-btn.active {
+            background: linear-gradient(135deg, #ff006e, #fb5607);
+            border-color: #ff006e;
+            box-shadow: 0 5px 20px rgba(255, 0, 110, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="animated-bg"></div>
+    
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="tournament-logo">
+                <div class="logo-circle">⚡</div>
+                <div class="tournament-name">PREMIER LEAGUE AUCTION 2025</div>
+            </div>
+            <div class="live-indicator">
+                <div class="live-dot"></div>
+                <span style="font-weight: bold; font-size: 16px;">LIVE BIDDING</span>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Player Section -->
+            <div class="player-section">
+                <div class="player-main">
+                    <div class="player-image-container">
+                        <div class="player-image">
+                            🏏
+                            <div class="player-badge">ALL-ROUNDER</div>
+                        </div>
+                    </div>
+                    <div class="player-details">
+                        <div>
+                            <div class="player-header">
+                                <h1>ALEX MORGAN</h1>
+                            </div>
+                            <div class="player-meta">
+                                <span>🇺🇸 USA</span>
+                                <span>⚡ All-Rounder</span>
+                                <span>👤 27 years</span>
+                            </div>
+                            <div class="stats-grid">
+                                <div class="stat-card">
+                                    <div class="stat-label">Matches</div>
+                                    <div class="stat-value">156</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">Total Runs</div>
+                                    <div class="stat-value">4,852</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">Wickets</div>
+                                    <div class="stat-value">89</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">Strike Rate</div>
+                                    <div class="stat-value">142.5</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="price-section">
+                            <div class="price-box base">
+                                <div class="price-label">Base Value</div>
+                                <div class="price-value">$500K</div>
+                            </div>
+                            <div class="price-box final">
+                                <div class="price-label">Final Price</div>
+                                <div class="price-value" id="finalPrice">---</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Teams Section -->
+        <div class="teams-section">
+            <div class="section-header">
+                <div class="section-title">🏆 Participating Teams</div>
+            </div>
+            <div class="teams-grid">
+                <div class="team-card">
+                    <div class="team-logo t1">🔴</div>
+                    <div class="team-info">
+                        <h3>Red Warriors</h3>
+                        <p>Budget: $2.5M</p>
+                    </div>
+                </div>
+                <div class="team-card">
+                    <div class="team-logo t2">🔵</div>
+                    <div class="team-info">
+                        <h3>Blue Titans</h3>
+                        <p>Budget: $3.1M</p>
+                    </div>
+                </div>
+                <div class="team-card">
+                    <div class="team-logo t3">🟡</div>
+                    <div class="team-info">
+                        <h3>Golden Eagles</h3>
+                        <p>Budget: $2.8M</p>
+                    </div>
+                </div>
+                <div class="team-card">
+                    <div class="team-logo t4">🟢</div>
+                    <div class="team-info">
+                        <h3>Green Storm</h3>
+                        <p>Budget: $3.3M</p>
+                    </div>
+                </div>
+                <div class="team-card">
+                    <div class="team-logo t5">🟣</div>
+                    <div class="team-info">
+                        <h3>Purple Knights</h3>
+                        <p>Budget: $2.9M</p>
+                    </div>
+                </div>
+                <div class="team-card">
+                    <div class="team-logo t6">🔴</div>
+                    <div class="team-info">
+                        <h3>Pink Panthers</h3>
+                        <p>Budget: $2.7M</p>
+                    </div>
+                </div>
+                <div class="team-card">
+                    <div class="team-logo t7">🔷</div>
+                    <div class="team-info">
+                        <h3>Teal Sharks</h3>
+                        <p>Budget: $3.0M</p>
+                    </div>
+                </div>
+                <div class="team-card">
+                    <div class="team-logo t8">🟠</div>
+                    <div class="team-info">
+                        <h3>Orange Thunder</h3>
+                        <p>Budget: $2.6M</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sponsors Section -->
+        <div class="sponsors-section">
+            <div class="section-header">
+                <div class="section-title">💎 Official Sponsors</div>
+            </div>
+            <div class="sponsors-scroll">
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(255, 0, 110, 0.2), rgba(0, 150, 255, 0.2));">SPORTX</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(255, 190, 11, 0.2), rgba(251, 86, 7, 0.2));">ENERGY+</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(6, 255, 165, 0.2), rgba(5, 150, 105, 0.2));">TECH PRO</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));">GAME ON</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(219, 39, 119, 0.2));">ELITE WEAR</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(139, 92, 246, 0.2));">MEGA BANK</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(3, 105, 161, 0.2));">AQUA LIFE</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(202, 138, 4, 0.2));">GOLD CHAIN</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(185, 28, 28, 0.2));">RED BULL</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(21, 128, 61, 0.2));">GREEN TEA</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(194, 65, 12, 0.2));">FIRE FIT</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(20, 184, 166, 0.2), rgba(13, 148, 136, 0.2));">OCEAN WAY</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.2));">SUN STAR</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(79, 70, 229, 0.2));">NOVA TECH</div>
+                <div class="sponsor-card" style="background: linear-gradient(135deg, rgba(244, 63, 94, 0.2), rgba(190, 18, 60, 0.2));">HEART CARE</div>
+            </div>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="control-panel">
+            <div class="team-select">
+                <button class="team-btn" onclick="selectTeam(this, 'Red Warriors')">Red Warriors</button>
+                <button class="team-btn" onclick="selectTeam(this, 'Blue Titans')">Blue Titans</button>
+                <button class="team-btn" onclick="selectTeam(this, 'Golden Eagles')">Golden Eagles</button>
+                <button class="team-btn" onclick="selectTeam(this, 'Green Storm')">Green Storm</button>
+                <button class="team-btn" onclick="selectTeam(this, 'Purple Knights')">Purple Knights</button>
+                <button class="team-btn" onclick="selectTeam(this, 'Pink Panthers')">Pink Panthers</button>
+                <button class="team-btn" onclick="selectTeam(this, 'Teal Sharks')">Teal Sharks</button>
+                <button class="team-btn" onclick="selectTeam(this, 'Orange Thunder')">Orange Thunder</button>
+            </div>
+            <div class="price-input-group">
+                <label for="priceInput">Final Price:</label>
+                <input type="text" id="priceInput" placeholder="Enter amount (e.g., 850000)">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-sell" onclick="sellToTeam()">Sell to Team</button>
+                <button class="btn btn-add" onclick="addFinalPrice()">Add Final Price</button>
+                <button class="btn btn-next" onclick="nextPlayer()">Next Player →</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedTeam = null;
+
+        function selectTeam(btn, teamName) {
+            document.querySelectorAll('.team-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedTeam = teamName;
+        }
+
+        function addFinalPrice() {
+            const input = document.getElementById('priceInput');
+            const price = input.value.trim();
+            if (price) {
+                const formatted = '$' + (parseInt(price) / 1000).toFixed(0) + 'K';
+                document.getElementById('finalPrice').textContent = formatted;
+                input.value = '';
+            } else {
+                alert('Please enter a valid price!');
+            }
+        }
+
+        function sellToTeam() {
+            if (!selectedTeam) {
+                alert('Please select a team first!');
+                return;
+            }
+            const finalPrice = document.getElementById('finalPrice').textContent;
+            if (finalPrice === '---') {
+                alert('Please add a final price first!');
+                return;
+            }
+            alert(`Player sold to ${selectedTeam} for ${finalPrice}!`);
+        }
+
+        function nextPlayer() {
+            if (confirm('Move to next player?')) {
+                document.getElementById('finalPrice').textContent = '---';
+                document.getElementById('priceInput').value = '';
+                document.querySelectorAll('.team-btn').forEach(b => b.classList.remove('active'));
+                selectedTeam = null;
+                alert('Ready for next player!');
+            }
+        }
+    </script>
+</body>
+</html>
