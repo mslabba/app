@@ -122,9 +122,20 @@ const EventManagement = () => {
             <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Event Management</h1>
             <p className="text-white/80">powered by Turgut - Create and manage auction events</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); }}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => { 
+            console.log('Dialog state changing to:', open);
+            setIsDialogOpen(open);
+            if (!open) resetForm(); 
+          }}>
             <DialogTrigger asChild>
-              <Button className="bg-white text-purple-700 hover:bg-white/90" data-testid="create-event-button">
+              <Button 
+                className="bg-white text-purple-700 hover:bg-white/90" 
+                data-testid="create-event-button"
+                onClick={() => {
+                  console.log('Create Event button clicked');
+                  setIsDialogOpen(true);
+                }}
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Create Event
               </Button>

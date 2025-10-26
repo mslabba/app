@@ -183,13 +183,18 @@ const CategoryManagement = () => {
             <p>Categories define player types (e.g., Batsmen, Bowlers, All-rounders)</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => { 
+            console.log('Category Dialog state changing to:', open);
+            setIsDialogOpen(open);
             if (!open) resetForm(); 
-            setIsDialogOpen(open); 
           }}>
             <DialogTrigger asChild>
               <Button 
                 className="bg-white text-purple-700 hover:bg-white/90"
-                onClick={resetForm}
+                onClick={() => {
+                  console.log('Add Category button clicked');
+                  resetForm();
+                  setIsDialogOpen(true);
+                }}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Category

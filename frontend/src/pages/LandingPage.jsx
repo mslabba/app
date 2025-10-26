@@ -83,10 +83,18 @@ const LandingPage = () => {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Trophy className="w-8 h-8 text-yellow-400" />
+              <img 
+                src="/images/sports/logo-transparent.png" 
+                alt="PowerAuctions Logo" 
+                className="h-12 w-auto"
+                onError={(e) => {
+                  console.error('Logo failed to load:', e.target.src);
+                  e.target.style.display = 'none';
+                }}
+              />
               <div className="flex flex-col">
-                <span className="text-2xl font-bold text-white">PowerAuctions</span>
-                <span className="text-xs text-white/60">powered by Turgut</span>
+                <span className="text-2xl font-bold text-white">Power<span className="text-red-500">Auction</span></span>
+                <span className="text-xs text-white/60">Powered by Turgut</span>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -457,10 +465,18 @@ const LandingPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="col-span-1 md:col-span-2">
               <div className="flex items-center space-x-2 mb-4">
-                <Trophy className="w-8 h-8 text-yellow-400" />
+                <img 
+                  src="/images/sports/logo-transparent.png" 
+                  alt="PowerAuctions Logo" 
+                  className="h-12 w-auto"
+                  onError={(e) => {
+                    console.error('Logo failed to load:', e.target.src);
+                    e.target.style.display = 'none';
+                  }}
+                />
                 <div className="flex flex-col">
-                  <span className="text-2xl font-bold text-white">PowerAuctions</span>
-                  <span className="text-xs text-white/60">powered by Turgut</span>
+                  <span className="text-2xl font-bold text-white">Power<span className="text-red-500">Auction</span></span>
+                  <span className="text-xs text-white/60">Powered by Turgut</span>
                 </div>
               </div>
               <p className="text-white/60 max-w-md">

@@ -25,8 +25,19 @@ const Navbar = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-8">
             <Link to={isSuperAdmin ? "/admin" : "/team"} className="flex items-center space-x-2">
-              <DollarSign className="w-8 h-8 text-white" />
-              <span className="text-xl font-bold text-white">Sports Auction</span>
+              <img 
+                src="/images/sports/logo-transparent.png" 
+                alt="PowerAuctions Logo"
+                className="h-10 w-auto"
+                onError={(e) => {
+                  console.error('Logo failed to load:', e.target.src);
+                  e.target.style.display = 'none';
+                }}
+              />
+              <div className="flex flex-col">
+                <span className="text-xl font-bold text-white">Power<span className="text-red-500">Auction</span></span>
+                <span className="text-xs text-white/60">Powered by Turgut</span>
+              </div>
             </Link>
             
             {isSuperAdmin && (

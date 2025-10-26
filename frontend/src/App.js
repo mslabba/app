@@ -62,7 +62,7 @@ function App() {
   return (
     <AuthProvider>
       <div className="App">
-        <BrowserRouter basename="/app">
+        <BrowserRouter>
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />

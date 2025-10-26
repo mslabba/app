@@ -215,10 +215,17 @@ const SponsorManagement = () => {
             <h1 className="text-4xl font-bold text-white mb-2">Sponsor Management</h1>
             {event && <p className="text-white/80 text-lg">{event.name}</p>}
           </div>
-          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+          <Dialog open={isModalOpen} onOpenChange={(open) => {
+            console.log('Sponsor Dialog state changing to:', open);
+            setIsModalOpen(open);
+          }}>
             <DialogTrigger asChild>
               <Button 
-                onClick={resetForm}
+                onClick={() => {
+                  console.log('Add Sponsor button clicked');
+                  resetForm();
+                  setIsModalOpen(true);
+                }}
                 className="bg-green-600 hover:bg-green-700 text-white"
               >
                 <Plus className="w-4 h-4 mr-2" />

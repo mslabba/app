@@ -143,9 +143,19 @@ const TeamManagement = () => {
             <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Team Management</h1>
             <p className="text-white/80">{event?.name || 'Loading...'}</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); }}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => { 
+            console.log('Team Dialog state changing to:', open);
+            setIsDialogOpen(open);
+            if (!open) resetForm(); 
+          }}>
             <DialogTrigger asChild>
-              <Button className="bg-white text-purple-700 hover:bg-white/90">
+              <Button 
+                className="bg-white text-purple-700 hover:bg-white/90"
+                onClick={() => {
+                  console.log('Create Team button clicked');
+                  setIsDialogOpen(true);
+                }}
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Create Team
               </Button>

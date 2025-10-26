@@ -211,11 +211,17 @@ const PlayerManagement = () => {
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl font-bold text-white">PowerAuctions - Player Management</h1>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
+            console.log('Player Dialog state changing to:', open);
+            setIsDialogOpen(open);
+          }}>
             <DialogTrigger asChild>
               <Button 
                 className="bg-white text-purple-700 hover:bg-white/90"
-                onClick={resetForm}
+                onClick={() => {
+                  console.log('Add Player button clicked');
+                  setIsDialogOpen(true);
+                }}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Player
