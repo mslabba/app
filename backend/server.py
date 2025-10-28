@@ -1450,33 +1450,14 @@ async def health():
 # Include router in main app
 app.include_router(api_router)
 
-# Add CORS middleware
-cors_origins = os.environ.get('CORS_ORIGINS', '*')
-if cors_origins == '*':
-    # Allow all origins including the specific frontend domain
-    allowed_origins = ["*"]
-else:
-    allowed_origins = cors_origins.split(',')
-
-# Always include the frontend domain explicitly
-frontend_domains = [
-    "https://powerauction.turgut.in",
-    "http://localhost:3000",  # For local development
-    "https://mslabba.github.io"  # GitHub Pages fallback
-]
-
-# If using wildcard, keep it simple, otherwise add specific domains
-if cors_origins == '*':
-    allowed_origins = ["*"]
-else:
-    allowed_origins = list(set(cors_origins.split(',') + frontend_domains))
-
-logger.info(f"CORS Origins configured: {allowed_origins}")
+# Add CORS middleware - Temporary fix for deployment
+# Allow all origins to troubleshoot CORS issues
+logger.info("Setting up CORS middleware with permissive settings")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=allowed_origins,
+    allow_origins=["*"],  # Allow all origins temporarily
+    allow_credentials=False,  # Set to False when using wildcard origins
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
     allow_headers=["*"],
 )
