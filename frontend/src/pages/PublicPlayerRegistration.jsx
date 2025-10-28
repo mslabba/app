@@ -64,7 +64,7 @@ const PublicPlayerRegistration = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.name.trim()) {
       toast.error('Please enter your name');
       return;
@@ -93,7 +93,7 @@ const PublicPlayerRegistration = () => {
       };
 
       const response = await axios.post(`${API}/events/${eventId}/register-player`, registrationData);
-      
+
       toast.success('Registration submitted successfully!');
       setSubmitted(true);
     } catch (error) {
@@ -117,8 +117,8 @@ const PublicPlayerRegistration = () => {
               <p className="text-gray-600 mb-6">
                 Thank you for registering! The organizer will review your application and get back to you soon.
               </p>
-              <Link 
-                to="/" 
+              <Link
+                to="/"
                 className="inline-flex items-center bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -137,13 +137,28 @@ const PublicPlayerRegistration = () => {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
-              <Trophy className="w-8 h-8 text-white" />
-            </div>
+            {event && event.logo_url ? (
+              <img
+                src={event.logo_url}
+                alt={`${event.name} logo`}
+                className="w-16 h-16 object-contain rounded-lg bg-white/20 p-2 backdrop-blur-sm"
+              />
+            ) : (
+              <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
+                <Trophy className="w-8 h-8 text-white" />
+              </div>
+            )}
           </div>
           <h1 className="text-4xl font-bold text-white mb-2">Player Registration</h1>
           {event && (
-            <p className="text-white/80 text-lg">Register for {event.name}</p>
+            <div className="space-y-2">
+              <p className="text-white/90 text-xl font-medium">Register for {event.name}</p>
+              {event.description && (
+                <p className="text-white/70 text-sm max-w-2xl mx-auto">
+                  {event.description}
+                </p>
+              )}
+            </div>
           )}
         </div>
 
@@ -330,8 +345,8 @@ const PublicPlayerRegistration = () => {
 
         {/* Back to Home */}
         <div className="text-center mt-8">
-          <Link 
-            to="/" 
+          <Link
+            to="/"
             className="inline-flex items-center text-white/80 hover:text-white font-medium"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
