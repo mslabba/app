@@ -37,16 +37,69 @@ const PublicPlayerRegistration = () => {
   });
 
   useEffect(() => {
+    // Log environment info for debugging
+    console.log('Environment check:', {
+      location: window.location.href,
+      protocol: window.location.protocol,
+      isHTTPS: window.location.protocol === 'https:',
+      API: API,
+      eventId: eventId,
+      timestamp: new Date().toISOString()
+    });
+
     fetchEvent();
   }, [eventId]);
 
+  const testConnectivity = async () => {
+    try {
+      console.log('Testing basic connectivity...');
+      console.log('API URL:', API);
+      console.log('Full URL:', `${API}/events/${eventId}`);
+      console.log('Network online:', navigator.onLine);
+      console.log('User agent:', navigator.userAgent);
+
+      // Test basic connectivity
+      const testResponse = await fetch(`${API}/events/${eventId}`, {
+        method: 'HEAD',
+        mode: 'cors'
+      });
+      console.log('Connectivity test response:', {
+        ok: testResponse.ok,
+        status: testResponse.status,
+        headers: Object.fromEntries(testResponse.headers.entries())
+      });
+    } catch (error) {
+      console.error('Connectivity test failed:', error);
+    }
+  };
+
   const fetchEvent = async () => {
     try {
-      const response = await axios.get(`${API}/events/${eventId}`);
+      await testConnectivity();
+
+      const response = await axios.get(`${API}/events/${eventId}`, {
+        timeout: 10000, // 10 second timeout
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
       setEvent(response.data);
     } catch (error) {
       console.error('Failed to fetch event:', error);
-      toast.error('Failed to load event details');
+      console.error('Error details:', {
+        message: error.message,
+        name: error.name,
+        code: error.code,
+        response: error.response,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        url: `${API}/events/${eventId}`,
+        userAgent: navigator.userAgent,
+        isNetworkError: !error.response,
+        isTimeoutError: error.code === 'ECONNABORTED'
+      });
+      toast.error(`Failed to load event details: ${error.message || 'Network error'}`);
     }
   };
 
