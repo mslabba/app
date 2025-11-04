@@ -28,10 +28,15 @@ const addToRemoveQueue = (toastId) => {
 
   const timeout = setTimeout(() => {
     toastTimeouts.delete(toastId)
-    dispatch({
-      type: "REMOVE_TOAST",
-      toastId: toastId,
-    })
+    // Use try-catch to prevent DOM manipulation errors
+    try {
+      dispatch({
+        type: "REMOVE_TOAST",
+        toastId: toastId,
+      })
+    } catch (error) {
+      console.warn('Toast removal error suppressed:', error.message);
+    }
   }, TOAST_REMOVE_DELAY)
 
   toastTimeouts.set(toastId, timeout)
@@ -70,9 +75,9 @@ export const reducer = (state, action) => {
         toasts: state.toasts.map((t) =>
           t.id === toastId || toastId === undefined
             ? {
-                ...t,
-                open: false,
-              }
+              ...t,
+              open: false,
+            }
             : t),
       };
     }
@@ -136,19 +141,33 @@ function useToast() {
   const [state, setState] = React.useState(memoryState)
 
   React.useEffect(() => {
-    listeners.push(setState)
+    const stateListener = (newState) => {
+      try {
+        setState(newState);
+      } catch (error) {
+        console.warn('Toast state update error suppressed:', error.message);
+      }
+    };
+
+    listeners.push(stateListener)
     return () => {
-      const index = listeners.indexOf(setState)
+      const index = listeners.indexOf(stateListener)
       if (index > -1) {
         listeners.splice(index, 1)
       }
     };
-  }, [state])
+  }, [])
 
   return {
     ...state,
     toast,
-    dismiss: (toastId) => dispatch({ type: "DISMISS_TOAST", toastId }),
+    dismiss: (toastId) => {
+      try {
+        dispatch({ type: "DISMISS_TOAST", toastId });
+      } catch (error) {
+        console.warn('Toast dismiss error suppressed:', error.message);
+      }
+    },
   };
 }
 

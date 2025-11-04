@@ -10,14 +10,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { 
-  Play, 
-  Pause, 
-  Square, 
-  Timer, 
-  Users, 
-  Trophy, 
-  DollarSign, 
+import {
+  Play,
+  Pause,
+  Square,
+  Timer,
+  Users,
+  Trophy,
+  DollarSign,
   Clock,
   CheckCircle,
   AlertCircle,
@@ -25,7 +25,8 @@ import {
   Gavel,
   RotateCcw,
   X,
-  User
+  User,
+  ArrowRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/AuthContext';
@@ -53,15 +54,24 @@ const AuctionControl = () => {
   const [showFinalizeBidModal, setShowFinalizeBidModal] = useState(false);
   const [finalBidAmount, setFinalBidAmount] = useState('');
   const [selectedTeamForSale, setSelectedTeamForSale] = useState('');
+  const [showSoldStamp, setShowSoldStamp] = useState(false);
+  const [soldStampData, setSoldStampData] = useState({ teamName: '', price: '' });
+  const [preventDataRefresh, setPreventDataRefresh] = useState(false);
+  const [tempCurrentPlayer, setTempCurrentPlayer] = useState(null);
 
   useEffect(() => {
     if (eventId && currentUser && token && !authLoading) {
       fetchData();
       // Set up polling for real-time updates
-      const interval = setInterval(fetchAuctionState, 2000);
+      const interval = setInterval(() => {
+        // Only fetch if we're not showing the SOLD stamp
+        if (!preventDataRefresh) {
+          fetchAuctionState();
+        }
+      }, 2000);
       return () => clearInterval(interval);
     }
-  }, [eventId, currentUser, token, authLoading]);
+  }, [eventId, currentUser, token, authLoading, preventDataRefresh]);
 
   useEffect(() => {
     let interval;
@@ -245,7 +255,7 @@ const AuctionControl = () => {
       toast.error('No player currently selected for bidding');
       return;
     }
-    
+
     // Pre-fill with current bid amount and team
     setFinalBidAmount(auctionState?.current_bid?.toString() || currentPlayer.base_price?.toString() || '');
     setSelectedTeamForSale(auctionState?.current_team_id || '');
@@ -270,7 +280,7 @@ const AuctionControl = () => {
 
     try {
       setLoading(true);
-      
+
       // First place a bid for the selected team with the final amount
       await axios.post(`${API}/bids`, {
         player_id: currentPlayer.id,
@@ -287,14 +297,19 @@ const AuctionControl = () => {
       });
 
       const selectedTeam = teams.find(t => t.id === selectedTeamForSale);
+
+      // Show SOLD stamp animation
+      showSoldStampAnimation(selectedTeam?.name || 'Unknown Team', `₹${parseInt(finalBidAmount).toLocaleString()}`, currentPlayer);
+
       toast.success(`${currentPlayer.name} sold to ${selectedTeam?.name} for ₹${parseInt(finalBidAmount).toLocaleString()}!`);
-      
+
       setTimerActive(false);
       setTimer(0);
       setShowFinalizeBidModal(false);
       setFinalBidAmount('');
       setSelectedTeamForSale('');
-      
+
+      // Refresh data immediately since we're using tempCurrentPlayer to keep display stable
       fetchAuctionState();
       fetchPlayers();
       fetchTeams();
@@ -356,7 +371,7 @@ const AuctionControl = () => {
 
     try {
       setLoading(true);
-      
+
       // If there's a current bid, finalize it directly
       if (auctionState?.current_bid && auctionState?.current_team_id) {
         // Direct finalize - the backend will use the current auction state
@@ -365,21 +380,33 @@ const AuctionControl = () => {
         });
 
         const currentTeamName = teams.find(t => t.id === auctionState.current_team_id)?.name || 'Unknown Team';
+
+        // Show SOLD stamp animation
+        showSoldStampAnimation(currentTeamName, `₹${auctionState.current_bid.toLocaleString()}`, currentPlayer);
+
         toast.success(`${currentPlayer.name} sold to ${currentTeamName} for ₹${auctionState.current_bid.toLocaleString()}!`);
+
+        setTimerActive(false);
+        setTimer(0);
+
+        // Refresh data immediately since we're using tempCurrentPlayer to keep display stable
+        fetchAuctionState();
+        fetchPlayers();
+        fetchTeams();
       } else {
         // No bids - mark as unsold
         await axios.post(`${API}/bids/finalize/${currentPlayer.id}?event_id=${eventId}`, {}, {
           headers: { Authorization: `Bearer ${token}` }
         });
         toast.success(`${currentPlayer.name} marked as unsold`);
+
+        setTimerActive(false);
+        setTimer(0);
+
+        fetchAuctionState();
+        fetchPlayers();
+        fetchTeams();
       }
-      
-      setTimerActive(false);
-      setTimer(0);
-      
-      fetchAuctionState();
-      fetchPlayers();
-      fetchTeams();
     } catch (error) {
       console.error('Failed to finalize bid:', error);
       toast.error('Failed to finalize bid');
@@ -410,7 +437,26 @@ const AuctionControl = () => {
     return gradients[index % gradients.length];
   };
 
-  const handleSellToTeam = async () => {
+  const showSoldStampAnimation = (teamName, price, playerToKeep) => {
+    console.log('🎉 SHOWING SOLD STAMP:', { teamName, price, playerToKeep });
+
+    // Store the current player temporarily to keep it visible during animation
+    if (playerToKeep) {
+      setTempCurrentPlayer(playerToKeep);
+    }
+
+    setSoldStampData({ teamName, price });
+    setShowSoldStamp(true);
+    setPreventDataRefresh(true);
+
+    // Hide the stamp after 4 seconds
+    setTimeout(() => {
+      console.log('⏰ HIDING SOLD STAMP after 4 seconds');
+      setShowSoldStamp(false);
+      setPreventDataRefresh(false);
+      setTempCurrentPlayer(null); // Clear the temporary player
+    }, 4000);
+  }; const handleSellToTeam = async () => {
     if (!selectedTeamForSale) {
       toast.error('Please select a team first!');
       return;
@@ -426,14 +472,17 @@ const AuctionControl = () => {
 
     try {
       setLoading(true);
-      
+
       // Use direct sale endpoint for super admin
       await axios.post(`${API}/players/${currentPlayer.id}/sell?team_id=${selectedTeamForSale}&price=${parseInt(finalBidAmount)}&event_id=${eventId}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       const selectedTeam = teams.find(t => t.id === selectedTeamForSale);
-      
+
+      // Show SOLD stamp animation
+      showSoldStampAnimation(selectedTeam?.name || 'Unknown Team', `₹${parseInt(finalBidAmount).toLocaleString()}`, currentPlayer);
+
       // Enhanced celebration toast
       toast.success(
         `🎉 ${currentPlayer.name} SOLD! 🎉\n${selectedTeam?.name} • ₹${parseInt(finalBidAmount).toLocaleString()}`,
@@ -448,14 +497,14 @@ const AuctionControl = () => {
           }
         }
       );
-      
+
       // Reset states but keep current player visible
       setTimerActive(false);
       setTimer(0);
       setFinalBidAmount('');
       setSelectedTeamForSale('');
-      
-      // Refresh data to show updated player status
+
+      // Refresh data immediately since we're using tempCurrentPlayer to keep display stable
       fetchAuctionState();
       fetchPlayers();
       fetchTeams();
@@ -472,7 +521,7 @@ const AuctionControl = () => {
       toast.error('Please enter a valid price!');
       return;
     }
-    
+
     // Update the display price (this could update a state for display)
     const formattedPrice = `₹${parseInt(finalBidAmount).toLocaleString()}`;
     toast.success(`Final price set to ${formattedPrice}`);
@@ -482,41 +531,41 @@ const AuctionControl = () => {
     if (window.confirm('Move to next player? This will reset the current auction state and randomly select the next player.')) {
       try {
         setLoading(true);
-        
+
         // Reset all states
         setFinalBidAmount('');
         setSelectedTeamForSale('');
         setTimerActive(false);
         setTimer(60);
-        
+
         // Get available players (not sold, not unsold, not current)
-        const availableForNext = players.filter(p => 
+        const availableForNext = players.filter(p =>
           p.status === 'available' || p.status === 'AVAILABLE'
         );
-        
+
         if (availableForNext.length === 0) {
           toast.error('No available players left for auction!');
           setSelectedPlayer('');
           return;
         }
-        
+
         // Randomly select next player
         const randomIndex = Math.floor(Math.random() * availableForNext.length);
         const nextPlayer = availableForNext[randomIndex];
-        
+
         // Set the randomly selected player as current
         await axios.post(`${API}/auction/next-player/${eventId}?player_id=${nextPlayer.id}`, {}, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        
+
         // Update UI states
         setSelectedPlayer('');
         setTimerActive(true);
-        
+
         // Refresh data
         fetchAuctionState();
         fetchPlayers();
-        
+
         toast.success(`${nextPlayer.name} randomly selected for next auction!`);
       } catch (error) {
         console.error('Failed to set next player:', error);
@@ -536,14 +585,14 @@ const AuctionControl = () => {
     if (window.confirm(`Mark ${currentPlayer.name} as UNSOLD?`)) {
       try {
         setLoading(true);
-        
+
         // Mark player as unsold
         await axios.post(`${API}/players/${currentPlayer.id}/mark-unsold?event_id=${eventId}`, {}, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
         toast.success(`${currentPlayer.name} marked as UNSOLD`);
-        
+
         // Refresh data but don't clear current player yet
         fetchAuctionState();
         fetchPlayers();
@@ -567,7 +616,7 @@ const AuctionControl = () => {
       const response = await axios.post(`${API}/events/${eventId}/fix-current-players`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
+
       toast.success(response.data.message);
       fetchPlayers(); // Refresh player list
       fetchAuctionState(); // Refresh auction state
@@ -582,19 +631,19 @@ const AuctionControl = () => {
   // Filter players based on search and category
   useEffect(() => {
     let filtered = availablePlayers;
-    
+
     if (searchTerm) {
-      filtered = filtered.filter(player => 
+      filtered = filtered.filter(player =>
         player.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         player.position?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         player.specialty?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-    
+
     if (selectedCategory && selectedCategory !== 'all') {
       filtered = filtered.filter(player => player.category_id === selectedCategory);
     }
-    
+
     setFilteredPlayers(filtered);
   }, [availablePlayers, searchTerm, selectedCategory]);
 
@@ -603,7 +652,7 @@ const AuctionControl = () => {
       toast.error('No players available for selection');
       return;
     }
-    
+
     const randomIndex = Math.floor(Math.random() * filteredPlayers.length);
     const randomPlayer = filteredPlayers[randomIndex];
     setSelectedPlayer(randomPlayer.id);
@@ -615,6 +664,11 @@ const AuctionControl = () => {
   };
 
   const getCurrentPlayer = () => {
+    // During SOLD stamp animation, use the temporary current player
+    if (showSoldStamp && tempCurrentPlayer) {
+      return tempCurrentPlayer;
+    }
+
     if (!auctionState?.current_player_id) return null;
     return players.find(p => p.id === auctionState.current_player_id);
   };
@@ -661,55 +715,232 @@ const AuctionControl = () => {
     );
   }
 
-  // Fullscreen Auction Control Mode
+  // Fullscreen Auction Control Mode - Optimized for Projector Display
   if (isFullscreen) {
     return (
       <div className="fixed inset-0 z-50 bg-gradient-to-br from-[#0a0e27] via-[#1a1f3a] to-[#2a1f3a] overflow-hidden">
-        {/* Animated Background */}
-        <div className="fixed inset-0 opacity-50 animate-pulse">
+        {/* Dynamic Animated Background */}
+        <div className="fixed inset-0 opacity-30">
           <div className="absolute inset-0" style={{
-            background: `radial-gradient(circle at 20% 50%, rgba(255, 0, 150, 0.1) 0%, transparent 50%), radial-gradient(circle at 80% 50%, rgba(0, 150, 255, 0.1) 0%, transparent 50%)`
+            background: `
+              radial-gradient(circle at 20% 30%, rgba(0, 255, 150, 0.08) 0%, transparent 50%), 
+              radial-gradient(circle at 80% 70%, rgba(255, 0, 150, 0.08) 0%, transparent 50%),
+              radial-gradient(circle at 50% 50%, rgba(0, 150, 255, 0.05) 0%, transparent 70%)
+            `
           }}></div>
+          {/* Floating particles effect */}
+          <div className="absolute inset-0">
+            {[...Array(20)].map((_, i) => (
+              <div
+                key={i}
+                className="absolute w-1 h-1 bg-cyan-400/30 rounded-full animate-pulse"
+                style={{
+                  left: `${Math.random() * 100}%`,
+                  top: `${Math.random() * 100}%`,
+                  animationDelay: `${Math.random() * 3}s`,
+                  animationDuration: `${3 + Math.random() * 2}s`
+                }}
+              />
+            ))}
+          </div>
         </div>
 
-        <div className="relative z-10 h-full flex flex-col p-5 gap-4">
-          {/* Header */}
-          <div className="flex justify-between items-center p-4 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-pink-500 to-orange-500 rounded-full flex items-center justify-center text-2xl font-bold shadow-lg shadow-pink-500/50">
-                ⚡
+        <div className="relative z-10 h-screen flex flex-col">
+          {/* 1️⃣ HEADER SECTION - 15% height */}
+          <div className="h-[15vh] flex items-center justify-between px-8 py-4 bg-black/20 backdrop-blur-xl border-b border-white/10">
+            {/* Left side: Event Logo and Name */}
+            <div className="flex items-center gap-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-xl shadow-cyan-500/30 animate-pulse overflow-hidden">
+                {event?.logo_url ? (
+                  <img
+                    src={event.logo_url}
+                    alt={event.name}
+                    className="w-full h-full object-cover rounded-full"
+                  />
+                ) : (
+                  <span className="text-3xl font-bold">⚡</span>
+                )}
               </div>
-              <div className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-yellow-500 bg-clip-text text-transparent uppercase tracking-wider">
-                {event?.name || 'SPORTS AUCTION 2025'}
+              <div>
+                <div className="text-3xl font-black bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent uppercase tracking-wider">
+                  {event?.name || 'SPORTS AUCTION 2025'}
+                </div>
+                <div className="text-sm text-cyan-300/80 uppercase tracking-widest font-medium">
+                  Live Auction Control
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3 px-5 py-2 bg-red-500/20 border-2 border-red-500 rounded-full">
-                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                <span className="font-bold text-white">LIVE BIDDING</span>
+
+            {/* Center: PowerAuction Branding & Timer */}
+            <div className="flex flex-col items-center">
+              <div className="text-center mb-4">
+                <div className="text-2xl font-black bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500 bg-clip-text text-transparent uppercase tracking-wider">
+                  PowerAuction
+                </div>
+                <div className="text-sm text-cyan-300/80 uppercase tracking-widest font-medium">
+                  Powered by Turgut
+                </div>
               </div>
+              {/* Countdown Timer */}
+              <div className={`flex items-center gap-3 px-6 py-3 rounded-full border-2 ${timer <= 10 && timerActive ?
+                'bg-red-500/20 border-red-500 animate-pulse' :
+                'bg-white/10 border-white/30'
+                }`}>
+                <Clock className="w-6 h-6 text-white" />
+                <span className={`text-2xl font-mono font-bold ${timer <= 10 && timerActive ? 'text-red-300' : 'text-white'
+                  }`}>
+                  {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
+                </span>
+              </div>
+            </div>
+
+            {/* Right side: Sponsor Carousel & Live Status */}
+            <div className="flex items-center gap-6">
+              {/* Live Status */}
+              <div className="flex items-center gap-3 px-6 py-3 bg-red-500/20 border-2 border-red-500 rounded-full">
+                <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
+                <span className="font-bold text-white uppercase tracking-wider">LIVE AUCTION</span>
+              </div>
+
+              {/* Sponsor Carousel */}
+              {sponsors.length > 0 && (
+                <div className="flex items-center gap-4 overflow-hidden">
+                  <div className="flex animate-marquee gap-4">
+                    {sponsors.filter(s => s.is_active).concat(sponsors.filter(s => s.is_active)).map((sponsor, index) => (
+                      <div
+                        key={`${sponsor.id}-${index}`}
+                        className="flex-shrink-0 w-20 h-12 bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 flex items-center justify-center overflow-hidden"
+                      >
+                        {sponsor.logo_url ? (
+                          <img
+                            src={sponsor.logo_url}
+                            alt={sponsor.name}
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-xs font-bold text-white/80">{sponsor.name}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <Button
                 onClick={toggleFullscreen}
                 variant="outline"
+                size="sm"
                 className="text-white border-white/30 hover:bg-white/10"
               >
-                Exit Fullscreen
+                Exit
               </Button>
             </div>
           </div>
 
-          {/* Main Content */}
-          <div className="flex-1 grid grid-rows-[1fr_auto_auto] gap-4">
-            {/* Player Display Section */}
-            <div className="bg-white/5 backdrop-blur-xl rounded-3xl border-2 border-white/10 p-8 relative overflow-hidden">
-              {/* Rotating background effect */}
-              <div className="absolute -top-1/2 -right-1/2 w-full h-full bg-gradient-radial from-pink-500/10 to-transparent animate-spin" style={{animationDuration: '10s'}}></div>
-              
+          {/* 2️⃣ MIDDLE SECTION - Main Focus Area - 70% height */}
+          <div className="h-[70vh] flex gap-6 px-8">
+            {/* Left 70%: Player Info Panel */}
+            <div className="w-[70%] bg-black/20 backdrop-blur-xl rounded-3xl border border-white/10 p-8 relative overflow-hidden">
+              {/* Dynamic background effects */}
+              <div className="absolute inset-0 opacity-20">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-cyan-500/20 to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }}></div>
+                <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-purple-500/20 to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s', animationDelay: '2s' }}></div>
+              </div>
+
               {currentPlayer ? (
-                <div className="relative z-10 grid grid-cols-[350px_1fr] gap-8 h-full">
-                  {/* Player Image */}
+                <div className="relative z-10 grid grid-cols-[280px_1fr] gap-8 h-full">
+                  {/* Enhanced SOLD Animation - Covers Full Player Card */}
+                  {showSoldStamp && (
+                    <>
+                      {console.log('🖼️ RENDERING ENHANCED SOLD ANIMATION:', soldStampData)}
+
+                      {/* Very Light Transparent Overlay Background */}
+                      <div className="absolute inset-0 bg-black/20 rounded-3xl pointer-events-none" style={{ zIndex: 95 }} />
+
+                      {/* Confetti Particles */}
+                      <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl" style={{ zIndex: 100 }}>
+                        {[...Array(50)].map((_, i) => (
+                          <div
+                            key={i}
+                            className="absolute animate-confetti"
+                            style={{
+                              left: `${Math.random() * 100}%`,
+                              top: '-10px',
+                              animationDelay: `${Math.random() * 1}s`,
+                              animationDuration: `${2.5 + Math.random() * 2}s`
+                            }}
+                          >
+                            <div
+                              className="w-4 h-4 rounded-full shadow-lg"
+                              style={{
+                                backgroundColor: ['#f59e0b', '#3b82f6', '#ef4444', '#10b981', '#8b5cf6', '#f97316', '#ec4899'][i % 7]
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Subtle Flash Effect - No White Background */}
+                      <div className="absolute inset-0 bg-yellow-200/30 animate-flash rounded-3xl pointer-events-none" style={{ zIndex: 101 }} />
+
+                      {/* Celebration Rings */}
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 102 }}>
+                        <div className="absolute w-40 h-40 border-4 border-yellow-400 rounded-full animate-ping" />
+                        <div
+                          className="absolute w-60 h-60 border-4 border-green-400 rounded-full animate-ping"
+                          style={{ animationDelay: '0.2s' }}
+                        />
+                        <div
+                          className="absolute w-80 h-80 border-4 border-blue-400 rounded-full animate-ping"
+                          style={{ animationDelay: '0.4s' }}
+                        />
+                      </div>
+
+                      {/* Main SOLD Stamp */}
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 103 }}>
+                        <div className="animate-stamp">
+                          <div className="relative">
+                            {/* Stamp Border and Background */}
+                            <div className="bg-red-600 text-white font-black text-8xl px-16 py-10 border-8 border-red-600 rounded-2xl transform -rotate-12 shadow-2xl">
+                              <div className="relative">
+                                <div className="absolute inset-0 bg-white opacity-20 rounded-xl" />
+                                <div className="relative flex items-center gap-6">
+                                  <Trophy className="w-20 h-20" />
+                                  <span>SOLD!</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Shine Effect */}
+                            <div className="absolute inset-0 overflow-hidden rounded-2xl -rotate-12">
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-60 animate-shine transform -skew-x-12" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Team and Price Info - Positioned below stamp */}
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 104 }}>
+                        <div className="mt-48 text-center">
+                          <div className="bg-black/90 backdrop-blur-sm rounded-3xl px-12 py-8 animate-slide-up border-2 border-yellow-400/50">
+                            <div className="text-5xl font-black bg-gradient-to-r from-yellow-300 via-yellow-400 to-orange-400 bg-clip-text text-transparent mb-4 drop-shadow-lg">
+                              {soldStampData.teamName}
+                            </div>
+                            <div className="text-4xl font-bold text-green-300 drop-shadow-lg">
+                              {soldStampData.price}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Player Image with Team Color Frame */}
                   <div className="relative">
-                    <div className="w-full h-96 bg-gradient-to-br from-purple-500 to-blue-600 rounded-2xl flex items-center justify-center text-8xl relative overflow-hidden shadow-2xl">
+                    <div className={`w-full h-80 rounded-2xl flex items-center justify-center relative overflow-hidden shadow-2xl ${currentPlayer.status === 'sold' && currentTeam ?
+                      'ring-4 ring-green-400 shadow-green-400/50' :
+                      'bg-gradient-to-br from-purple-500 to-blue-600'
+                      }`}>
                       {currentPlayer.photo_url ? (
                         <img
                           src={currentPlayer.photo_url}
@@ -717,78 +948,138 @@ const AuctionControl = () => {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <User className="w-32 h-32 text-white/70" />
+                        <User className="w-24 h-24 text-white/70" />
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
-                      <div className="absolute top-4 right-4 px-4 py-2 bg-black/70 backdrop-blur-sm rounded-full text-sm font-bold text-white uppercase">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+
+                      {/* Role Badge */}
+                      <div className="absolute top-4 right-4 px-3 py-1 bg-black/80 backdrop-blur-sm rounded-full text-sm font-bold text-white uppercase flex items-center gap-2">
+                        {currentPlayer.position === 'Batsman' && '🏏'}
+                        {currentPlayer.position === 'Bowler' && '⚾'}
+                        {currentPlayer.position === 'All-rounder' && '⚡'}
+                        {currentPlayer.position === 'Wicketkeeper' && '🥅'}
                         {currentPlayer.position || 'Player'}
                       </div>
+
+                      {/* Status Overlay - Only show when not showing stamp animation */}
+                      {currentPlayer.status === 'sold' && !showSoldStamp && (
+                        <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
+                          <div className="bg-green-500 text-white px-4 py-2 rounded-full font-bold text-lg animate-bounce">
+                            SOLD!
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {/* Player Details */}
                   <div className="flex flex-col justify-between">
                     <div>
-                      <h1 className="text-5xl font-black mb-2 bg-gradient-to-r from-cyan-400 via-blue-500 to-pink-500 bg-clip-text text-transparent uppercase tracking-wider">
+                      {/* Player Name */}
+                      <h1 className="text-4xl font-black mb-4 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent uppercase tracking-wider leading-tight">
                         {currentPlayer.name}
                       </h1>
-                      
-                      <div className="flex gap-4 mb-6 text-lg flex-wrap">
-                        <span className="px-4 py-2 bg-white/10 rounded-lg">🏏 {currentPlayer.position || 'Player'}</span>
-                        <span className="px-4 py-2 bg-white/10 rounded-lg">👤 {currentPlayer.age || 'N/A'} years</span>
-                        <span className="px-4 py-2 bg-white/10 rounded-lg">⚡ {currentPlayer.specialty || 'All-rounder'}</span>
+
+                      {/* Player Info Pills */}
+                      <div className="flex gap-3 mb-6 flex-wrap">
+                        <div className="px-4 py-2 bg-cyan-500/20 border border-cyan-500/50 rounded-xl text-cyan-300 font-semibold">
+                          🏏 {currentPlayer.position || 'All-rounder'}
+                        </div>
+                        <div className="px-4 py-2 bg-blue-500/20 border border-blue-500/50 rounded-xl text-blue-300 font-semibold">
+                          👤 {currentPlayer.age || 'N/A'} years
+                        </div>
+                        {currentPlayer.category_id && categories.find(cat => cat.id === currentPlayer.category_id) && (
+                          <div
+                            className="px-4 py-2 border rounded-xl font-semibold"
+                            style={{
+                              backgroundColor: `${categories.find(cat => cat.id === currentPlayer.category_id)?.color}20`,
+                              borderColor: `${categories.find(cat => cat.id === currentPlayer.category_id)?.color}80`,
+                              color: categories.find(cat => cat.id === currentPlayer.category_id)?.color
+                            }}
+                          >
+                            🏷️ {categories.find(cat => cat.id === currentPlayer.category_id)?.name}
+                          </div>
+                        )}
+                        <div className="px-4 py-2 bg-purple-500/20 border border-purple-500/50 rounded-xl text-purple-300 font-semibold">
+                          ⚡ {currentPlayer.specialty || 'Versatile'}
+                        </div>
                       </div>
 
-                      {/* Stats Grid */}
-                      <div className="grid grid-cols-4 gap-3 mb-6">
-                        <div className="p-4 bg-white/5 rounded-xl border border-white/10 hover:border-cyan-500/50 transition-all">
-                          <div className="text-xs text-white/60 uppercase tracking-wider mb-2">Matches</div>
-                          <div className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-white bg-clip-text text-transparent">
+                      {/* Stylish Stats Grid with Icons */}
+                      <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/20">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="w-8 h-8 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-lg flex items-center justify-center">
+                              🏏
+                            </div>
+                            <div className="text-sm text-white/60 uppercase tracking-wider font-medium">Matches</div>
+                          </div>
+                          <div className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-white bg-clip-text text-transparent">
                             {currentPlayer.stats?.matches || 0}
                           </div>
                         </div>
-                        <div className="p-4 bg-white/5 rounded-xl border border-white/10 hover:border-cyan-500/50 transition-all">
-                          <div className="text-xs text-white/60 uppercase tracking-wider mb-2">Runs</div>
-                          <div className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-white bg-clip-text text-transparent">
+                        <div className="p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-green-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-green-500/20">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="w-8 h-8 bg-gradient-to-r from-green-400 to-emerald-500 rounded-lg flex items-center justify-center">
+                              🎯
+                            </div>
+                            <div className="text-sm text-white/60 uppercase tracking-wider font-medium">Runs</div>
+                          </div>
+                          <div className="text-3xl font-bold bg-gradient-to-r from-green-400 to-white bg-clip-text text-transparent">
                             {currentPlayer.stats?.runs || 0}
                           </div>
                         </div>
-                        <div className="p-4 bg-white/5 rounded-xl border border-white/10 hover:border-cyan-500/50 transition-all">
-                          <div className="text-xs text-white/60 uppercase tracking-wider mb-2">Wickets</div>
-                          <div className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-white bg-clip-text text-transparent">
+                        <div className="p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-red-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-red-500/20">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="w-8 h-8 bg-gradient-to-r from-red-400 to-pink-500 rounded-lg flex items-center justify-center">
+                              ⚾
+                            </div>
+                            <div className="text-sm text-white/60 uppercase tracking-wider font-medium">Wickets</div>
+                          </div>
+                          <div className="text-3xl font-bold bg-gradient-to-r from-red-400 to-white bg-clip-text text-transparent">
                             {currentPlayer.stats?.wickets || 0}
                           </div>
                         </div>
-                        <div className="p-4 bg-white/5 rounded-xl border border-white/10 hover:border-cyan-500/50 transition-all">
-                          <div className="text-xs text-white/60 uppercase tracking-wider mb-2">Strike Rate</div>
-                          <div className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-white bg-clip-text text-transparent">
+                        <div className="p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-yellow-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-yellow-500/20">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center">
+                              ⚡
+                            </div>
+                            <div className="text-sm text-white/60 uppercase tracking-wider font-medium">Strike Rate</div>
+                          </div>
+                          <div className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-white bg-clip-text text-transparent">
                             {currentPlayer.stats?.strike_rate || 'N/A'}
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Price Section */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-5 bg-white/5 rounded-xl border-2 border-cyan-500/50 text-center">
-                        <div className="text-xs text-white/70 uppercase tracking-wider mb-2">Base Value</div>
-                        <div className="text-3xl font-black bg-gradient-to-r from-yellow-400 to-pink-500 bg-clip-text text-transparent">
-                          ₹{currentPlayer.base_price?.toLocaleString()}
-                        </div>
-                      </div>
-                      <div className="p-5 bg-gradient-to-br from-yellow-500/10 to-pink-500/10 rounded-xl border-2 border-yellow-500/50 text-center">
-                        <div className="text-xs text-white/70 uppercase tracking-wider mb-2">
-                          {finalBidAmount ? 'Final Price' : auctionState?.current_bid ? 'Current Bid' : 'Starting Price'}
-                        </div>
-                        <div className="text-3xl font-black bg-gradient-to-r from-yellow-400 to-pink-500 bg-clip-text text-transparent">
-                          {finalBidAmount ? `₹${parseInt(finalBidAmount).toLocaleString()}` : 
-                           auctionState?.current_bid ? `₹${auctionState.current_bid.toLocaleString()}` : '---'}
-                        </div>
-                        {(currentTeam || selectedTeamForSale) && (
-                          <div className="text-sm text-white/80 mt-1">
-                            {selectedTeamForSale ? teams.find(t => t.id === selectedTeamForSale)?.name : currentTeam?.name}
+                    {/* Highlight Bar: Base Price → Current Bid - Made more visible in fullscreen */}
+                    <div className="bg-gradient-to-r from-yellow-500/30 via-orange-500/30 to-pink-500/30 p-8 rounded-3xl border-2 border-yellow-500/50 backdrop-blur-sm">
+                      <div className="flex items-center justify-between">
+                        <div className="text-center flex-1">
+                          <div className="text-lg text-yellow-200 uppercase tracking-wider font-bold mb-2">Base Price</div>
+                          <div className="text-4xl font-black bg-gradient-to-r from-yellow-300 to-orange-400 bg-clip-text text-transparent">
+                            ₹{currentPlayer.base_price?.toLocaleString()}
                           </div>
-                        )}
+                        </div>
+                        <div className="flex-1 mx-8 flex items-center justify-center">
+                          <div className="w-full h-2 bg-gradient-to-r from-yellow-400 to-pink-400 rounded-full shadow-lg"></div>
+                        </div>
+                        <div className="text-center flex-1">
+                          <div className="text-lg text-pink-200 uppercase tracking-wider font-bold mb-2">
+                            {finalBidAmount ? 'Final Price' : auctionState?.current_bid ? 'Current Bid' : 'Starting Price'}
+                          </div>
+                          <div className="text-4xl font-black bg-gradient-to-r from-orange-400 to-pink-400 bg-clip-text text-transparent">
+                            {finalBidAmount ? `₹${parseInt(finalBidAmount).toLocaleString()}` :
+                              auctionState?.current_bid ? `₹${auctionState.current_bid.toLocaleString()}` : '---'}
+                          </div>
+                          {(currentTeam || selectedTeamForSale) && (
+                            <div className="text-lg text-white mt-2 font-bold">
+                              {selectedTeamForSale ? teams.find(t => t.id === selectedTeamForSale)?.name : currentTeam?.name}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -796,7 +1087,7 @@ const AuctionControl = () => {
               ) : (
                 <div className="relative z-10 flex items-center justify-center h-full">
                   <div className="text-center">
-                    <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-8">
+                    <div className="w-32 h-32 bg-gradient-to-r from-cyan-500/20 to-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-8 animate-pulse">
                       <Trophy className="w-16 h-16 text-white/60" />
                     </div>
                     <h2 className="text-4xl font-bold text-white mb-4">No Player Selected</h2>
@@ -806,243 +1097,114 @@ const AuctionControl = () => {
               )}
             </div>
 
-            {/* Teams Section */}
-            <div className="p-4 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent uppercase tracking-wider">
-                  🏆 Participating Teams
+            {/* Right 30%: Bidding Activity Panel */}
+            <div className="w-[30%] bg-black/20 backdrop-blur-xl rounded-3xl border border-white/10 p-6 flex flex-col h-full">
+              {/* Header */}
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent uppercase tracking-wider">
+                  Bidding Control
                 </h3>
               </div>
-              <div className="grid grid-cols-4 gap-3">
-                {teams.map((team, index) => (
-                  <div 
-                    key={team.id} 
-                    className="p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 hover:border-white/30 hover:shadow-lg hover:shadow-cyan-500/20 transition-all cursor-pointer group relative"
-                    title={team.name}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg flex-shrink-0 overflow-hidden">
+
+              {/* Scrollable Content Area */}
+              <div className="flex-1 overflow-y-auto space-y-4">
+                {/* Auction Status Indicator */}
+                <div className={`p-4 rounded-xl border-2 text-center transition-all duration-500 ${auctionState?.status === 'in_progress' ?
+                  'bg-green-500/30 border-green-500 animate-pulse' :
+                  'bg-white/10 border-white/30'
+                  }`}>
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    <div className={`w-4 h-4 rounded-full ${auctionState?.status === 'in_progress' ?
+                      'bg-green-500 animate-pulse' :
+                      'bg-gray-500'
+                      }`}></div>
+                    <span className="text-white font-bold uppercase tracking-wider text-sm">
+                      {auctionState?.status === 'in_progress' ? 'Bidding Active' : 'Waiting for Bids'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Team Selection for Direct Sale - Grid Layout */}
+                <div className="space-y-3">
+                  <h4 className="text-white font-bold uppercase tracking-wider text-sm">Select Team</h4>
+                  <div className={`grid gap-2 max-h-48 overflow-y-auto ${teams.length <= 4 ? 'grid-cols-2' : teams.length <= 6 ? 'grid-cols-2' : 'grid-cols-2'}`}>
+                    {teams.map((team) => (
+                      <button
+                        key={team.id}
+                        onClick={() => setSelectedTeamForSale(team.id)}
+                        className={`p-2 rounded-lg border-2 text-white font-bold text-xs transition-all hover:scale-105 flex flex-col items-center gap-1 ${selectedTeamForSale === team.id
+                          ? 'bg-gradient-to-r from-green-500/40 to-emerald-500/40 border-green-400'
+                          : 'bg-white/10 border-white/30 hover:border-white/60 hover:bg-white/20'
+                          }`}
+                      >
                         {team.logo_url ? (
                           <img
                             src={team.logo_url}
                             alt={team.name}
-                            className="w-full h-full object-cover rounded-lg"
-                            title={team.name}
+                            className="w-5 h-5 object-cover rounded-full"
                           />
                         ) : (
-                          <div 
-                            className="w-full h-full rounded-lg flex items-center justify-center"
-                            style={{ 
-                              background: `linear-gradient(135deg, ${team.color || '#3B82F6'}, ${team.color ? team.color + '80' : '#1E40AF'})` 
-                            }}
-                            title={team.name}
-                          >
+                          <div className="w-5 h-5 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full flex items-center justify-center text-xs font-bold">
                             {team.name.charAt(0)}
                           </div>
                         )}
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-sm font-bold text-white truncate">{team.name}</h4>
-                        <p className="text-xs text-white/60">Budget: ₹{team.remaining_budget?.toLocaleString()}</p>
-                      </div>
-                    </div>
+                        <span className="truncate text-center leading-tight text-xs">{team.name}</span>
+                        <span className="text-xs text-white/70">
+                          ₹{team.remaining?.toLocaleString() || 'N/A'}
+                        </span>
+                      </button>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Sponsors Section */}
-            {sponsors.length > 0 && (
-              <div className="p-4 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent uppercase tracking-wider">
-                    💎 Official Sponsors
-                  </h3>
                 </div>
-                <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/30 scrollbar-track-transparent">
-                  {sponsors.filter(s => s.is_active).map((sponsor, index) => (
-                    <div 
-                      key={sponsor.id} 
-                      className="min-w-[140px] h-20 p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 flex items-center justify-center text-sm font-bold text-white transition-all hover:scale-105 hover:border-white/30 flex-shrink-0 relative overflow-hidden"
-                      style={{
-                        background: sponsor.logo_url ? 'rgba(255, 255, 255, 0.1)' : `linear-gradient(135deg, ${getRandomGradient(index)})`
-                      }}
-                      title={sponsor.name}
-                    >
-                      {sponsor.logo_url ? (
-                        <img
-                          src={sponsor.logo_url}
-                          alt={sponsor.name}
-                          className="max-w-full max-h-full object-contain"
-                          title={sponsor.name}
-                        />
-                      ) : (
-                        <span title={sponsor.name}>{sponsor.name}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {/* Enhanced Control Panel */}
-            <div className="p-4 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
-              {/* Team Selection */}
-              <div className="mb-4">
-                <h4 className="text-white font-bold mb-3 uppercase tracking-wider">Select Team for Sale</h4>
-                <div className="flex flex-wrap gap-2">
-                  {teams.map((team) => (
-                    <button
-                      key={team.id}
-                      onClick={() => setSelectedTeamForSale(team.id)}
-                      className={`px-4 py-2 rounded-lg border-2 text-white font-bold text-sm transition-all hover:scale-105 flex items-center gap-2 ${
-                        selectedTeamForSale === team.id
-                          ? 'bg-gradient-to-r from-pink-500 to-orange-500 border-pink-500 shadow-lg shadow-pink-500/50'
-                          : 'bg-white/5 border-white/20 hover:border-white/50'
-                      }`}
-                      title={team.name}
-                    >
-                      {team.logo_url ? (
-                        <>
-                          <img
-                            src={team.logo_url}
-                            alt={team.name}
-                            className="w-5 h-5 object-cover rounded"
-                          />
-                          <span className="hidden sm:inline">{team.name}</span>
-                        </>
-                      ) : (
-                        <span>{team.name}</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Price Input */}
-              <div className="mb-4">
-                <div className="flex items-center gap-4">
+                {/* Price Input */}
+                <div className="space-y-2">
                   <label className="text-white font-bold uppercase tracking-wider text-sm">Final Price:</label>
                   <input
                     type="number"
                     value={finalBidAmount}
                     onChange={(e) => setFinalBidAmount(e.target.value)}
-                    placeholder="Enter amount (e.g., 850000)"
-                    className="flex-1 px-4 py-3 bg-white/10 border-2 border-white/20 rounded-xl text-white text-lg font-bold outline-none transition-all focus:border-cyan-400 focus:shadow-lg focus:shadow-cyan-400/30"
+                    placeholder="Enter amount"
+                    className="w-full px-3 py-2 bg-white/10 border-2 border-white/20 rounded-lg text-white text-lg font-bold outline-none transition-all focus:border-cyan-400 focus:shadow-lg focus:shadow-cyan-400/20"
                   />
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3">
+              {/* Fixed Bottom Button */}
+              <div className="mt-4 pt-4 border-t border-white/20">
                 <button
                   onClick={handleSellToTeam}
                   disabled={loading || !selectedTeamForSale || !finalBidAmount}
-                  className="px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold uppercase tracking-wider rounded-xl transition-all hover:scale-105 hover:shadow-lg hover:shadow-green-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold uppercase tracking-wider rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-green-400 text-sm"
                 >
-                  Sell to Team
-                </button>
-                <button
-                  onClick={handleAddFinalPrice}
-                  disabled={loading || !finalBidAmount}
-                  className="px-8 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-bold uppercase tracking-wider rounded-xl transition-all hover:scale-105 hover:shadow-lg hover:shadow-yellow-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Add Final Price
-                </button>
-                <button
-                  onClick={handleNextPlayer}
-                  disabled={loading}
-                  className="px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold uppercase tracking-wider rounded-xl transition-all hover:scale-105 hover:shadow-lg hover:shadow-blue-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next Player →
+                  🏆 Sell to Team
                 </button>
               </div>
             </div>
+          </div>
 
-            {/* Timer and Quick Actions */}
-            <div className="p-4 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
-              <div className="flex items-center justify-between gap-4">
-                {/* Timer */}
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-8 h-8 text-white" />
-                    <span className={`text-4xl font-mono font-bold ${timer <= 10 ? 'text-red-400' : 'text-white'}`}>
-                      {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
-                    </span>
-                  </div>
-                  <Progress value={(timer / 60) * 100} className="w-48 h-4" />
-                </div>
+          {/* 3️⃣ BOTTOM SECTION - Control Panel - 15% height */}
+          <div className="h-[15vh] px-8 pb-4">
+            <div className="h-full bg-black/20 backdrop-blur-xl rounded-2xl border border-white/10 p-4 flex items-center justify-center">
+              {/* Control Panel - Quick Actions */}
+              <div className="flex justify-center gap-6">
+                <button
+                  onClick={startTimer}
+                  disabled={timerActive || loading}
+                  className="px-8 py-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold uppercase tracking-wider rounded-2xl transition-all hover:scale-105 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-blue-400 text-lg"
+                >
+                  <Timer className="w-5 h-5 mr-2 inline" />
+                  Start Timer
+                </button>
 
-                {/* Action Buttons */}
-                <div className="flex items-center gap-3">
-                  {auctionState?.status === 'not_started' && (
-                    <Button
-                      onClick={startAuction}
-                      disabled={loading}
-                      className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-lg px-6 py-3 shadow-lg hover:shadow-green-500/25 transition-all"
-                    >
-                      <Play className="w-5 h-5 mr-2" />
-                      Start Auction
-                    </Button>
-                  )}
-                  
-                  {auctionState?.status === 'in_progress' && (
-                    <Button
-                      onClick={pauseAuction}
-                      disabled={loading}
-                      className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white text-lg px-6 py-3 shadow-lg hover:shadow-yellow-500/25 transition-all"
-                    >
-                      <Pause className="w-5 h-5 mr-2" />
-                      Pause
-                    </Button>
-                  )}
-
-                  <Button
-                    onClick={setNextPlayer}
-                    disabled={loading || !selectedPlayer}
-                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-lg px-6 py-3 shadow-lg hover:shadow-blue-500/25 transition-all"
-                  >
-                    Set Player
-                  </Button>
-
-                  <Button
-                    onClick={startTimer}
-                    disabled={timerActive}
-                    className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-lg px-6 py-3 shadow-lg hover:shadow-purple-500/25 transition-all"
-                  >
-                    <Timer className="w-5 h-5 mr-2" />
-                    Start Timer
-                  </Button>
-
-                  <Button
-                    onClick={resetTimer}
-                    className="bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white text-lg px-6 py-3 shadow-lg hover:shadow-gray-500/25 transition-all"
-                  >
-                    Reset
-                  </Button>
-
-                  {currentPlayer && auctionState?.current_bid && (
-                    <Button
-                      onClick={directFinalizeBid}
-                      disabled={loading}
-                      className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-lg px-6 py-3 shadow-lg hover:shadow-red-500/25 transition-all"
-                    >
-                      <CheckCircle className="w-5 h-5 mr-2" />
-                      Sell to {currentTeam?.name}
-                    </Button>
-                  )}
-
-                  {currentPlayer && !auctionState?.current_bid && (
-                    <Button
-                      onClick={directFinalizeBid}
-                      disabled={loading}
-                      className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-lg px-6 py-3 shadow-lg hover:shadow-orange-500/25 transition-all"
-                    >
-                      <X className="w-5 h-5 mr-2" />
-                      Mark Unsold
-                    </Button>
-                  )}
-                </div>
+                <button
+                  onClick={handleNextPlayer}
+                  disabled={loading}
+                  className="px-8 py-4 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-bold uppercase tracking-wider rounded-2xl transition-all hover:scale-105 hover:shadow-lg hover:shadow-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-purple-400 text-lg"
+                >
+                  <ArrowRight className="w-5 h-5 mr-2 inline" />
+                  Next Player
+                </button>
               </div>
             </div>
           </div>
@@ -1055,7 +1217,7 @@ const AuctionControl = () => {
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
       <Navbar />
-      
+
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -1163,11 +1325,10 @@ const AuctionControl = () => {
 
             {/* Current Player */}
             {currentPlayer && (
-              <Card className={`relative overflow-hidden backdrop-blur-sm border-white/30 ${
-                currentPlayer.status === 'sold' ? 'bg-green-50/95 border-green-200' : 
-                currentPlayer.status === 'unsold' ? 'bg-red-50/95 border-red-200' : 
-                'bg-white/95'
-              }`}>
+              <Card className={`relative overflow-hidden backdrop-blur-sm border-white/30 ${currentPlayer.status === 'sold' ? 'bg-green-50/95 border-green-200' :
+                currentPlayer.status === 'unsold' ? 'bg-red-50/95 border-red-200' :
+                  'bg-white/95'
+                }`}>
                 {/* SOLD Stamp */}
                 {currentPlayer.status === 'sold' && (
                   <div className="absolute top-4 right-4 z-10">
@@ -1207,22 +1368,20 @@ const AuctionControl = () => {
                         <img
                           src={currentPlayer.photo_url}
                           alt={currentPlayer.name}
-                          className={`w-20 h-20 rounded-full object-cover ${
-                            currentPlayer.status === 'sold' ? 'border-4 border-green-400' : 
-                            currentPlayer.status === 'unsold' ? 'border-4 border-red-400' : 
-                            'border-2 border-gray-300'
-                          }`}
+                          className={`w-20 h-20 rounded-full object-cover ${currentPlayer.status === 'sold' ? 'border-4 border-green-400' :
+                            currentPlayer.status === 'unsold' ? 'border-4 border-red-400' :
+                              'border-2 border-gray-300'
+                            }`}
                         />
                       ) : (
-                        <div className={`w-20 h-20 rounded-full flex items-center justify-center ${
-                          currentPlayer.status === 'sold' ? 'bg-green-200 border-4 border-green-400' : 
-                          currentPlayer.status === 'unsold' ? 'bg-red-200 border-4 border-red-400' : 
-                          'bg-gray-200 border-2 border-gray-300'
-                        }`}>
+                        <div className={`w-20 h-20 rounded-full flex items-center justify-center ${currentPlayer.status === 'sold' ? 'bg-green-200 border-4 border-green-400' :
+                          currentPlayer.status === 'unsold' ? 'bg-red-200 border-4 border-red-400' :
+                            'bg-gray-200 border-2 border-gray-300'
+                          }`}>
                           <User className="w-10 h-10 text-gray-500" />
                         </div>
                       )}
-                      
+
                       {/* Team Logo for Sold Players */}
                       {currentPlayer.status === 'sold' && currentPlayer.sold_to_team_id && (
                         <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-white rounded-full border-2 border-green-400 flex items-center justify-center shadow-lg">
@@ -1234,7 +1393,7 @@ const AuctionControl = () => {
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="flex-1">
                       <h3 className="text-2xl font-bold text-gray-800">{currentPlayer.name}</h3>
                       <p className="text-gray-600">
@@ -1243,7 +1402,7 @@ const AuctionControl = () => {
                       {currentPlayer.position && (
                         <p className="text-gray-600">Position: {currentPlayer.position}</p>
                       )}
-                      
+
                       {/* Sold Details */}
                       {currentPlayer.status === 'sold' && (
                         <div className="mt-2 p-2 bg-green-100 rounded-lg border border-green-200">
@@ -1257,7 +1416,7 @@ const AuctionControl = () => {
                           )}
                         </div>
                       )}
-                      
+
                       {/* Unsold Notice */}
                       {currentPlayer.status === 'unsold' && (
                         <div className="mt-2 p-2 bg-red-100 rounded-lg border border-red-200">
@@ -1267,7 +1426,7 @@ const AuctionControl = () => {
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="text-right">
                       {currentPlayer.status === 'sold' ? (
                         <div className="text-3xl font-bold text-green-600">
@@ -1371,6 +1530,77 @@ const AuctionControl = () => {
                 </CardContent>
               </Card>
             )}
+
+            {/* Sold Players Display */}
+            {soldPlayers.length > 0 && (
+              <Card className="bg-white/95 backdrop-blur-sm border-white/30">
+                <CardHeader>
+                  <CardTitle className="text-gray-800 flex items-center">
+                    <Trophy className="w-5 h-5 mr-2 text-green-600" />
+                    Sold Players ({soldPlayers.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                    {soldPlayers.map((player) => (
+                      <div key={player.id} className="relative flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg overflow-hidden">
+                        {/* Sold Stamp with Enhanced Animation */}
+                        <div className="absolute top-2 right-2 z-10">
+                          <div className="relative">
+                            {/* Main SOLD stamp */}
+                            <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1 rounded-full text-xs font-bold transform rotate-12 shadow-lg animate-bounce border-2 border-white">
+                              ✓ SOLD
+                            </div>
+                            {/* Pulsing background effect */}
+                            <div className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-30"></div>
+                            {/* Sparkle effect */}
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                            <div className="absolute -bottom-1 -left-1 w-1.5 h-1.5 bg-yellow-300 rounded-full animate-pulse delay-150"></div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-3 flex-1">
+                          {player.photo_url ? (
+                            <img
+                              src={player.photo_url}
+                              alt={player.name}
+                              className="w-10 h-10 rounded-full object-cover border-2 border-green-300"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-green-200 flex items-center justify-center border-2 border-green-300">
+                              <User className="w-6 h-6 text-green-600" />
+                            </div>
+                          )}
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-800">{player.name}</div>
+                            <div className="text-sm text-gray-600">
+                              {player.position} • Base: ₹{player.base_price?.toLocaleString()}
+                            </div>
+                            {player.sold_price && (
+                              <div className="text-sm font-semibold text-green-700">
+                                Sold for: ₹{player.sold_price?.toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Team info if available */}
+                        {player.sold_to_team_id && (
+                          <div className="text-right">
+                            <div className="text-sm font-medium text-green-700">
+                              {teams.find(t => t.id === player.sold_to_team_id)?.name || 'Team'}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 text-sm text-gray-600">
+                    Players successfully sold in the auction.
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <div className="space-y-6">
@@ -1411,20 +1641,85 @@ const AuctionControl = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {teams.map((team) => (
-                    <div key={team.id} className="flex justify-between items-center">
-                      <div>
-                        <div className="font-medium text-gray-800">{team.name}</div>
-                        <div className="text-sm text-gray-600">
-                          Players: {team.players_count || 0}
+                  {teams.map((team, index) => (
+                    <div
+                      key={team.id}
+                      className="relative overflow-hidden rounded-xl border-2 border-gray-200 bg-gradient-to-r p-4 shadow-sm hover:shadow-md transition-all duration-300"
+                      style={{
+                        background: `linear-gradient(135deg, ${team.color || '#3B82F6'}15, ${team.color || '#3B82F6'}08)`,
+                        borderColor: `${team.color || '#3B82F6'}40`
+                      }}
+                    >
+                      {/* Team Logo and Info */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          {/* Team Logo */}
+                          {team.logo_url ? (
+                            <img
+                              src={team.logo_url}
+                              alt={team.name}
+                              className="w-12 h-12 object-cover rounded-full border-2 border-white shadow-lg"
+                            />
+                          ) : (
+                            <div
+                              className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg border-2 border-white"
+                              style={{ backgroundColor: team.color || '#3B82F6' }}
+                            >
+                              {team.name.charAt(0)}
+                            </div>
+                          )}
+
+                          {/* Team Details */}
+                          <div>
+                            <div className="font-bold text-gray-800 text-lg">{team.name}</div>
+                            <div className="text-sm text-gray-600 flex items-center space-x-3">
+                              <span className="flex items-center">
+                                👥 {team.players_count || 0} players
+                              </span>
+                              <span className="text-gray-400">•</span>
+                              <span className="flex items-center">
+                                🎯 {team.max_squad_size} max
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Budget Info */}
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-green-600">
+                            ₹{team.remaining?.toLocaleString()}
+                          </div>
+                          <div className="text-xs text-gray-500 uppercase tracking-wider font-medium">
+                            remaining budget
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            of ₹{team.budget?.toLocaleString()} total
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-green-600">
-                          ₹{team.remaining?.toLocaleString()}
+
+                      {/* Progress Bar for Budget Usage */}
+                      <div className="mt-3">
+                        <div className="flex justify-between text-xs text-gray-600 mb-1">
+                          <span>Budget Used</span>
+                          <span>{Math.round(((team.budget - team.remaining) / team.budget) * 100) || 0}%</span>
                         </div>
-                        <div className="text-xs text-gray-500">remaining</div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="h-2 rounded-full transition-all duration-300"
+                            style={{
+                              width: `${Math.min(((team.budget - team.remaining) / team.budget) * 100, 100) || 0}%`,
+                              backgroundColor: team.color || '#3B82F6'
+                            }}
+                          />
+                        </div>
                       </div>
+
+                      {/* Team Color Accent */}
+                      <div
+                        className="absolute top-0 right-0 w-1 h-full opacity-60"
+                        style={{ backgroundColor: team.color || '#3B82F6' }}
+                      />
                     </div>
                   ))}
                 </div>
@@ -1456,77 +1751,6 @@ const AuctionControl = () => {
                 </Button>
               </CardContent>
             </Card>
-
-            {/* Sold Players Display */}
-            {soldPlayers.length > 0 && (
-              <Card className="bg-white/95 backdrop-blur-sm border-white/30">
-                <CardHeader>
-                  <CardTitle className="text-gray-800 flex items-center">
-                    <Trophy className="w-5 h-5 mr-2 text-green-600" />
-                    Sold Players ({soldPlayers.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {soldPlayers.map((player) => (
-                      <div key={player.id} className="relative flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg overflow-hidden">
-                        {/* Sold Stamp with Enhanced Animation */}
-                        <div className="absolute top-2 right-2 z-10">
-                          <div className="relative">
-                            {/* Main SOLD stamp */}
-                            <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1 rounded-full text-xs font-bold transform rotate-12 shadow-lg animate-bounce border-2 border-white">
-                              ✓ SOLD
-                            </div>
-                            {/* Pulsing background effect */}
-                            <div className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-30"></div>
-                            {/* Sparkle effect */}
-                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                            <div className="absolute -bottom-1 -left-1 w-1.5 h-1.5 bg-yellow-300 rounded-full animate-pulse delay-150"></div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center space-x-3 flex-1">
-                          {player.photo_url ? (
-                            <img
-                              src={player.photo_url}
-                              alt={player.name}
-                              className="w-10 h-10 rounded-full object-cover border-2 border-green-300"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-green-200 flex items-center justify-center border-2 border-green-300">
-                              <User className="w-6 h-6 text-green-600" />
-                            </div>
-                          )}
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-800">{player.name}</div>
-                            <div className="text-sm text-gray-600">
-                              {player.position} • Base: ₹{player.base_price?.toLocaleString()}
-                            </div>
-                            {player.sold_price && (
-                              <div className="text-sm font-semibold text-green-700">
-                                Sold for: ₹{player.sold_price?.toLocaleString()}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* Team info if available */}
-                        {player.sold_to_team_id && (
-                          <div className="text-right">
-                            <div className="text-sm font-medium text-green-700">
-                              {teams.find(t => t.id === player.sold_to_team_id)?.name || 'Team'}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 text-sm text-gray-600">
-                    Players successfully sold in the auction.
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             {/* Unsold Players Management */}
             {unsoldPlayers.length > 0 && (
@@ -1600,7 +1824,7 @@ const AuctionControl = () => {
                 Sell Player
               </DialogTitle>
             </DialogHeader>
-            
+
             {currentPlayer && (
               <div className="space-y-6">
                 {/* Player Info */}
@@ -1638,13 +1862,13 @@ const AuctionControl = () => {
                       {teams.map((team) => (
                         <SelectItem key={team.id} value={team.id}>
                           <div className="flex items-center space-x-2">
-                            <div 
-                              className="w-4 h-4 rounded-full" 
+                            <div
+                              className="w-4 h-4 rounded-full"
                               style={{ backgroundColor: team.color || '#3B82F6' }}
                             />
                             <span>{team.name}</span>
                             <span className="text-sm text-gray-500">
-                              (₹{team.remaining_budget?.toLocaleString()} left)
+                              (₹{team.remaining?.toLocaleString()} left)
                             </span>
                           </div>
                         </SelectItem>
@@ -1690,6 +1914,86 @@ const AuctionControl = () => {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Enhanced SOLD Animation CSS */}
+        <style>{`
+          @keyframes stamp {
+            0% {
+              transform: scale(0) rotate(-12deg);
+              opacity: 0;
+            }
+            50% {
+              transform: scale(1.2) rotate(-12deg);
+            }
+            100% {
+              transform: scale(1) rotate(-12deg);
+              opacity: 1;
+            }
+          }
+
+          @keyframes flash {
+            0% {
+              opacity: 0;
+            }
+            50% {
+              opacity: 0.3;
+            }
+            100% {
+              opacity: 0;
+            }
+          }
+
+          @keyframes confetti {
+            0% {
+              transform: translateY(0) rotate(0deg);
+              opacity: 1;
+            }
+            100% {
+              transform: translateY(600px) rotate(720deg);
+              opacity: 0;
+            }
+          }
+
+          @keyframes shine {
+            0% {
+              transform: translateX(-100%) skewX(-15deg);
+            }
+            100% {
+              transform: translateX(200%) skewX(-15deg);
+            }
+          }
+
+          @keyframes slide-up {
+            0% {
+              transform: translateY(50px);
+              opacity: 0;
+            }
+            100% {
+              transform: translateY(0);
+              opacity: 1;
+            }
+          }
+
+          .animate-stamp {
+            animation: stamp 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          }
+
+          .animate-flash {
+            animation: flash 0.6s ease-out;
+          }
+
+          .animate-confetti {
+            animation: confetti linear forwards;
+          }
+
+          .animate-shine {
+            animation: shine 2.5s infinite;
+          }
+
+          .animate-slide-up {
+            animation: slide-up 0.8s ease-out 0.3s both;
+          }
+        `}</style>
       </div>
     </div>
   );

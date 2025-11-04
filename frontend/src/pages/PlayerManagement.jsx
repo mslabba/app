@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Edit, Trash2, User } from 'lucide-react';
+import { Plus, Users, Edit, Trash2, User, Unlock, RotateCcw } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
@@ -22,6 +22,7 @@ const PlayerManagement = () => {
   const { token } = useAuth();
   const [players, setPlayers] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [teams, setTeams] = useState([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState(null);
@@ -47,6 +48,7 @@ const PlayerManagement = () => {
   useEffect(() => {
     fetchPlayers();
     fetchCategories();
+    fetchTeams();
   }, [eventId]);
 
   const fetchPlayers = async () => {
@@ -66,6 +68,16 @@ const PlayerManagement = () => {
     } catch (error) {
       console.error('Failed to fetch categories:', error);
       toast.error('Failed to load categories');
+    }
+  };
+
+  const fetchTeams = async () => {
+    try {
+      const response = await axios.get(`${API}/teams/event/${eventId}`);
+      setTeams(response.data);
+    } catch (error) {
+      console.error('Failed to fetch teams:', error);
+      toast.error('Failed to load teams');
     }
   };
 
@@ -146,6 +158,36 @@ const PlayerManagement = () => {
     }
   };
 
+  const handleReleasePlayer = async (player) => {
+    const teamName = getTeamName(player.sold_to_team_id);
+    if (!confirm(`Are you sure you want to release ${player.name} from ${teamName}? This will refund ₹${player.sold_price?.toLocaleString()} to the team.`)) return;
+
+    try {
+      await axios.post(`${API}/players/${player.id}/release`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success(`${player.name} released successfully! Budget refunded to ${teamName}.`);
+      fetchPlayers();
+      fetchTeams(); // Refresh teams to update budgets
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to release player');
+    }
+  };
+
+  const handleMakeAvailable = async (player) => {
+    if (!confirm(`Are you sure you want to make ${player.name} available for bidding? This will remove them from the current auction slot.`)) return;
+
+    try {
+      await axios.post(`${API}/players/${player.id}/make-available`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success(`${player.name} is now available for bidding again!`);
+      fetchPlayers();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to make player available');
+    }
+  };
+
   const resetForm = () => {
     setEditingPlayer(null);
     setFormData({
@@ -179,13 +221,13 @@ const PlayerManagement = () => {
       // Auto-fill base price when category changes
       const selectedCategory = categories.find(c => c.id === value);
       const basePrice = selectedCategory ? selectedCategory.base_price_min : '';
-      
-      setFormData(prev => ({ 
-        ...prev, 
+
+      setFormData(prev => ({
+        ...prev,
         [field]: value,
         base_price: basePrice.toString()
       }));
-      
+
       if (selectedCategory) {
         toast.info(`Base price auto-filled to ₹${basePrice.toLocaleString()} (category minimum)`);
       }
@@ -197,6 +239,11 @@ const PlayerManagement = () => {
   const getCategoryName = (categoryId) => {
     const category = categories.find(c => c.id === categoryId);
     return category?.name || 'Unknown';
+  };
+
+  const getTeamName = (teamId) => {
+    const team = teams.find(t => t.id === teamId);
+    return team ? team.name : 'Unknown Team';
   };
 
   const getCategoryPriceRange = (categoryId) => {
@@ -216,7 +263,7 @@ const PlayerManagement = () => {
             setIsDialogOpen(open);
           }}>
             <DialogTrigger asChild>
-              <Button 
+              <Button
                 className="bg-white text-purple-700 hover:bg-white/90"
                 onClick={() => {
                   console.log('Add Player button clicked');
@@ -369,9 +416,9 @@ const PlayerManagement = () => {
                 </div>
 
                 <div className="flex justify-end space-x-2 pt-4">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
+                    variant="outline"
                     onClick={() => setIsDialogOpen(false)}
                   >
                     Cancel
@@ -387,7 +434,27 @@ const PlayerManagement = () => {
 
         <Card className="glass border-white/20">
           <CardHeader>
-            <CardTitle className="text-white">Players ({players.length})</CardTitle>
+            <CardTitle className="text-white flex items-center justify-between">
+              <span>Players ({players.length})</span>
+              <div className="flex items-center space-x-4 text-sm">
+                <div className="flex items-center">
+                  <span className="w-2 h-2 rounded-full bg-green-400 mr-1"></span>
+                  Available: {players.filter(p => p.status === 'available').length}
+                </div>
+                <div className="flex items-center">
+                  <span className="w-2 h-2 rounded-full bg-yellow-400 mr-1"></span>
+                  Current: {players.filter(p => p.status === 'current').length}
+                </div>
+                <div className="flex items-center">
+                  <span className="w-2 h-2 rounded-full bg-blue-400 mr-1"></span>
+                  Sold: {players.filter(p => p.status === 'sold').length}
+                </div>
+                <div className="flex items-center">
+                  <span className="w-2 h-2 rounded-full bg-red-400 mr-1"></span>
+                  Unsold: {players.filter(p => p.status === 'unsold').length}
+                </div>
+              </div>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {players.length === 0 ? (
@@ -403,8 +470,8 @@ const PlayerManagement = () => {
                     <CardContent className="p-4">
                       {player.photo_url && (
                         <div className="flex justify-center mb-4">
-                          <img 
-                            src={player.photo_url} 
+                          <img
+                            src={player.photo_url}
                             alt={`${player.name} photo`}
                             className="w-20 h-20 rounded-xl object-cover border-2 border-white/30 shadow-lg bg-white/10 p-1"
                             onError={(e) => { e.target.style.display = 'none'; }}
@@ -444,15 +511,57 @@ const PlayerManagement = () => {
                         {player.position && <div>Position: {player.position}</div>}
                         {player.age && <div>Age: {player.age}</div>}
                         {player.previous_team && <div>Previous: {player.previous_team}</div>}
+
+                        {/* Player Status */}
                         <div className="flex items-center">
-                          <span className={`w-2 h-2 rounded-full mr-2 ${
-                            player.status === 'available' ? 'bg-green-400' :
+                          <span className={`w-2 h-2 rounded-full mr-2 ${player.status === 'available' ? 'bg-green-400' :
                             player.status === 'sold' ? 'bg-blue-400' :
-                            player.status === 'current' ? 'bg-yellow-400' :
-                            'bg-gray-400'
-                          }`}></span>
+                              player.status === 'current' ? 'bg-yellow-400' :
+                                'bg-gray-400'
+                            }`}></span>
                           {player.status?.replace('_', ' ').toUpperCase()}
                         </div>
+
+                        {/* Current Player Information */}
+                        {player.status === 'current' && (
+                          <div className="mt-3 p-3 bg-yellow-500/20 border border-yellow-400/30 rounded-lg">
+                            <div className="font-semibold text-yellow-300 mb-2">Currently in Auction:</div>
+                            <div>This player is currently being auctioned</div>
+                            <div className="mt-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="bg-green-500/20 border-green-400/40 text-green-300 hover:bg-green-500/30"
+                                onClick={() => handleMakeAvailable(player)}
+                                title="Make player available for future bidding"
+                              >
+                                <RotateCcw className="w-3 h-3 mr-1" />
+                                Make Available
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Sold Player Information */}
+                        {player.status === 'sold' && (
+                          <div className="mt-3 p-3 bg-blue-500/20 border border-blue-400/30 rounded-lg">
+                            <div className="font-semibold text-blue-300 mb-2">Sold Details:</div>
+                            <div>Team: {getTeamName(player.sold_to_team_id)}</div>
+                            <div>Sold Price: ₹{player.sold_price?.toLocaleString()}</div>
+                            <div className="mt-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="bg-yellow-500/20 border-yellow-400/40 text-yellow-300 hover:bg-yellow-500/30"
+                                onClick={() => handleReleasePlayer(player)}
+                                title="Release player back to auction pool"
+                              >
+                                <Unlock className="w-3 h-3 mr-1" />
+                                Release Player
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

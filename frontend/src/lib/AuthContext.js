@@ -30,22 +30,30 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
+    let isMounted = true;
+
     // Safety timeout to ensure loading is set to false
     const timeout = setTimeout(() => {
-      console.log('Safety timeout: setting loading to false');
-      setLoading(false);
+      if (isMounted) {
+        console.log('Safety timeout: setting loading to false');
+        setLoading(false);
+      }
     }, 5000);
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!isMounted) return;
+
       console.log('Auth state changed, user:', user);
       setCurrentUser(user);
-      
+
       if (user) {
         try {
           // Get ID token
           const idToken = await user.getIdToken();
+          if (!isMounted) return;
+
           setToken(idToken);
-          
+
           // Fetch user profile from backend
           console.log('Fetching user profile from backend...');
           const response = await axios.get(`${API}/auth/me`, {
@@ -53,7 +61,9 @@ export const AuthProvider = ({ children }) => {
               'Authorization': `Bearer ${idToken}`
             }
           });
-          
+
+          if (!isMounted) return;
+
           console.log('User profile loaded:', response.data);
           setUserProfile(response.data);
         } catch (error) {
@@ -61,17 +71,22 @@ export const AuthProvider = ({ children }) => {
           // Set loading to false even if profile fetch fails
         }
       } else {
+        if (!isMounted) return;
+
         console.log('No user, clearing profile');
         setToken(null);
         setUserProfile(null);
       }
-      
-      console.log('Setting loading to false');
-      setLoading(false);
-      clearTimeout(timeout);
+
+      if (isMounted) {
+        console.log('Setting loading to false');
+        setLoading(false);
+        clearTimeout(timeout);
+      }
     });
 
     return () => {
+      isMounted = false;
       unsubscribe();
       clearTimeout(timeout);
     };

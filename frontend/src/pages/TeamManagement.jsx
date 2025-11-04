@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Users, DollarSign, Edit } from 'lucide-react';
+import { Plus, Users, DollarSign, Edit, Eye, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
@@ -21,8 +21,13 @@ const TeamManagement = () => {
   const [teams, setTeams] = useState([]);
   const [event, setEvent] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isPlayersDialogOpen, setIsPlayersDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editingTeam, setEditingTeam] = useState(null);
+  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [teamPlayers, setTeamPlayers] = useState([]);
+  const [loadingPlayers, setLoadingPlayers] = useState(false);
+  const [categories, setCategories] = useState([]);
   const [formData, setFormData] = useState({
     name: '',
     budget: 10000000,
@@ -37,6 +42,7 @@ const TeamManagement = () => {
     fetchEvent();
     fetchTeams();
     fetchAvailableAdmins();
+    fetchCategories();
   }, [eventId]);
 
   const fetchEvent = async () => {
@@ -65,6 +71,48 @@ const TeamManagement = () => {
       setAvailableAdmins(response.data);
     } catch (error) {
       console.error('Failed to load available admins:', error);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await axios.get(`${API}/categories/event/${eventId}`);
+      setCategories(response.data);
+    } catch (error) {
+      console.error('Failed to load categories:', error);
+    }
+  };
+
+  const fetchTeamPlayers = async (teamId) => {
+    setLoadingPlayers(true);
+    try {
+      const response = await axios.get(`${API}/teams/${teamId}/players`);
+      setTeamPlayers(response.data);
+    } catch (error) {
+      toast.error('Failed to load team players');
+      console.error('Failed to load team players:', error);
+    } finally {
+      setLoadingPlayers(false);
+    }
+  };
+
+  const handleViewPlayers = (team) => {
+    setSelectedTeam(team);
+    setIsPlayersDialogOpen(true);
+    fetchTeamPlayers(team.id);
+  };
+
+  const handleRefreshPlayers = async () => {
+    if (selectedTeam) {
+      try {
+        await Promise.all([
+          fetchTeamPlayers(selectedTeam.id),
+          fetchTeams() // Refresh teams data to get updated statistics
+        ]);
+        toast.success('Data refreshed successfully');
+      } catch (error) {
+        toast.error('Failed to refresh data');
+      }
     }
   };
 
@@ -130,8 +178,46 @@ const TeamManagement = () => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
+      minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount);
+  };
+
+  const groupPlayersByCategory = () => {
+    if (!teamPlayers.length || !categories.length) return {};
+
+    const groupedPlayers = {};
+
+    // Initialize groups with categories
+    categories.forEach(category => {
+      groupedPlayers[category.id] = {
+        category,
+        players: [],
+        count: 0,
+        minRequired: category.min_players,
+        maxAllowed: category.max_players
+      };
+    });
+
+    // Group players by category
+    teamPlayers.forEach(player => {
+      if (player.category_id && groupedPlayers[player.category_id]) {
+        groupedPlayers[player.category_id].players.push(player);
+        groupedPlayers[player.category_id].count++;
+      }
+    });
+
+    return groupedPlayers;
+  };
+
+  const getCategoryStatus = (count, minRequired, maxAllowed) => {
+    if (count < minRequired) {
+      return { status: 'insufficient', color: 'text-red-600', bgColor: 'bg-red-50', borderColor: 'border-red-200' };
+    } else if (count > maxAllowed) {
+      return { status: 'exceeded', color: 'text-orange-600', bgColor: 'bg-orange-50', borderColor: 'border-orange-200' };
+    } else {
+      return { status: 'optimal', color: 'text-green-600', bgColor: 'bg-green-50', borderColor: 'border-green-200' };
+    }
   };
 
   return (
@@ -143,13 +229,13 @@ const TeamManagement = () => {
             <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Team Management</h1>
             <p className="text-white/80">{event?.name || 'Loading...'}</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => { 
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
             console.log('Team Dialog state changing to:', open);
             setIsDialogOpen(open);
-            if (!open) resetForm(); 
+            if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
-              <Button 
+              <Button
                 className="bg-white text-purple-700 hover:bg-white/90"
                 onClick={() => {
                   console.log('Create Team button clicked');
@@ -170,7 +256,7 @@ const TeamManagement = () => {
                   <Input
                     id="name"
                     value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
                     data-testid="team-name-input"
                   />
@@ -181,7 +267,7 @@ const TeamManagement = () => {
                     id="budget"
                     type="number"
                     value={formData.budget}
-                    onChange={(e) => setFormData({...formData, budget: parseInt(e.target.value)})}
+                    onChange={(e) => setFormData({ ...formData, budget: parseInt(e.target.value) })}
                     required
                   />
                 </div>
@@ -191,7 +277,7 @@ const TeamManagement = () => {
                     id="max_squad_size"
                     type="number"
                     value={formData.max_squad_size}
-                    onChange={(e) => setFormData({...formData, max_squad_size: parseInt(e.target.value)})}
+                    onChange={(e) => setFormData({ ...formData, max_squad_size: parseInt(e.target.value) })}
                     required
                   />
                 </div>
@@ -201,12 +287,12 @@ const TeamManagement = () => {
                     id="color"
                     type="color"
                     value={formData.color}
-                    onChange={(e) => setFormData({...formData, color: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, color: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="admin_email">Team Admin (Optional)</Label>
-                  <Select value={formData.admin_email || "none"} onValueChange={(value) => setFormData({...formData, admin_email: value === "none" ? "" : value})}>
+                  <Select value={formData.admin_email || "none"} onValueChange={(value) => setFormData({ ...formData, admin_email: value === "none" ? "" : value })}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a team admin" />
                     </SelectTrigger>
@@ -223,7 +309,7 @@ const TeamManagement = () => {
                 <ImageUpload
                   label="Team Logo"
                   value={formData.logo_url}
-                  onChange={(url) => setFormData({...formData, logo_url: url})}
+                  onChange={(url) => setFormData({ ...formData, logo_url: url })}
                   placeholder="Upload team logo or enter URL"
                   sampleType={{ type: 'teams', subtype: 'logos' }}
                 />
@@ -235,14 +321,240 @@ const TeamManagement = () => {
           </Dialog>
         </div>
 
+        {/* Players Dialog */}
+        <Dialog open={isPlayersDialogOpen} onOpenChange={setIsPlayersDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="flex items-center justify-between">
+                <DialogTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  {selectedTeam?.name} - Squad ({teamPlayers.length}/{selectedTeam?.max_squad_size})
+                </DialogTitle>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleRefreshPlayers}
+                  disabled={loadingPlayers}
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingPlayers ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+            </DialogHeader>
+            <div className="space-y-6">
+              {loadingPlayers ? (
+                <div className="flex justify-center py-8">
+                  <div className="text-gray-500">Loading players...</div>
+                </div>
+              ) : teamPlayers.length > 0 ? (
+                <div className="space-y-6">
+                  {/* Category Overview */}
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-900 mb-3">Squad Composition by Category</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {Object.values(groupPlayersByCategory()).map((categoryGroup) => {
+                        const statusInfo = getCategoryStatus(
+                          categoryGroup.count,
+                          categoryGroup.minRequired,
+                          categoryGroup.maxAllowed
+                        );
+                        return (
+                          <div
+                            key={categoryGroup.category.id}
+                            className={`p-3 rounded-lg border-2 ${statusInfo.bgColor} ${statusInfo.borderColor}`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <h5 className="font-medium text-gray-900">{categoryGroup.category.name}</h5>
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: categoryGroup.category.color }}
+                              />
+                            </div>
+                            <div className={`text-sm ${statusInfo.color} font-medium`}>
+                              {categoryGroup.count}/{categoryGroup.minRequired}-{categoryGroup.maxAllowed}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              {categoryGroup.count < categoryGroup.minRequired ?
+                                `Need ${categoryGroup.minRequired - categoryGroup.count} more` :
+                                categoryGroup.count > categoryGroup.maxAllowed ?
+                                  `${categoryGroup.count - categoryGroup.maxAllowed} over limit` :
+                                  'Requirement met'
+                              }
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Players grouped by Category */}
+                  {Object.values(groupPlayersByCategory()).map((categoryGroup) => (
+                    categoryGroup.players.length > 0 && (
+                      <div key={categoryGroup.category.id} className="space-y-3">
+                        <div className="flex items-center gap-2 pb-2 border-b">
+                          <div
+                            className="w-4 h-4 rounded-full"
+                            style={{ backgroundColor: categoryGroup.category.color }}
+                          />
+                          <h4 className="font-semibold text-gray-900">
+                            {categoryGroup.category.name} ({categoryGroup.players.length})
+                          </h4>
+                          <span className="text-sm text-gray-500">
+                            Min: {categoryGroup.minRequired} | Max: {categoryGroup.maxAllowed}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {categoryGroup.players.map((player) => (
+                            <Card key={player.id} className="border border-gray-200 hover:shadow-md transition-shadow">
+                              <CardContent className="p-4">
+                                <div className="flex items-start gap-3">
+                                  {player.photo_url ? (
+                                    <img
+                                      src={player.photo_url}
+                                      alt={player.name}
+                                      className="w-12 h-12 rounded-full object-cover border-2"
+                                      style={{ borderColor: categoryGroup.category.color }}
+                                      onError={(e) => { e.target.style.display = 'none'; }}
+                                    />
+                                  ) : (
+                                    <div
+                                      className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold border-2"
+                                      style={{
+                                        backgroundColor: categoryGroup.category.color,
+                                        borderColor: categoryGroup.category.color
+                                      }}
+                                    >
+                                      {player.name.charAt(0)}
+                                    </div>
+                                  )}
+                                  <div className="flex-1">
+                                    <h3 className="font-semibold text-gray-900">{player.name}</h3>
+                                    <p className="text-sm text-gray-600">{player.position}</p>
+                                    {player.specialty && (
+                                      <p className="text-xs text-gray-500">{player.specialty}</p>
+                                    )}
+                                    <div className="mt-2 space-y-1">
+                                      <div className="flex justify-between text-sm">
+                                        <span className="text-gray-600">Base:</span>
+                                        <span className="font-medium">{formatCurrency(player.base_price)}</span>
+                                      </div>
+                                      <div className="flex justify-between text-sm">
+                                        <span className="text-gray-600">Sold:</span>
+                                        <span className="font-bold text-green-600">
+                                          {formatCurrency(player.sold_price || player.base_price)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex justify-between text-xs text-gray-500 mt-2">
+                                      {player.age && <span>Age: {player.age}</span>}
+                                      {player.jersey_number && <span>#{player.jersey_number}</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  ))}
+
+                  {/* Uncategorized Players (if any) */}
+                  {teamPlayers.filter(p => !p.category_id).length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-gray-900 pb-2 border-b">
+                        Uncategorized Players ({teamPlayers.filter(p => !p.category_id).length})
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {teamPlayers.filter(p => !p.category_id).map((player) => (
+                          <Card key={player.id} className="border border-gray-200">
+                            <CardContent className="p-4">
+                              <div className="flex items-start gap-3">
+                                {player.photo_url ? (
+                                  <img
+                                    src={player.photo_url}
+                                    alt={player.name}
+                                    className="w-12 h-12 rounded-full object-cover"
+                                    onError={(e) => { e.target.style.display = 'none'; }}
+                                  />
+                                ) : (
+                                  <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 font-bold">
+                                    {player.name.charAt(0)}
+                                  </div>
+                                )}
+                                <div className="flex-1">
+                                  <h3 className="font-semibold text-gray-900">{player.name}</h3>
+                                  <p className="text-sm text-gray-600">{player.position}</p>
+                                  <div className="mt-2 space-y-1">
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-gray-600">Base:</span>
+                                      <span className="font-medium">{formatCurrency(player.base_price)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-gray-600">Sold:</span>
+                                      <span className="font-bold text-green-600">
+                                        {formatCurrency(player.sold_price || player.base_price)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 mb-2">No players bought yet</p>
+                  <p className="text-sm text-gray-400">
+                    This team hasn't purchased any players during the auction.
+                  </p>
+                </div>
+              )}
+
+              {/* Team Summary */}
+              {selectedTeam && (
+                <div className="border-t pt-4 mt-6">
+                  <h4 className="font-semibold text-gray-900 mb-3">Team Summary</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-3 bg-gray-50 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600">{teamPlayers.length}</div>
+                      <div className="text-sm text-gray-600">Players</div>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 rounded-lg">
+                      <div className="text-2xl font-bold text-red-600">{formatCurrency(selectedTeam.spent)}</div>
+                      <div className="text-sm text-gray-600">Spent</div>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600">{formatCurrency(selectedTeam.remaining)}</div>
+                      <div className="text-sm text-gray-600">Remaining</div>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 rounded-lg">
+                      <div className="text-2xl font-bold text-gray-800">
+                        {selectedTeam.max_squad_size - teamPlayers.length}
+                      </div>
+                      <div className="text-sm text-gray-600">Slots Left</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {teams.map((team) => (
             <Card key={team.id} className="glass border-white/20 card-hover" style={{ borderTopColor: team.color, borderTopWidth: '4px' }}>
               <CardHeader className="pb-3">
                 {team.logo_url && (
                   <div className="flex justify-center mb-4">
-                    <img 
-                      src={team.logo_url} 
+                    <img
+                      src={team.logo_url}
                       alt={`${team.name} logo`}
                       className="w-16 h-16 rounded-xl object-cover border-2 border-white/30 shadow-lg bg-white/10 p-1"
                       onError={(e) => { e.target.style.display = 'none'; }}
@@ -258,7 +570,17 @@ const TeamManagement = () => {
                       size="sm"
                       variant="outline"
                       className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                      onClick={() => handleViewPlayers(team)}
+                      title="View Players"
+                    >
+                      <Eye className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                       onClick={() => handleEdit(team)}
+                      title="Edit Team"
                     >
                       <Edit className="w-3 h-3" />
                     </Button>
@@ -281,7 +603,7 @@ const TeamManagement = () => {
                     <span className="text-green-400 font-semibold">{formatCurrency(team.remaining)}</span>
                   </div>
                   <div className="h-2 bg-white/20 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
                       style={{ width: `${(team.spent / team.budget) * 100}%` }}
                     />

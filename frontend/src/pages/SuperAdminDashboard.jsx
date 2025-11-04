@@ -130,8 +130,8 @@ const SuperAdminDashboard = () => {
                   >
                     <div className="flex items-center flex-1">
                       {event.logo_url && (
-                        <img 
-                          src={event.logo_url} 
+                        <img
+                          src={event.logo_url}
                           alt={`${event.name} logo`}
                           className="w-10 h-10 rounded-lg object-cover mr-3 border border-white/20"
                           onError={(e) => { e.target.style.display = 'none'; }}
@@ -143,11 +143,10 @@ const SuperAdminDashboard = () => {
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        event.status === 'in_progress' ? 'bg-green-500/20 text-green-300' :
-                        event.status === 'completed' ? 'bg-blue-500/20 text-blue-300' :
-                        'bg-yellow-500/20 text-yellow-300'
-                      }`}>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${event.status === 'in_progress' ? 'bg-green-500/20 text-green-300' :
+                          event.status === 'completed' ? 'bg-blue-500/20 text-blue-300' :
+                            'bg-yellow-500/20 text-yellow-300'
+                        }`}>
                         {event.status.replace('_', ' ').toUpperCase()}
                       </span>
                       <Link to={`/admin/categories/${event.id}`}>
@@ -166,6 +165,12 @@ const SuperAdminDashboard = () => {
                         <Button size="sm" variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
                           <Users className="w-4 h-4 mr-1" />
                           Players
+                        </Button>
+                      </Link>
+                      <Link to={`/admin/sold-players/${event.id}`}>
+                        <Button size="sm" variant="outline" className="bg-green-500/20 border-green-400/40 text-green-300 hover:bg-green-500/30">
+                          <TrendingUp className="w-4 h-4 mr-1" />
+                          Sold Players
                         </Button>
                       </Link>
                       <Link to={`/admin/auction/${event.id}`}>

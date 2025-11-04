@@ -407,13 +407,47 @@ async def update_team(team_id: str, team_data: TeamCreate, current_user: dict = 
 
 @api_router.get("/teams/event/{event_id}", response_model=List[Team])
 async def get_event_teams(event_id: str):
-    """Get teams for an event"""
+    """Get teams for an event with accurate player statistics"""
     try:
         if not db:
             return []
         
         teams = db.collection('teams').where('event_id', '==', event_id).stream()
-        return [Team(**team.to_dict()) for team in teams]
+        result_teams = []
+        
+        for team_doc in teams:
+            team_data = team_doc.to_dict()
+            team_id = team_data['id']
+            
+            # Calculate actual players count and spent amount from sold players
+            sold_players = db.collection('players').where('sold_to_team_id', '==', team_id).stream()
+            
+            actual_players_count = 0
+            actual_spent = 0
+            
+            for player_doc in sold_players:
+                player_data = player_doc.to_dict()
+                if player_data.get('status') == 'sold' and player_data.get('sold_price'):
+                    actual_players_count += 1
+                    actual_spent += player_data['sold_price']
+            
+            # Update the team data with accurate values
+            team_data['players_count'] = actual_players_count
+            team_data['spent'] = actual_spent
+            team_data['remaining'] = team_data['budget'] - actual_spent
+            
+            # Update the database with correct values if they differ
+            if (team_doc.to_dict().get('players_count', 0) != actual_players_count or 
+                team_doc.to_dict().get('spent', 0) != actual_spent):
+                db.collection('teams').document(team_id).update({
+                    'players_count': actual_players_count,
+                    'spent': actual_spent,
+                    'remaining': team_data['remaining']
+                })
+            
+            result_teams.append(Team(**team_data))
+        
+        return result_teams
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -439,7 +473,7 @@ async def get_available_team_admins(current_user: dict = Depends(require_super_a
 
 @api_router.get("/teams/{team_id}", response_model=Team)
 async def get_team(team_id: str):
-    """Get team by ID"""
+    """Get team by ID with accurate player statistics"""
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -448,7 +482,52 @@ async def get_team(team_id: str):
         if not team_doc.exists:
             raise HTTPException(status_code=404, detail="Team not found")
         
-        return Team(**team_doc.to_dict())
+        team_data = team_doc.to_dict()
+        
+        # Calculate actual players count and spent amount from sold players
+        sold_players = db.collection('players').where('sold_to_team_id', '==', team_id).stream()
+        
+        actual_players_count = 0
+        actual_spent = 0
+        
+        for player_doc in sold_players:
+            player_data = player_doc.to_dict()
+            if player_data.get('status') == 'sold' and player_data.get('sold_price'):
+                actual_players_count += 1
+                actual_spent += player_data['sold_price']
+        
+        # Update the team data with accurate values
+        team_data['players_count'] = actual_players_count
+        team_data['spent'] = actual_spent
+        team_data['remaining'] = team_data['budget'] - actual_spent
+        
+        return Team(**team_data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/teams/{team_id}/players", response_model=List[Player])
+async def get_team_players(team_id: str):
+    """Get all players bought by a specific team"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Check if team exists
+        team_doc = db.collection('teams').document(team_id).get()
+        if not team_doc.exists:
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        # Get all sold players for this team
+        sold_players = db.collection('players').where('sold_to_team_id', '==', team_id).where('status', '==', 'sold').stream()
+        
+        players = []
+        for player_doc in sold_players:
+            player_data = player_doc.to_dict()
+            players.append(Player(**player_data))
+        
+        return players
     except HTTPException:
         raise
     except Exception as e:
@@ -1148,7 +1227,7 @@ async def mark_player_unsold(
 
 @api_router.post("/players/{player_id}/make-available")
 async def make_player_available(player_id: str, current_user: dict = Depends(require_super_admin)):
-    """Make an unsold player available for auction again"""
+    """Make an unsold or current player available for auction again"""
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -1160,16 +1239,16 @@ async def make_player_available(player_id: str, current_user: dict = Depends(req
         
         player_data = player_doc.to_dict()
         
-        # Check if player is unsold
-        if player_data.get('status') != PlayerStatus.UNSOLD.value:
-            raise HTTPException(status_code=400, detail="Player is not unsold")
+        # Check if player is unsold or current
+        if player_data.get('status') not in [PlayerStatus.UNSOLD.value, PlayerStatus.CURRENT.value]:
+            raise HTTPException(status_code=400, detail="Player must be unsold or current to make available")
         
         # Update player status to available
         db.collection('players').document(player_id).update({
             'status': PlayerStatus.AVAILABLE.value
         })
         
-        return {"message": "Player made available for auction"}
+        return {"message": f"Player {player_data['name']} made available for auction"}
     except HTTPException:
         raise
     except Exception as e:
@@ -1248,6 +1327,69 @@ async def fix_current_players(event_id: str, current_user: dict = Depends(requir
             "message": f"Fixed {fixed_count} players with incorrect CURRENT status",
             "fixed_count": fixed_count,
             "actual_current_player": actual_current_player_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/players/{player_id}/release")
+async def release_player_from_team(player_id: str, current_user: dict = Depends(require_super_admin)):
+    """Release a sold player from their team back to auction (super admin only)"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Get player document
+        player_doc = db.collection('players').document(player_id).get()
+        if not player_doc.exists:
+            raise HTTPException(status_code=404, detail="Player not found")
+        
+        player_data = player_doc.to_dict()
+        
+        # Check if player is sold
+        if player_data.get('status') != PlayerStatus.SOLD.value:
+            raise HTTPException(status_code=400, detail="Player is not sold to any team")
+        
+        # Get the team details before releasing
+        team_id = player_data.get('sold_to_team_id')
+        sold_price = player_data.get('sold_price', 0)
+        
+        if not team_id:
+            raise HTTPException(status_code=400, detail="Player has no associated team")
+        
+        # Get team document
+        team_doc = db.collection('teams').document(team_id).get()
+        if not team_doc.exists:
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        team_data = team_doc.to_dict()
+        team_name = team_data.get('name', 'Unknown Team')
+        
+        # Update player status to available and clear team association
+        db.collection('players').document(player_id).update({
+            'status': PlayerStatus.AVAILABLE.value,
+            'sold_to_team_id': None,
+            'sold_price': None
+        })
+        
+        # Update team budget - refund the amount and decrease player count
+        new_spent = max(0, team_data.get('spent', 0) - sold_price)
+        new_remaining = team_data.get('budget', 0) - new_spent
+        new_players_count = max(0, team_data.get('players_count', 0) - 1)
+        
+        db.collection('teams').document(team_id).update({
+            'spent': new_spent,
+            'remaining': new_remaining,
+            'players_count': new_players_count
+        })
+        
+        return {
+            "message": f"Player {player_data['name']} released from {team_name} successfully",
+            "player_id": player_id,
+            "player_name": player_data['name'],
+            "released_from_team": team_name,
+            "refunded_amount": sold_price
         }
     except HTTPException:
         raise
