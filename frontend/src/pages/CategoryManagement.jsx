@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Tags, Edit, Trash2, Folder } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
+import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -182,13 +183,13 @@ const CategoryManagement = () => {
           <div className="text-white/60">
             <p>Categories define player types (e.g., Batsmen, Bowlers, All-rounders)</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => { 
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
             console.log('Category Dialog state changing to:', open);
             setIsDialogOpen(open);
-            if (!open) resetForm(); 
+            if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
-              <Button 
+              <Button
                 className="bg-white text-purple-700 hover:bg-white/90"
                 onClick={() => {
                   console.log('Add Category button clicked');
@@ -291,9 +292,9 @@ const CategoryManagement = () => {
                 </div>
 
                 <div className="flex justify-end space-x-2 pt-4">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
+                    variant="outline"
                     onClick={() => setIsDialogOpen(false)}
                   >
                     Cancel
@@ -329,8 +330,8 @@ const CategoryManagement = () => {
                       <div className="flex justify-between items-start mb-4">
                         <div className="flex-1">
                           <div className="flex items-center mb-2">
-                            <div 
-                              className="w-4 h-4 rounded-full mr-2" 
+                            <div
+                              className="w-4 h-4 rounded-full mr-2"
                               style={{ backgroundColor: category.color }}
                             ></div>
                             <h3 className="text-white font-semibold text-lg">{category.name}</h3>
@@ -384,6 +385,9 @@ const CategoryManagement = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Floating Menu */}
+      <FloatingMenu />
     </div>
   );
 };

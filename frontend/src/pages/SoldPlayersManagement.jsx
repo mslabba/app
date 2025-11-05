@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Unlock, Trophy, DollarSign, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
+import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -321,6 +322,9 @@ const SoldPlayersManagement = () => {
           </div>
         </div>
       </div>
+
+      {/* Floating Menu */}
+      <FloatingMenu />
     </div>
   );
 };

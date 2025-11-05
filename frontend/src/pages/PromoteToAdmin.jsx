@@ -22,20 +22,30 @@ const PromoteToAdmin = () => {
 
     setLoading(true);
     try {
-      await axios.post(`${API}/auth/promote-to-admin`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
+      console.log('Sending promotion request to:', `${API}/auth/promote-to-admin`);
+      console.log('Token:', token ? 'Present' : 'Missing');
+
+      const response = await axios.post(`${API}/auth/promote-to-admin`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000 // 10 second timeout
       });
-      
-      toast.success('Successfully promoted to Super Admin! Please refresh the page.');
-      
-      // Redirect to admin dashboard after a short delay
+
+      console.log('Promotion response:', response.data);
+      toast.success('Successfully promoted to Super Admin! Redirecting...');
+
+      // Clear any cached user data and redirect
       setTimeout(() => {
-        window.location.reload(); // Refresh to update auth context
-      }, 2000);
-      
+        // Clear local storage and session storage
+        localStorage.clear();
+        sessionStorage.clear();
+        // Redirect to admin dashboard
+        window.location.href = '/admin';
+      }, 1500);
+
     } catch (error) {
       console.error('Promotion error:', error);
-      toast.error(error.response?.data?.detail || 'Failed to promote user');
+      console.log('Error response:', error.response?.data);
+      toast.error(error.response?.data?.detail || 'Failed to promote user: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -77,12 +87,40 @@ const PromoteToAdmin = () => {
               disabled={loading || userProfile?.role === 'super_admin'}
               className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 font-semibold"
             >
-              {loading ? 'Promoting...' : 
-               userProfile?.role === 'super_admin' ? 'Already Super Admin' : 
-               'Promote to Super Admin'}
+              {loading ? 'Promoting...' :
+                userProfile?.role === 'super_admin' ? 'Already Super Admin' :
+                  'Promote to Super Admin'}
             </Button>
 
+            {/* Debug button to test auth */}
             <Button
+              onClick={async () => {
+                try {
+                  console.log('Testing auth with token:', token ? 'Present' : 'Missing');
+                  console.log('API URL:', API);
+
+                  const response = await axios.get(`${API}/auth/me`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    timeout: 5000
+                  });
+                  console.log('Current user profile:', response.data);
+                  toast.success('✅ Auth working! Check console for user profile data');
+                } catch (error) {
+                  console.error('Auth test error:', error);
+                  console.log('Error details:', {
+                    message: error.message,
+                    status: error.response?.status,
+                    data: error.response?.data,
+                    config: error.config
+                  });
+                  toast.error('❌ Auth test failed: ' + (error.response?.data?.detail || error.message));
+                }
+              }}
+              variant="outline"
+              className="w-full bg-white/10 border-white/20 text-white hover:bg-white/20"
+            >
+              🔍 Test Auth Status
+            </Button>            <Button
               onClick={() => navigate('/')}
               variant="outline"
               className="w-full bg-white/10 border-white/20 text-white hover:bg-white/20"

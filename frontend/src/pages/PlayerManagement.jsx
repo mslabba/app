@@ -14,6 +14,7 @@ import { Plus, Users, Edit, Trash2, User, Unlock, RotateCcw } from 'lucide-react
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
+import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -571,6 +572,8 @@ const PlayerManagement = () => {
           </CardContent>
         </Card>
       </div>
+      {/* Floating Menu */}
+      <FloatingMenu />
     </div>
   );
 };

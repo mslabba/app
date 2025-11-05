@@ -20,8 +20,10 @@ import SponsorManagement from '@/pages/SponsorManagement';
 import Analytics from '@/pages/Analytics';
 import PublicPlayerRegistration from '@/pages/PublicPlayerRegistration';
 import PlayerRegistrationManagement from '@/pages/PlayerRegistrationManagement';
+import PublicTeamStats from '@/pages/PublicTeamStats';
 import TestPage from '@/pages/TestPage';
 import PromoteToAdmin from '@/pages/PromoteToAdmin';
+import LogoutPage from '@/pages/LogoutPage';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 // Dashboard redirect component for authenticated users
@@ -81,10 +83,14 @@ function App() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/test" element={<TestPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/logout" element={<LogoutPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/promote-to-admin" element={<PromoteToAdmin />} />
             <Route path="/display/:eventId" element={<AuctionDisplay />} />
             <Route path="/events/:eventId/register" element={<PublicPlayerRegistration />} />
+
+            {/* Public Team Statistics - No authentication required */}
+            <Route path="/public/team/:teamId/stats" element={<PublicTeamStats />} />
 
             {/* Dashboard redirect for authenticated users */}
             <Route path="/dashboard" element={<DashboardRedirect />} />

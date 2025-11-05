@@ -10,11 +10,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Building2, 
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Building2,
   DollarSign,
   Star,
   Globe,
@@ -25,6 +25,7 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/AuthContext';
 import ImageUpload from '@/components/ImageUpload';
+import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -91,7 +92,7 @@ const SponsorManagement = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.name.trim()) {
       toast.error('Please enter sponsor name');
       return;
@@ -99,7 +100,7 @@ const SponsorManagement = () => {
 
     try {
       setLoading(true);
-      
+
       const sponsorData = {
         ...formData,
         event_id: eventId,
@@ -220,7 +221,7 @@ const SponsorManagement = () => {
             setIsModalOpen(open);
           }}>
             <DialogTrigger asChild>
-              <Button 
+              <Button
                 onClick={() => {
                   console.log('Add Sponsor button clicked');
                   resetForm();
@@ -348,15 +349,15 @@ const SponsorManagement = () => {
                 </div>
 
                 <div className="flex justify-end space-x-4">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
+                    variant="outline"
                     onClick={() => setIsModalOpen(false)}
                   >
                     Cancel
                   </Button>
-                  <Button 
-                    type="submit" 
+                  <Button
+                    type="submit"
                     disabled={loading}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
@@ -422,9 +423,9 @@ const SponsorManagement = () => {
                   {sponsor.website && (
                     <div className="flex items-center space-x-2">
                       <Globe className="w-4 h-4" />
-                      <a 
-                        href={sponsor.website} 
-                        target="_blank" 
+                      <a
+                        href={sponsor.website}
+                        target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:underline truncate"
                       >
@@ -464,7 +465,7 @@ const SponsorManagement = () => {
               <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 text-lg mb-2">No sponsors added yet</p>
               <p className="text-gray-500 text-sm mb-6">Add sponsors to showcase them during the auction</p>
-              <Button 
+              <Button
                 onClick={() => setIsModalOpen(true)}
                 className="bg-blue-600 hover:bg-blue-700"
               >
@@ -475,6 +476,9 @@ const SponsorManagement = () => {
           </Card>
         )}
       </div>
+
+      {/* Floating Menu */}
+      <FloatingMenu />
     </div>
   );
 };

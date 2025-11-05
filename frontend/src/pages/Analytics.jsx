@@ -1,6 +1,7 @@
 import Navbar from '@/components/Navbar';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarChart } from 'lucide-react';
+import FloatingMenu from '@/components/FloatingMenu';
 
 const Analytics = () => {
   return (
@@ -16,6 +17,9 @@ const Analytics = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Floating Menu */}
+      <FloatingMenu />
     </div>
   );
 };

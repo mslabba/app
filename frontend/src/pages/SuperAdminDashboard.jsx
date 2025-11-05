@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar, Users, TrendingUp, Plus, Play, BarChart } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
+import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -144,8 +145,8 @@ const SuperAdminDashboard = () => {
                     </div>
                     <div className="flex items-center space-x-2">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${event.status === 'in_progress' ? 'bg-green-500/20 text-green-300' :
-                          event.status === 'completed' ? 'bg-blue-500/20 text-blue-300' :
-                            'bg-yellow-500/20 text-yellow-300'
+                        event.status === 'completed' ? 'bg-blue-500/20 text-blue-300' :
+                          'bg-yellow-500/20 text-yellow-300'
                         }`}>
                         {event.status.replace('_', ' ').toUpperCase()}
                       </span>
@@ -187,6 +188,9 @@ const SuperAdminDashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Floating Menu */}
+      <FloatingMenu />
     </div>
   );
 };

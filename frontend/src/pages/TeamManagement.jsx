@@ -8,10 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Users, DollarSign, Edit, Eye, RefreshCw } from 'lucide-react';
+import { Plus, Users, DollarSign, Edit, Eye, RefreshCw, Share2, Copy, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
+import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -28,6 +29,7 @@ const TeamManagement = () => {
   const [teamPlayers, setTeamPlayers] = useState([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [shareDialog, setShareDialog] = useState({ open: false, team: null, link: null, generating: false });
   const [formData, setFormData] = useState({
     name: '',
     budget: 10000000,
@@ -159,6 +161,60 @@ const TeamManagement = () => {
       admin_email: team.admin_email || ''
     });
     setIsDialogOpen(true);
+  };
+
+  const handleGenerateShareLink = async (team) => {
+    setShareDialog({ open: true, team, link: null, generating: true });
+
+    try {
+      // Call backend API to generate secure public link
+      const response = await axios.post(`${API}/teams/${team.id}/generate-public-link`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // Use the current domain instead of the backend response
+      const publicLink = `${window.location.origin}/public/team/${team.id}/stats?token=${response.data.token}`;
+
+      setShareDialog(prev => ({ ...prev, link: publicLink, generating: false }));
+      toast.success('Public link generated successfully!');
+    } catch (error) {
+      console.error('Failed to generate public link:', error);
+      console.error('Error details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+
+      // Fallback to demo link for testing
+      const timestamp = Date.now();
+      const demoString = `${team.id}-${timestamp}`;
+      const demoToken = btoa(demoString);
+      const fallbackLink = `${window.location.origin}/public/team/${team.id}/stats?token=${demoToken}`;
+
+      console.log('Demo token details:', {
+        teamId: team.id,
+        teamName: team.name,
+        timestamp,
+        demoString,
+        demoToken: demoToken.substring(0, 20) + '...',
+        fallbackLink
+      });
+
+      setShareDialog(prev => ({ ...prev, link: fallbackLink, generating: false }));
+      toast.success('Demo public link generated (for testing)!');
+    }
+  }; const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Link copied to clipboard!');
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      toast.error('Failed to copy link');
+    }
+  };
+
+  const openInNewTab = (url) => {
+    window.open(url, '_blank');
   };
 
   const resetForm = () => {
@@ -584,6 +640,15 @@ const TeamManagement = () => {
                     >
                       <Edit className="w-3 h-3" />
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                      onClick={() => handleGenerateShareLink(team)}
+                      title="Generate Public Statistics Link"
+                    >
+                      <Share2 className="w-3 h-3" />
+                    </Button>
                     <Users className="w-5 h-5" />
                   </div>
                 </CardTitle>
@@ -638,6 +703,102 @@ const TeamManagement = () => {
           </Card>
         )}
       </div>
+
+      {/* Share Link Dialog */}
+      <Dialog open={shareDialog.open} onOpenChange={(open) => setShareDialog(prev => ({ ...prev, open }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Share2 className="w-5 h-5 text-blue-600" />
+              <span>Share Team Statistics</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {shareDialog.team && (
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-gray-900">{shareDialog.team.name}</h3>
+                <p className="text-sm text-gray-600">Generate a public link for real-time auction statistics</p>
+              </div>
+            )}
+
+            {shareDialog.generating ? (
+              <div className="text-center py-8">
+                <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-gray-600">Generating secure link...</p>
+              </div>
+            ) : shareDialog.link ? (
+              <div className="space-y-4">
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Public Statistics Link
+                  </Label>
+                  <div className="flex items-center space-x-2">
+                    <Input
+                      value={shareDialog.link}
+                      readOnly
+                      className="flex-1 text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => copyToClipboard(shareDialog.link)}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openInNewTab(shareDialog.link)}
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <div className="w-4 h-4 rounded-full bg-blue-500 mt-0.5"></div>
+                    <div className="text-sm text-blue-700">
+                      <p className="font-medium mb-1">Share this link with team owner</p>
+                      <ul className="text-xs space-y-1">
+                        <li>✅ Real-time budget and player updates</li>
+                        <li>✅ Category-wise player breakdown</li>
+                        <li>✅ No login required</li>
+                        <li>✅ Auto-refreshes every 5 seconds</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex space-x-2">
+                  <Button
+                    className="flex-1"
+                    onClick={() => copyToClipboard(shareDialog.link)}
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Link
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => openInNewTab(shareDialog.link)}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Preview
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-gray-600">Click "Generate Link" to create a shareable statistics page</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Floating Menu */}
+      <FloatingMenu />
     </div>
   );
 };

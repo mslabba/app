@@ -6,10 +6,10 @@ import { Upload, X, Image as ImageIcon, Link, Shuffle } from 'lucide-react';
 import { toast } from 'sonner';
 import { getRandomSampleImage } from '@/utils/sampleImages';
 
-const ImageUpload = ({ 
-  label, 
-  value, 
-  onChange, 
+const ImageUpload = ({
+  label,
+  value,
+  onChange,
   placeholder = "Enter image URL or upload file",
   accept = "image/*",
   maxSize = 5 * 1024 * 1024, // 5MB default
@@ -86,7 +86,7 @@ const ImageUpload = ({
   return (
     <div className={`space-y-3 ${className}`}>
       <Label>{label}</Label>
-      
+
       {/* URL Input */}
       <div className="flex space-x-2">
         <div className="flex-1 relative">

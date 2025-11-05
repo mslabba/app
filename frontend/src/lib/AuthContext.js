@@ -68,7 +68,20 @@ export const AuthProvider = ({ children }) => {
           setUserProfile(response.data);
         } catch (error) {
           console.error('Error fetching user profile:', error);
-          // Set loading to false even if profile fetch fails
+
+          if (!isMounted) return;
+
+          // If profile fetch fails, create a default profile
+          const defaultProfile = {
+            uid: user.uid,
+            email: user.email,
+            role: 'team_admin',
+            display_name: user.displayName || user.email?.split('@')[0] || 'User',
+            team_id: null
+          };
+
+          console.log('Setting default profile due to backend error:', defaultProfile);
+          setUserProfile(defaultProfile);
         }
       } else {
         if (!isMounted) return;

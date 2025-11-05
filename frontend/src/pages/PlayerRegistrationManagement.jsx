@@ -11,19 +11,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Users, 
-  UserCheck, 
-  UserX, 
-  Eye, 
-  CheckCircle, 
-  XCircle, 
+import {
+  Users,
+  UserCheck,
+  UserX,
+  Eye,
+  CheckCircle,
+  XCircle,
   Clock,
   Filter,
   Download
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
+import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -59,7 +60,7 @@ const PlayerRegistrationManagement = () => {
           headers: { Authorization: `Bearer ${token}` }
         })
       ]);
-      
+
       setRegistrations(registrationsRes.data);
       setPlayers(playersRes.data);
       setCategories(categoriesRes.data);
@@ -93,16 +94,16 @@ const PlayerRegistrationManagement = () => {
   const handleCategoryChange = (categoryId, isBulk = true) => {
     const selectedCategory = categories.find(c => c.id === categoryId);
     const basePrice = selectedCategory ? selectedCategory.base_price_min : '';
-    
+
     if (isBulk) {
       setBulkCategory(categoryId);
       setBulkBasePrice(basePrice.toString());
-      
+
       if (selectedCategory) {
         toast.info(`Base price auto-filled to ₹${basePrice.toLocaleString()} (category minimum)`);
       }
     }
-    
+
     return basePrice;
   };
 
@@ -118,7 +119,7 @@ const PlayerRegistrationManagement = () => {
         category_id: bulkCategory,
         base_price: parseInt(bulkBasePrice)
       });
-      
+
       const promises = selectedRegistrations.map(regId =>
         axios.post(`${API}/registrations/${regId}/approve`, {
           category_id: bulkCategory,
@@ -149,7 +150,7 @@ const PlayerRegistrationManagement = () => {
         category_id: categoryId,
         base_price: parseInt(basePrice)
       });
-      
+
       await axios.post(`${API}/registrations/${registrationId}/approve`, {
         category_id: categoryId,
         base_price: parseInt(basePrice)
@@ -274,7 +275,7 @@ const PlayerRegistrationManagement = () => {
                           </div>
                         )}
                       </div>
-                      <Button 
+                      <Button
                         onClick={handleBulkApprove}
                         disabled={loading || !bulkCategory || !bulkBasePrice}
                         className="bg-green-600 hover:bg-green-700"
@@ -650,6 +651,9 @@ const PlayerRegistrationManagement = () => {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Floating Menu */}
+      <FloatingMenu />
     </div>
   );
 };

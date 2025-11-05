@@ -7,46 +7,67 @@ import { Badge } from '@/components/ui/badge';
 import { Gavel, Users, DollarSign, Trophy, Clock, User } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
+import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const TeamDashboard = () => {
-  const { token, userProfile } = useAuth();
+  const { token, userProfile, loading: authLoading } = useAuth();
   const [events, setEvents] = useState([]);
   const [team, setTeam] = useState(null);
   const [auctionState, setAuctionState] = useState(null);
   const [currentPlayer, setCurrentPlayer] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    console.log('TeamDashboard useEffect - authLoading:', authLoading, 'userProfile:', userProfile, 'token:', !!token);
+
+    if (!authLoading) {
+      fetchData();
+    }
+  }, [authLoading, userProfile, token]);
 
   const fetchData = async () => {
     try {
+      console.log('TeamDashboard fetchData started');
+      setError(null);
+
       // Fetch events
+      console.log('Fetching events...');
       const eventsResponse = await axios.get(`${API}/events`);
       setEvents(eventsResponse.data);
+      console.log('Events fetched:', eventsResponse.data);
 
       // If user has a team, fetch team data
       if (userProfile?.team_id) {
+        console.log('User has team_id:', userProfile.team_id);
         const teamResponse = await axios.get(`${API}/teams/${userProfile.team_id}`);
         setTeam(teamResponse.data);
+        console.log('Team fetched:', teamResponse.data);
 
         // Fetch auction state for team's event
+        console.log('Fetching auction state for event:', teamResponse.data.event_id);
         const auctionResponse = await axios.get(`${API}/auction/state/${teamResponse.data.event_id}`);
         setAuctionState(auctionResponse.data);
+        console.log('Auction state fetched:', auctionResponse.data);
 
         // If there's a current player, fetch player details
         if (auctionResponse.data.current_player_id) {
+          console.log('Fetching current player:', auctionResponse.data.current_player_id);
           const playerResponse = await axios.get(`${API}/players/${auctionResponse.data.current_player_id}`);
           setCurrentPlayer(playerResponse.data);
+          console.log('Current player fetched:', playerResponse.data);
         }
+      } else {
+        console.log('User has no team_id, userProfile:', userProfile);
       }
     } catch (error) {
       console.error('Failed to fetch data:', error);
-      toast.error('Failed to load dashboard data');
+      setError(error.message);
+      toast.error('Failed to load dashboard data: ' + error.message);
     } finally {
+      console.log('TeamDashboard fetchData completed, setting loading to false');
       setLoading(false);
     }
   };
@@ -70,10 +91,18 @@ const TeamDashboard = () => {
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white">Loading dashboard...</p>
+          {error && (
+            <div className="mt-4 p-4 bg-red-500/20 rounded-lg border border-red-500/30">
+              <p className="text-red-200">Error: {error}</p>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -97,6 +126,26 @@ const TeamDashboard = () => {
               <Users className="w-16 h-16 text-white/40 mx-auto mb-4" />
               <p className="text-white/80 text-lg">No Team Assigned</p>
               <p className="text-white/60 text-sm mt-2">Contact the super admin to assign you to a team</p>
+
+              {/* Debug info */}
+              <div className="mt-6 p-4 bg-blue-500/20 rounded-lg border border-blue-500/30 text-left">
+                <h3 className="text-white font-semibold mb-2">Debug Info:</h3>
+                <p className="text-white/80 text-sm">User Profile: {JSON.stringify(userProfile, null, 2)}</p>
+                <div className="mt-4 flex gap-2 justify-center">
+                  <Button
+                    onClick={() => window.location.href = '/promote-to-admin'}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    Promote to Admin
+                  </Button>
+                  <Button
+                    onClick={() => window.location.href = '/test'}
+                    className="bg-gray-600 hover:bg-gray-700"
+                  >
+                    Debug Page
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         ) : (
@@ -209,6 +258,9 @@ const TeamDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Floating Menu */}
+      <FloatingMenu />
     </div>
   );
 };

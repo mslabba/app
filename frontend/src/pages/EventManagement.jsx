@@ -11,6 +11,7 @@ import { Plus, Calendar, Settings, Share2, Copy } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
+import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -122,14 +123,14 @@ const EventManagement = () => {
             <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Event Management</h1>
             <p className="text-white/80">powered by Turgut - Create and manage auction events</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => { 
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
             console.log('Dialog state changing to:', open);
             setIsDialogOpen(open);
-            if (!open) resetForm(); 
+            if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
-              <Button 
-                className="bg-white text-purple-700 hover:bg-white/90" 
+              <Button
+                className="bg-white text-purple-700 hover:bg-white/90"
                 data-testid="create-event-button"
                 onClick={() => {
                   console.log('Create Event button clicked');
@@ -150,7 +151,7 @@ const EventManagement = () => {
                   <Input
                     id="name"
                     value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
                     data-testid="event-name-input"
                   />
@@ -161,7 +162,7 @@ const EventManagement = () => {
                     id="date"
                     type="date"
                     value={formData.date}
-                    onChange={(e) => setFormData({...formData, date: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                     required
                     data-testid="event-date-input"
                   />
@@ -171,7 +172,7 @@ const EventManagement = () => {
                   <Textarea
                     id="description"
                     value={formData.description}
-                    onChange={(e) => setFormData({...formData, description: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     rows={3}
                     data-testid="event-description-input"
                   />
@@ -183,14 +184,14 @@ const EventManagement = () => {
                     <ImageUpload
                       label="Event Logo"
                       value={formData.logo_url}
-                      onChange={(url) => setFormData({...formData, logo_url: url})}
+                      onChange={(url) => setFormData({ ...formData, logo_url: url })}
                       placeholder="Upload event logo or enter URL"
                       sampleType={{ type: 'events', subtype: 'logos' }}
                     />
                     <ImageUpload
                       label="Event Banner"
                       value={formData.banner_url}
-                      onChange={(url) => setFormData({...formData, banner_url: url})}
+                      onChange={(url) => setFormData({ ...formData, banner_url: url })}
                       placeholder="Upload event banner or enter URL"
                       sampleType={{ type: 'events', subtype: 'banners' }}
                     />
@@ -207,7 +208,7 @@ const EventManagement = () => {
                         value={formData.rules.min_squad_size}
                         onChange={(e) => setFormData({
                           ...formData,
-                          rules: {...formData.rules, min_squad_size: parseInt(e.target.value)}
+                          rules: { ...formData.rules, min_squad_size: parseInt(e.target.value) }
                         })}
                       />
                     </div>
@@ -218,7 +219,7 @@ const EventManagement = () => {
                         value={formData.rules.max_squad_size}
                         onChange={(e) => setFormData({
                           ...formData,
-                          rules: {...formData.rules, max_squad_size: parseInt(e.target.value)}
+                          rules: { ...formData.rules, max_squad_size: parseInt(e.target.value) }
                         })}
                       />
                     </div>
@@ -229,7 +230,7 @@ const EventManagement = () => {
                         value={formData.rules.min_bid_increment}
                         onChange={(e) => setFormData({
                           ...formData,
-                          rules: {...formData.rules, min_bid_increment: parseInt(e.target.value)}
+                          rules: { ...formData.rules, min_bid_increment: parseInt(e.target.value) }
                         })}
                       />
                     </div>
@@ -240,7 +241,7 @@ const EventManagement = () => {
                         value={formData.rules.timer_duration}
                         onChange={(e) => setFormData({
                           ...formData,
-                          rules: {...formData.rules, timer_duration: parseInt(e.target.value)}
+                          rules: { ...formData.rules, timer_duration: parseInt(e.target.value) }
                         })}
                       />
                     </div>
@@ -260,8 +261,8 @@ const EventManagement = () => {
               <CardHeader className="pb-3">
                 {event.logo_url && (
                   <div className="flex justify-center mb-4">
-                    <img 
-                      src={event.logo_url} 
+                    <img
+                      src={event.logo_url}
                       alt={`${event.name} logo`}
                       className="w-20 h-20 rounded-xl object-cover border-2 border-white/30 shadow-lg bg-white/10 p-2"
                       onError={(e) => { e.target.style.display = 'none'; }}
@@ -280,15 +281,14 @@ const EventManagement = () => {
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      event.status === 'in_progress' ? 'bg-green-500/20 text-green-300' :
-                      event.status === 'completed' ? 'bg-blue-500/20 text-blue-300' :
-                      'bg-yellow-500/20 text-yellow-300'
-                    }`}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${event.status === 'in_progress' ? 'bg-green-500/20 text-green-300' :
+                        event.status === 'completed' ? 'bg-blue-500/20 text-blue-300' :
+                          'bg-yellow-500/20 text-yellow-300'
+                      }`}>
                       {event.status.replace('_', ' ').toUpperCase()}
                     </span>
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       variant="outline"
                       className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                       onClick={() => handleEdit(event)}
@@ -299,51 +299,51 @@ const EventManagement = () => {
                   </div>
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
                         onClick={() => window.location.href = `/admin/categories/${event.id}`}
                       >
                         Categories
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         className="bg-green-500/20 text-green-300 hover:bg-green-500/30"
                         onClick={() => window.location.href = `/admin/teams/${event.id}`}
                       >
                         Teams
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         className="bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
                         onClick={() => window.location.href = `/admin/players/${event.id}`}
                       >
                         Players
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         className="bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30"
                         onClick={() => window.location.href = `/admin/registrations/${event.id}`}
                       >
                         Registrations
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         className="bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30"
                         onClick={() => window.location.href = `/admin/sponsors/${event.id}`}
                       >
                         Sponsors
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         className="bg-red-500/20 text-red-300 hover:bg-red-500/30"
                         onClick={() => window.location.href = `/admin/auction/${event.id}`}
                       >
                         🎯 Auction Control
                       </Button>
                     </div>
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       className="w-full bg-orange-500/20 text-orange-300 hover:bg-orange-500/30 flex items-center justify-center"
                       onClick={() => copyRegistrationLink(event.id)}
                     >
@@ -357,6 +357,9 @@ const EventManagement = () => {
           ))}
         </div>
       </div>
+
+      {/* Floating Menu */}
+      <FloatingMenu />
     </div>
   );
 };
