@@ -24,6 +24,7 @@ import PublicTeamStats from '@/pages/PublicTeamStats';
 import TestPage from '@/pages/TestPage';
 import PromoteToAdmin from '@/pages/PromoteToAdmin';
 import LogoutPage from '@/pages/LogoutPage';
+import CloudinaryTest from '@/pages/CloudinaryTest';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 // Dashboard redirect component for authenticated users
@@ -82,6 +83,7 @@ function App() {
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/test" element={<TestPage />} />
+            <Route path="/test-cloudinary" element={<CloudinaryTest />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/logout" element={<LogoutPage />} />
             <Route path="/register" element={<RegisterPage />} />

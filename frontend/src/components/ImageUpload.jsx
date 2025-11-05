@@ -2,9 +2,10 @@ import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Upload, X, Image as ImageIcon, Link, Shuffle } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, Link, Shuffle, Cloud } from 'lucide-react';
 import { toast } from 'sonner';
 import { getRandomSampleImage } from '@/utils/sampleImages';
+import { uploadImageToCloudinary } from '@/lib/cloudinary';
 
 const ImageUpload = ({
   label,
@@ -45,24 +46,39 @@ const ImageUpload = ({
     setUploading(true);
 
     try {
-      // For now, we'll convert to base64 data URL
-      // In production, you'd upload to a service like Firebase Storage, AWS S3, etc.
+      // Try Cloudinary upload first
+      try {
+        toast.info('Uploading to Cloudinary...');
+        const folder = sampleType ? `${sampleType.type}/${sampleType.subtype || 'images'}` : 'general';
+        const uploadResult = await uploadImageToCloudinary(file, folder);
+        
+        console.log('Cloudinary upload successful:', uploadResult);
+        setPreview(uploadResult.url);
+        onChange(uploadResult.url);
+        toast.success('✅ Image uploaded to Cloudinary!');
+        return;
+      } catch (cloudinaryError) {
+        console.warn('Cloudinary upload failed, falling back to base64:', cloudinaryError);
+        toast.warning('Cloudinary unavailable, using fallback method...');
+      }
+
+      // Fallback to base64 if Cloudinary fails
       const reader = new FileReader();
       reader.onload = (e) => {
         const dataUrl = e.target.result;
         setPreview(dataUrl);
         onChange(dataUrl);
-        setUploading(false);
-        toast.success('Image uploaded successfully!');
+        toast.success('📎 Image uploaded (fallback method)');
       };
       reader.onerror = () => {
-        setUploading(false);
-        toast.error('Failed to read file');
+        throw new Error('Failed to read file');
       };
       reader.readAsDataURL(file);
     } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Failed to upload image: ' + error.message);
+    } finally {
       setUploading(false);
-      toast.error('Failed to upload image');
     }
   };
 
@@ -105,8 +121,13 @@ const ImageUpload = ({
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
           className="px-3"
+          title="Upload to Cloudinary"
         >
-          <Upload className="w-4 h-4" />
+          {uploading ? (
+            <div className="w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
+          ) : (
+            <Cloud className="w-4 h-4" />
+          )}
         </Button>
         {showSample && sampleType && (
           <Button
@@ -163,7 +184,10 @@ const ImageUpload = ({
       )}
 
       {uploading && (
-        <div className="text-sm text-gray-500">Uploading image...</div>
+        <div className="flex items-center space-x-2 text-sm text-blue-600">
+          <div className="w-4 h-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600"></div>
+          <span>Uploading to Cloudinary...</span>
+        </div>
       )}
     </div>
   );
