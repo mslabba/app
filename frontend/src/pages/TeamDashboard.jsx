@@ -4,7 +4,7 @@ import Navbar from '@/components/Navbar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Gavel, Users, DollarSign, Trophy, Clock, User } from 'lucide-react';
+import { Gavel, Users, DollarSign, Trophy, Clock, User, Target, Calculator } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import FloatingMenu from '@/components/FloatingMenu';
@@ -17,6 +17,8 @@ const TeamDashboard = () => {
   const [team, setTeam] = useState(null);
   const [auctionState, setAuctionState] = useState(null);
   const [currentPlayer, setCurrentPlayer] = useState(null);
+  const [budgetAnalysis, setBudgetAnalysis] = useState(null);
+  const [maxSafeBid, setMaxSafeBid] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -58,7 +60,21 @@ const TeamDashboard = () => {
           const playerResponse = await axios.get(`${API}/players/${auctionResponse.data.current_player_id}`);
           setCurrentPlayer(playerResponse.data);
           console.log('Current player fetched:', playerResponse.data);
+
+          // Fetch max safe bid for current player's category
+          console.log('Fetching max safe bid...');
+          const maxBidResponse = await axios.get(`${API}/teams/${userProfile.team_id}/max-safe-bid/${teamResponse.data.event_id}?player_category=${encodeURIComponent(playerResponse.data.category || '')}`);
+          setMaxSafeBid(maxBidResponse.data);
+          console.log('Max safe bid fetched:', maxBidResponse.data);
+        } else {
+          setMaxSafeBid(null);
         }
+
+        // Fetch budget analysis with base price obligations
+        console.log('Fetching budget analysis...');
+        const budgetResponse = await axios.get(`${API}/teams/${userProfile.team_id}/budget-analysis/${teamResponse.data.event_id}`);
+        setBudgetAnalysis(budgetResponse.data);
+        console.log('Budget analysis fetched:', budgetResponse.data);
       } else {
         console.log('User has no team_id, userProfile:', userProfile);
       }
@@ -151,7 +167,7 @@ const TeamDashboard = () => {
         ) : (
           <div className="space-y-6">
             {/* Team Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card className="glass border-white/20">
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
@@ -187,7 +203,151 @@ const TeamDashboard = () => {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Base Price Obligations */}
+              <Card className="glass border-white/20">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-white/60 text-sm">Effective Budget</p>
+                      <h3 className={`text-2xl font-bold ${budgetAnalysis?.budget_analysis?.can_bid ? 'text-green-400' : 'text-red-400'}`}>
+                        ₹{budgetAnalysis?.budget_analysis?.effective_budget?.toLocaleString() || '0'}
+                      </h3>
+                      {budgetAnalysis?.budget_analysis?.base_price_obligations > 0 && (
+                        <p className="text-yellow-300 text-xs mt-1">
+                          ₹{budgetAnalysis.budget_analysis.base_price_obligations.toLocaleString()} reserved
+                        </p>
+                      )}
+                    </div>
+                    <Target className="w-8 h-8 text-white/60" />
+                  </div>
+                </CardContent>
+              </Card>
             </div>
+
+            {/* Base Price Requirements Breakdown */}
+            {budgetAnalysis?.base_price_requirements && (
+              <Card className="glass border-white/20">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center">
+                    <Calculator className="w-5 h-5 mr-2" />
+                    Squad Requirements & Base Price Obligations
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Object.values(budgetAnalysis.category_breakdown).map((categoryInfo) => (
+                      <div
+                        key={categoryInfo.category_name}
+                        className={`p-4 rounded-lg border ${categoryInfo.remaining_needed > 0
+                          ? 'border-yellow-500/50 bg-yellow-500/10'
+                          : 'border-green-500/50 bg-green-500/10'
+                          }`}
+                      >
+                        <h4 className="font-semibold text-white mb-2">{categoryInfo.category_name}</h4>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex justify-between text-white/80">
+                            <span>Required:</span>
+                            <span>{categoryInfo.min_required}</span>
+                          </div>
+                          <div className="flex justify-between text-white/80">
+                            <span>Current:</span>
+                            <span>{categoryInfo.current_count}</span>
+                          </div>
+                          <div className="flex justify-between text-white/80">
+                            <span>Still need:</span>
+                            <span className={categoryInfo.remaining_needed > 0 ? 'text-yellow-300' : 'text-green-300'}>
+                              {categoryInfo.remaining_needed}
+                            </span>
+                          </div>
+                          <div className="flex justify-between font-semibold pt-2 border-t border-white/20">
+                            <span className="text-white">Base Price:</span>
+                            <span className="text-white">₹{categoryInfo.base_price?.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between font-semibold text-yellow-300">
+                            <span>Obligation:</span>
+                            <span>₹{categoryInfo.remaining_obligation?.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {budgetAnalysis.base_price_requirements.total_base_price_obligation > 0 && (
+                    <div className="mt-6 p-4 bg-yellow-500/20 border border-yellow-500/50 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-white font-semibold">Total Base Price Obligation</h4>
+                          <p className="text-white/60 text-sm">
+                            Amount reserved for minimum squad requirements
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-yellow-300">
+                            ₹{budgetAnalysis.base_price_requirements.total_base_price_obligation.toLocaleString()}
+                          </div>
+                          <div className="text-sm text-white/60">
+                            Remaining for bidding: ₹{budgetAnalysis.budget_analysis.effective_budget.toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Maximum Bidding Capacity Overview */}
+            {maxSafeBid && (
+              <Card className="glass border-white/20">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center">
+                    <Target className="w-5 h-5 mr-2" />
+                    Bidding Capacity Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 bg-green-500/20 border border-green-500/50 rounded-lg">
+                      <h4 className="text-green-300 font-semibold mb-2">Safe Bidding Range</h4>
+                      <div className="text-2xl font-bold text-white">
+                        ₹{maxSafeBid.max_safe_bid_with_buffer.toLocaleString()}
+                      </div>
+                      <div className="text-sm text-green-200 mt-1">
+                        Includes safety buffer
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-yellow-500/20 border border-yellow-500/50 rounded-lg">
+                      <h4 className="text-yellow-300 font-semibold mb-2">Maximum Possible</h4>
+                      <div className="text-2xl font-bold text-white">
+                        ₹{maxSafeBid.max_safe_bid.toLocaleString()}
+                      </div>
+                      <div className="text-sm text-yellow-200 mt-1">
+                        Without safety buffer
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-red-500/20 border border-red-500/50 rounded-lg">
+                      <h4 className="text-red-300 font-semibold mb-2">Reserved Amount</h4>
+                      <div className="text-2xl font-bold text-white">
+                        ₹{maxSafeBid.base_price_obligations.toLocaleString()}
+                      </div>
+                      <div className="text-sm text-red-200 mt-1">
+                        For squad requirements
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                    <div className="text-sm text-white/80">
+                      <strong>Strategy:</strong> Bids up to ₹{maxSafeBid.max_safe_bid_with_buffer.toLocaleString()} are safe and leave enough budget for future squad requirements.
+                      Higher bids may risk your ability to complete the minimum squad.
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Current Auction */}
             {auctionState && auctionState.status === 'in_progress' && currentPlayer ? (
@@ -227,21 +387,75 @@ const TeamDashboard = () => {
                     </div>
                     <div>
                       <h4 className="text-white mb-3">Place Your Bid</h4>
+
+                      {/* Max Safe Bid Information */}
+                      {maxSafeBid && (
+                        <div className="mb-4 p-3 bg-blue-500/20 border border-blue-500/50 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-white/80 text-sm">Safe Bidding Limit</span>
+                            <span className="text-blue-300 font-semibold">
+                              ₹{maxSafeBid.recommendation.suggested_max_bid.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="text-xs text-white/60">
+                            {maxSafeBid.recommendation.message}
+                          </div>
+                          <div className="text-xs text-white/50 mt-1">
+                            Reserves ₹{maxSafeBid.base_price_obligations.toLocaleString()} for squad obligations
+                          </div>
+                        </div>
+                      )}
+
                       <div className="space-y-2">
                         {[50000, 100000, 250000, 500000].map((increment) => {
                           const bidAmount = (auctionState.current_bid || currentPlayer.base_price) + increment;
+                          const effectiveBudget = budgetAnalysis?.budget_analysis?.effective_budget || team.remaining;
+                          const maxSafeBidAmount = maxSafeBid?.max_safe_bid_with_buffer || effectiveBudget;
+
+                          const canAfford = bidAmount <= effectiveBudget;
+                          const isSafeBid = bidAmount <= maxSafeBidAmount;
+
+                          let buttonClass = '';
+                          let buttonTitle = '';
+
+                          if (!canAfford) {
+                            buttonClass = 'bg-red-500 text-white cursor-not-allowed';
+                            buttonTitle = 'Exceeds total budget';
+                          } else if (isSafeBid) {
+                            buttonClass = 'bg-green-600 text-white hover:bg-green-700';
+                            buttonTitle = 'Safe bid - leaves buffer for squad requirements';
+                          } else {
+                            buttonClass = 'bg-yellow-600 text-white hover:bg-yellow-700';
+                            buttonTitle = 'Risky bid - may not leave enough for squad requirements';
+                          }
+
                           return (
                             <Button
                               key={increment}
                               onClick={() => placeBid(bidAmount)}
-                              className="w-full bg-white text-purple-700 hover:bg-white/90"
-                              disabled={bidAmount > team.remaining}
+                              className={`w-full ${buttonClass}`}
+                              disabled={!canAfford}
+                              title={buttonTitle}
                             >
-                              Bid ₹{bidAmount.toLocaleString()} (+₹{increment.toLocaleString()})
+                              <div className="flex items-center justify-between w-full">
+                                <span>Bid ₹{bidAmount.toLocaleString()} (+₹{increment.toLocaleString()})</span>
+                                <span className="text-xs">
+                                  {!canAfford ? '❌' : isSafeBid ? '✅' : '⚠️'}
+                                </span>
+                              </div>
                             </Button>
                           );
                         })}
                       </div>
+
+                      {/* Bidding Strategy Info */}
+                      {maxSafeBid && (
+                        <div className="mt-4 text-xs text-white/60 space-y-1">
+                          <div>• Green: Safe bids with buffer</div>
+                          <div>• Yellow: Risky - may affect future signings</div>
+                          <div>• Red: Exceeds total budget</div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>

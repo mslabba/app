@@ -29,6 +29,7 @@ const PublicTeamStats = () => {
   const [categories, setCategories] = useState([]);
   const [event, setEvent] = useState(null);
   const [auctionState, setAuctionState] = useState(null);
+  const [maxSafeBid, setMaxSafeBid] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
@@ -81,6 +82,20 @@ const PublicTeamStats = () => {
       setAuctionState(auctionResponse.data);
       setLastUpdated(new Date());
       setError(null);
+
+      // Fetch max safe bid for the team
+      try {
+        const currentPlayerCategory = auctionResponse.data?.current_player?.category;
+        const safeBidUrl = currentPlayerCategory
+          ? `${API}/teams/${teamId}/max-safe-bid/${teamResponse.data.event.id}?player_category=${encodeURIComponent(currentPlayerCategory)}`
+          : `${API}/teams/${teamId}/max-safe-bid/${teamResponse.data.event.id}`;
+
+        const safeBidResponse = await axios.get(safeBidUrl);
+        setMaxSafeBid(safeBidResponse.data);
+      } catch (safeBidError) {
+        console.error('Failed to fetch safe bid data:', safeBidError);
+        // Don't set error state for safe bid failure, just log it
+      }
     } catch (error) {
       console.error('Failed to fetch team data:', error);
       console.error('Error details:', {
@@ -373,6 +388,60 @@ Check console for full details.`);
                 </div>
               </CardContent>
             </Card>
+
+            {/* Safe Bidding Capacity */}
+            {maxSafeBid && (
+              <Card className="shadow-lg border-0 bg-gradient-to-br from-blue-50 to-indigo-50">
+                <CardHeader className="pb-4">
+                  <CardTitle className="flex items-center space-x-2">
+                    <Target className="w-5 h-5 text-blue-600" />
+                    <span>Safe Bidding Capacity</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-blue-600">
+                      {formatCurrency(maxSafeBid.max_safe_bid_with_buffer || 0)}
+                    </div>
+                    <p className="text-gray-600">Safe Bidding Limit</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {maxSafeBid.recommendation?.message}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 text-center">
+                    <div className="p-3 bg-white rounded-lg shadow-sm">
+                      <div className="text-lg font-bold text-green-600">
+                        {formatCurrency(maxSafeBid.max_safe_bid || 0)}
+                      </div>
+                      <p className="text-xs text-gray-600">Maximum Possible</p>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg shadow-sm">
+                      <div className="text-lg font-bold text-orange-600">
+                        {formatCurrency(maxSafeBid.base_price_obligations || 0)}
+                      </div>
+                      <p className="text-xs text-gray-600">Reserved for Squad</p>
+                    </div>
+                  </div>
+
+                  {maxSafeBid.can_bid_safely && (
+                    <div className="p-3 bg-green-100 border border-green-300 rounded-lg text-center">
+                      <p className="text-green-800 font-medium text-sm">
+                        ✅ Team can bid safely up to the limit shown above
+                      </p>
+                    </div>
+                  )}
+
+                  {!maxSafeBid.can_bid_safely && (
+                    <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-center">
+                      <p className="text-red-800 font-medium text-sm">
+                        ⚠️ Limited bidding capacity - consider squad requirements
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Squad Status */}
             <Card className="shadow-lg border-0">

@@ -93,14 +93,14 @@ const PlayerRegistrationManagement = () => {
 
   const handleCategoryChange = (categoryId, isBulk = true) => {
     const selectedCategory = categories.find(c => c.id === categoryId);
-    const basePrice = selectedCategory ? selectedCategory.base_price_min : '';
+    const basePrice = selectedCategory ? selectedCategory.base_price : '';
 
     if (isBulk) {
       setBulkCategory(categoryId);
       setBulkBasePrice(basePrice.toString());
 
       if (selectedCategory) {
-        toast.info(`Base price auto-filled to ₹${basePrice.toLocaleString()} (category minimum)`);
+        toast.info(`Base price auto-filled to ₹${basePrice.toLocaleString()} (category base price)`);
       }
     }
 
@@ -256,7 +256,7 @@ const PlayerRegistrationManagement = () => {
                         <SelectContent>
                           {categories.map((category) => (
                             <SelectItem key={category.id} value={category.id}>
-                              {category.name} (₹{category.base_price_min?.toLocaleString()} - ₹{category.base_price_max?.toLocaleString()})
+                              {category.name} (₹{category.base_price?.toLocaleString()})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -271,7 +271,7 @@ const PlayerRegistrationManagement = () => {
                         />
                         {bulkCategory && (
                           <div className="absolute top-full left-0 mt-1 text-xs text-white/70 whitespace-nowrap">
-                            Range: ₹{categories.find(c => c.id === bulkCategory)?.base_price_min?.toLocaleString()} - ₹{categories.find(c => c.id === bulkCategory)?.base_price_max?.toLocaleString()}
+                            Base Price: ₹{categories.find(c => c.id === bulkCategory)?.base_price?.toLocaleString()}
                           </div>
                         )}
                       </div>
@@ -609,7 +609,7 @@ const PlayerRegistrationManagement = () => {
                         <SelectContent>
                           {categories.map((category) => (
                             <SelectItem key={category.id} value={category.id}>
-                              {category.name} (₹{category.base_price_min?.toLocaleString()} - ₹{category.base_price_max?.toLocaleString()})
+                              {category.name} (₹{category.base_price?.toLocaleString()})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -624,7 +624,7 @@ const PlayerRegistrationManagement = () => {
                         />
                         {bulkCategory && (
                           <div className="absolute top-full left-0 mt-1 text-xs text-gray-500 whitespace-nowrap">
-                            Range: ₹{categories.find(c => c.id === bulkCategory)?.base_price_min?.toLocaleString()} - ₹{categories.find(c => c.id === bulkCategory)?.base_price_max?.toLocaleString()}
+                            Base Price: ₹{categories.find(c => c.id === bulkCategory)?.base_price?.toLocaleString()}
                           </div>
                         )}
                       </div>

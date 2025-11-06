@@ -81,8 +81,7 @@ class CategoryCreate(BaseModel):
     min_players: int
     max_players: int
     color: str
-    base_price_min: int
-    base_price_max: int
+    base_price: int  # Base price for this category
 
 class Category(BaseModel):
     id: str
@@ -92,8 +91,7 @@ class Category(BaseModel):
     min_players: int
     max_players: int
     color: str
-    base_price_min: int
-    base_price_max: int
+    base_price: int  # Base price for this category
 
 # Team Models
 class TeamCreate(BaseModel):

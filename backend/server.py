@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from datetime import datetime, timezone
 import uuid
+import time
 from typing import List, Optional
 
 from firebase_config import db, firebase_auth
@@ -231,8 +232,29 @@ async def get_event_categories(event_id: str):
             return []
         
         categories = db.collection('categories').where('event_id', '==', event_id).stream()
-        return [Category(**cat.to_dict()) for cat in categories]
+        
+        result = []
+        for cat in categories:
+            cat_data = cat.to_dict()
+            
+            # Handle transition from old model to new model
+            if 'base_price' not in cat_data:
+                # If base_price doesn't exist, use base_price_min as fallback
+                cat_data['base_price'] = cat_data.get('base_price_min', 50000)
+            
+            # Remove old fields that are no longer in the model
+            cat_data.pop('base_price_min', None)
+            cat_data.pop('base_price_max', None)
+            
+            try:
+                result.append(Category(**cat_data))
+            except Exception as model_error:
+                logger.error(f"Failed to create Category from data: {cat_data}, error: {model_error}")
+                continue
+                
+        return result
     except Exception as e:
+        logger.error(f"Error fetching categories for event {event_id}: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.get("/events/{event_id}/categories", response_model=List[Category])
@@ -243,8 +265,29 @@ async def get_categories_for_event(event_id: str):
             return []
         
         categories = db.collection('categories').where('event_id', '==', event_id).stream()
-        return [Category(**cat.to_dict()) for cat in categories]
+        
+        result = []
+        for cat in categories:
+            cat_data = cat.to_dict()
+            
+            # Handle transition from old model to new model
+            if 'base_price' not in cat_data:
+                # If base_price doesn't exist, use base_price_min as fallback
+                cat_data['base_price'] = cat_data.get('base_price_min', 50000)
+            
+            # Remove old fields that are no longer in the model
+            cat_data.pop('base_price_min', None)
+            cat_data.pop('base_price_max', None)
+            
+            try:
+                result.append(Category(**cat_data))
+            except Exception as model_error:
+                logger.error(f"Failed to create Category from data: {cat_data}, error: {model_error}")
+                continue
+                
+        return result
     except Exception as e:
+        logger.error(f"Error fetching categories for event {event_id}: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.put("/categories/{category_id}", response_model=Category)
@@ -266,8 +309,7 @@ async def update_category(category_id: str, category_data: CategoryCreate, curre
             'min_players': category_data.min_players,
             'max_players': category_data.max_players,
             'color': category_data.color,
-            'base_price_min': category_data.base_price_min,
-            'base_price_max': category_data.base_price_max,
+            'base_price': category_data.base_price,
             'event_id': category_data.event_id
         }
         
@@ -1272,6 +1314,255 @@ async def get_auction_state(event_id: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+# ============= TEAM BUDGET ANALYSIS =============
+
+@api_router.get("/teams/{team_id}/budget-analysis/{event_id}")
+async def get_team_budget_analysis(team_id: str, event_id: str):
+    """Get detailed budget analysis including base price obligations"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Get team details
+        team_doc = db.collection('teams').document(team_id).get()
+        if not team_doc.exists:
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        team_data = team_doc.to_dict()
+        
+        # Get categories
+        categories_docs = db.collection('categories').where('event_id', '==', event_id).stream()
+        categories = [Category(**doc.to_dict()) for doc in categories_docs]
+        
+        # Get team players
+        team_players_docs = db.collection('players').where('sold_to_team_id', '==', team_id).where('status', '==', 'sold').stream()
+        team_players = [doc.to_dict() for doc in team_players_docs]
+        
+        # Calculate base price analysis
+        try:
+            from utils.base_price_calculator import (
+                calculate_base_price_requirements, 
+                calculate_effective_budget, 
+                get_category_player_count
+            )
+        except ImportError as e:
+            logger.error(f"Failed to import base_price_calculator: {e}")
+            # Return basic budget info without base price calculations
+            return {
+                'team': team_data,
+                'base_price_requirements': {'total_base_price_obligation': 0, 'category_obligations': {}},
+                'budget_analysis': {
+                    'total_budget': team_data['budget'],
+                    'spent': team_data['spent'],
+                    'remaining_budget': team_data['remaining'],
+                    'base_price_obligations': 0,
+                    'effective_budget': team_data['remaining'],
+                    'can_bid': team_data['remaining'] > 0
+                },
+                'category_breakdown': {}
+            }
+        
+        player_count_by_category = get_category_player_count(team_players, categories)
+        base_price_reqs = calculate_base_price_requirements(categories, player_count_by_category)
+        budget_info = calculate_effective_budget(team_data['budget'], team_data['spent'], base_price_reqs['total_base_price_obligation'])
+        
+        return {
+            'team': team_data,
+            'base_price_requirements': base_price_reqs,
+            'budget_analysis': budget_info,
+            'category_breakdown': base_price_reqs['category_obligations']
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/teams/{team_id}/max-safe-bid/{event_id}")
+async def get_max_safe_bid_amount(team_id: str, event_id: str, player_category: str = None):
+    """Calculate maximum amount a team can safely bid while maintaining base price obligations"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Get team details
+        team_doc = db.collection('teams').document(team_id).get()
+        if not team_doc.exists:
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        team_data = team_doc.to_dict()
+        
+        # Get categories
+        categories_docs = db.collection('categories').where('event_id', '==', event_id).stream()
+        categories = []
+        for cat in categories_docs:
+            cat_data = cat.to_dict()
+            # Handle transition from old model to new model
+            if 'base_price' not in cat_data:
+                cat_data['base_price'] = cat_data.get('base_price_min', 50000)
+            cat_data.pop('base_price_min', None)
+            cat_data.pop('base_price_max', None)
+            categories.append(Category(**cat_data))
+        
+        # Get team players
+        team_players_docs = db.collection('players').where('sold_to_team_id', '==', team_id).where('status', '==', 'sold').stream()
+        team_players = [doc.to_dict() for doc in team_players_docs]
+        
+        # Calculate base price analysis
+        try:
+            from utils.base_price_calculator import (
+                calculate_base_price_requirements, 
+                get_category_player_count
+            )
+        except ImportError as e:
+            logger.error(f"Failed to import base_price_calculator: {e}")
+            return {
+                'max_safe_bid': team_data['remaining'],
+                'remaining_budget': team_data['remaining'],
+                'base_price_obligations': 0,
+                'can_bid_safely': team_data['remaining'] > 0,
+                'warning': "Base price calculations not available"
+            }
+        
+        player_count_by_category = get_category_player_count(team_players, categories)
+        base_price_reqs = calculate_base_price_requirements(categories, player_count_by_category)
+        
+        # Calculate maximum safe bid
+        remaining_budget = team_data['remaining']
+        total_obligations = base_price_reqs['total_base_price_obligation']
+        
+        # If bidding on a specific category, adjust obligations
+        adjusted_obligations = total_obligations
+        if player_category:
+            # Find the category and reduce obligation by its base price (since we're buying one)
+            for cat in categories:
+                if cat.name.lower() == player_category.lower():
+                    if player_category.lower() in base_price_reqs['category_obligations']:
+                        remaining_needed = base_price_reqs['category_obligations'][player_category.lower()]['remaining_needed']
+                        if remaining_needed > 0:
+                            # Reduce obligation by one player's base price for this category
+                            adjusted_obligations -= cat.base_price
+                    break
+        
+        # Maximum safe bid = remaining budget - adjusted obligations
+        max_safe_bid = max(0, remaining_budget - adjusted_obligations)
+        
+        # Add some buffer to ensure safety (e.g., keep at least 10% buffer)
+        buffer_amount = max(10000, int(adjusted_obligations * 0.1))  # 10% buffer or 10k, whichever is higher
+        max_safe_bid_with_buffer = max(0, max_safe_bid - buffer_amount)
+        
+        return {
+            'max_safe_bid': max_safe_bid,
+            'max_safe_bid_with_buffer': max_safe_bid_with_buffer,
+            'remaining_budget': remaining_budget,
+            'base_price_obligations': adjusted_obligations,
+            'buffer_amount': buffer_amount,
+            'can_bid_safely': max_safe_bid > 0,
+            'category_obligations': base_price_reqs['category_obligations'],
+            'recommendation': {
+                'suggested_max_bid': max_safe_bid_with_buffer,
+                'message': f"Suggested maximum bid: ₹{max_safe_bid_with_buffer:,} (includes safety buffer)"
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating max safe bid: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/events/{event_id}/teams-safe-bid-summary")
+async def get_all_teams_safe_bid_summary(event_id: str, player_category: str = None):
+    """Get safe bid summary for all teams in an event (for super admin view)"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Get all teams for the event
+        teams_docs = db.collection('teams').where('event_id', '==', event_id).stream()
+        teams_data = []
+        
+        # Get categories for the event
+        categories_docs = db.collection('categories').where('event_id', '==', event_id).stream()
+        categories = []
+        for cat in categories_docs:
+            cat_data = cat.to_dict()
+            # Handle transition from old model to new model
+            if 'base_price' not in cat_data:
+                cat_data['base_price'] = cat_data.get('base_price_min', 50000)
+            cat_data.pop('base_price_min', None)
+            cat_data.pop('base_price_max', None)
+            categories.append(Category(**cat_data))
+        
+        # Import calculator functions
+        try:
+            from utils.base_price_calculator import (
+                calculate_base_price_requirements, 
+                get_category_player_count
+            )
+        except ImportError as e:
+            logger.error(f"Failed to import base_price_calculator: {e}")
+            return {'teams': [], 'error': 'Base price calculations not available'}
+        
+        for team_doc in teams_docs:
+            team_data = team_doc.to_dict()
+            team_id = team_doc.id
+            
+            # Get team players
+            team_players_docs = db.collection('players').where('sold_to_team_id', '==', team_id).where('status', '==', 'sold').stream()
+            team_players = [doc.to_dict() for doc in team_players_docs]
+            
+            # Calculate base price analysis
+            player_count_by_category = get_category_player_count(team_players, categories)
+            base_price_reqs = calculate_base_price_requirements(categories, player_count_by_category)
+            
+            # Calculate maximum safe bid
+            remaining_budget = team_data.get('remaining', 0)
+            total_obligations = base_price_reqs['total_base_price_obligation']
+            
+            # If bidding on a specific category, adjust obligations
+            adjusted_obligations = total_obligations
+            if player_category:
+                for cat in categories:
+                    if cat.name.lower() == player_category.lower():
+                        if player_category.lower() in base_price_reqs['category_obligations']:
+                            remaining_needed = base_price_reqs['category_obligations'][player_category.lower()]['remaining_needed']
+                            if remaining_needed > 0:
+                                adjusted_obligations -= cat.base_price
+                        break
+            
+            # Calculate safe bid amounts
+            max_safe_bid = max(0, remaining_budget - adjusted_obligations)
+            buffer_amount = max(10000, int(adjusted_obligations * 0.1))
+            max_safe_bid_with_buffer = max(0, max_safe_bid - buffer_amount)
+            
+            teams_data.append({
+                'team_id': team_id,
+                'team_name': team_data.get('name', 'Unknown Team'),
+                'total_budget': team_data.get('budget', 0),
+                'spent': team_data.get('spent', 0),
+                'remaining_budget': remaining_budget,
+                'players_count': len(team_players),
+                'base_price_obligations': adjusted_obligations,
+                'max_safe_bid': max_safe_bid,
+                'max_safe_bid_with_buffer': max_safe_bid_with_buffer,
+                'buffer_amount': buffer_amount,
+                'can_bid_safely': max_safe_bid > 0,
+                'category_status': base_price_reqs['category_obligations'],
+                'risk_level': 'low' if max_safe_bid_with_buffer > 100000 else 'medium' if max_safe_bid_with_buffer > 50000 else 'high'
+            })
+        
+        # Sort by safe bidding capacity (descending)
+        teams_data.sort(key=lambda x: x['max_safe_bid_with_buffer'], reverse=True)
+        
+        return {
+            'teams': teams_data,
+            'event_id': event_id,
+            'player_category': player_category,
+            'total_teams': len(teams_data),
+            'timestamp': int(time.time())
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting teams safe bid summary: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 # ============= BIDDING ROUTES =============
 
 @api_router.post("/bids/place")
@@ -1295,7 +1586,36 @@ async def place_bid(bid_data: BidCreate, current_user: dict = Depends(require_te
         
         team_data = team_doc.to_dict()
         
-        # Check if team has enough budget
+        # Get categories and current team players for base price validation
+        categories_docs = db.collection('categories').where('event_id', '==', bid_data.event_id).stream()
+        categories = [Category(**doc.to_dict()) for doc in categories_docs]
+        
+        team_players_docs = db.collection('players').where('sold_to_team_id', '==', team_id).where('status', '==', 'sold').stream()
+        team_players = [doc.to_dict() for doc in team_players_docs]
+        
+        # Calculate base price obligations
+        try:
+            from utils.base_price_calculator import (
+                calculate_base_price_requirements, 
+                calculate_effective_budget, 
+                validate_bid_against_obligations,
+                get_category_player_count
+            )
+        except ImportError as e:
+            logger.error(f"Failed to import base_price_calculator: {e}")
+            # Fallback without base price validation for now
+            pass
+        
+        player_count_by_category = get_category_player_count(team_players, categories)
+        base_price_reqs = calculate_base_price_requirements(categories, player_count_by_category)
+        budget_info = calculate_effective_budget(team_data['budget'], team_data['spent'], base_price_reqs['total_base_price_obligation'])
+        
+        # Validate bid against base price obligations
+        bid_validation = validate_bid_against_obligations(bid_data.amount, budget_info)
+        if not bid_validation['valid']:
+            raise HTTPException(status_code=400, detail=bid_validation['reason'])
+        
+        # Traditional budget check
         if team_data['remaining'] < bid_data.amount:
             raise HTTPException(status_code=400, detail="Insufficient budget")
         

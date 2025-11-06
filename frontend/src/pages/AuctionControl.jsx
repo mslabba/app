@@ -41,6 +41,7 @@ const AuctionControl = () => {
   const [auctionState, setAuctionState] = useState(null);
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState([]);
+  const [teamsSafeBidSummary, setTeamsSafeBidSummary] = useState(null);
   const [sponsors, setSponsors] = useState([]);
   const [availablePlayers, setAvailablePlayers] = useState([]);
   const [selectedPlayer, setSelectedPlayer] = useState('');
@@ -101,6 +102,12 @@ const AuctionControl = () => {
         fetchSponsors(),
         fetchCategories()
       ]);
+      // Fetch safe bid summary after getting current auction state
+      const auctionResponse = await axios.get(`${API}/auction/state/${eventId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const currentPlayerCategory = auctionResponse.data?.current_player?.category;
+      await fetchTeamsSafeBidSummary(currentPlayerCategory);
     } catch (error) {
       console.error('Failed to fetch data:', error);
       toast.error('Failed to load auction data');
@@ -162,6 +169,34 @@ const AuctionControl = () => {
       setTeams(response.data);
     } catch (error) {
       console.error('Failed to fetch teams:', error);
+    }
+  };
+
+  const fetchTeamsSafeBidSummary = async (currentPlayerCategory = null) => {
+    try {
+      if (!currentUser || !token) {
+        console.log('Debug - fetchTeamsSafeBidSummary: Missing currentUser or token', { currentUser: !!currentUser, token: !!token });
+        return;
+      }
+      const url = currentPlayerCategory
+        ? `${API}/events/${eventId}/teams-safe-bid-summary?player_category=${encodeURIComponent(currentPlayerCategory)}`
+        : `${API}/events/${eventId}/teams-safe-bid-summary`;
+
+      console.log('Debug - fetchTeamsSafeBidSummary: Making API call to:', url);
+
+      const response = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      console.log('Debug - fetchTeamsSafeBidSummary: Response received:', response.data);
+      setTeamsSafeBidSummary(response.data);
+    } catch (error) {
+      console.error('Failed to fetch teams safe bid summary:', error);
+      console.error('Debug - Error details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
     }
   };
 
@@ -662,6 +697,10 @@ const AuctionControl = () => {
 
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
+    // Fetch safe bid data when entering fullscreen mode
+    if (!isFullscreen) {
+      fetchTeamsSafeBidSummary();
+    }
   };
 
   const getCurrentPlayer = () => {
@@ -1129,32 +1168,76 @@ const AuctionControl = () => {
                 <div className="space-y-3">
                   <h4 className="text-white font-bold uppercase tracking-wider text-sm">Select Team</h4>
                   <div className={`grid gap-2 max-h-48 overflow-y-auto ${teams.length <= 4 ? 'grid-cols-2' : teams.length <= 6 ? 'grid-cols-2' : 'grid-cols-2'}`}>
-                    {teams.map((team) => (
-                      <button
-                        key={team.id}
-                        onClick={() => setSelectedTeamForSale(team.id)}
-                        className={`p-2 rounded-lg border-2 text-white font-bold text-xs transition-all hover:scale-105 flex flex-col items-center gap-1 ${selectedTeamForSale === team.id
-                          ? 'bg-gradient-to-r from-green-500/40 to-emerald-500/40 border-green-400'
-                          : 'bg-white/10 border-white/30 hover:border-white/60 hover:bg-white/20'
-                          }`}
-                      >
-                        {team.logo_url ? (
-                          <img
-                            src={team.logo_url}
-                            alt={team.name}
-                            className="w-5 h-5 object-cover rounded-full"
-                          />
-                        ) : (
-                          <div className="w-5 h-5 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full flex items-center justify-center text-xs font-bold">
-                            {team.name.charAt(0)}
+                    {teams.map((team) => {
+                      // Find team safe bid data - backend returns 'teams' array with different field names
+                      const teamSafeBid = Array.isArray(teamsSafeBidSummary?.teams) ?
+                        teamsSafeBidSummary.teams.find(t => t.team_id === team.id) : null;
+                      const safeBidAmount = teamSafeBid?.max_safe_bid || 0;
+                      const riskLevel = teamSafeBid?.risk_level || 'unknown';
+
+                      // Debug log for first team to check data
+                      if (team === teams[0] && teamsSafeBidSummary) {
+                        console.log('Debug - First team safe bid data:', {
+                          teamId: team.id,
+                          teamName: team.name,
+                          teamSafeBid,
+                          safeBidAmount,
+                          riskLevel,
+                          fullSummary: teamsSafeBidSummary
+                        });
+                      } return (
+                        <div key={team.id} className="relative group">
+                          <button
+                            onClick={() => setSelectedTeamForSale(team.id)}
+                            className={`w-full p-2 rounded-lg border-2 text-white font-bold text-xs transition-all hover:scale-105 flex flex-col items-center gap-1 ${selectedTeamForSale === team.id
+                              ? 'bg-gradient-to-r from-green-500/40 to-emerald-500/40 border-green-400'
+                              : 'bg-white/10 border-white/30 hover:border-white/60 hover:bg-white/20'
+                              }`}
+                          >
+                            {team.logo_url ? (
+                              <img
+                                src={team.logo_url}
+                                alt={team.name}
+                                className="w-5 h-5 object-cover rounded-full"
+                              />
+                            ) : (
+                              <div className="w-5 h-5 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full flex items-center justify-center text-xs font-bold">
+                                {team.name.charAt(0)}
+                              </div>
+                            )}
+                            <span className="truncate text-center leading-tight text-xs">{team.name}</span>
+                            <span className="text-xs text-white/70">
+                              ₹{team.remaining?.toLocaleString() || 'N/A'}
+                            </span>
+                          </button>
+
+                          {/* Safe Bid Tooltip - positioned below to avoid cutoff */}
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+                            <div className="bg-gray-900/95 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap shadow-xl border border-white/20">
+                              <div className="flex flex-col items-center gap-1">
+                                <div className="font-semibold">Safe Bid Amount</div>
+                                <div className={`text-sm font-bold ${riskLevel === 'low' ? 'text-green-400' :
+                                  riskLevel === 'medium' ? 'text-yellow-400' :
+                                    riskLevel === 'high' ? 'text-red-400' : 'text-gray-400'
+                                  }`}>
+                                  ₹{safeBidAmount.toLocaleString()}
+                                </div>
+                                <div className={`text-xs capitalize ${riskLevel === 'low' ? 'text-green-300' :
+                                  riskLevel === 'medium' ? 'text-yellow-300' :
+                                    riskLevel === 'high' ? 'text-red-300' : 'text-gray-300'
+                                  }`}>
+                                  {riskLevel} risk
+                                </div>
+                              </div>
+                              {/* Tooltip arrow pointing up */}
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2">
+                                <div className="border-4 border-transparent border-b-gray-900/95"></div>
+                              </div>
+                            </div>
                           </div>
-                        )}
-                        <span className="truncate text-center leading-tight text-xs">{team.name}</span>
-                        <span className="text-xs text-white/70">
-                          ₹{team.remaining?.toLocaleString() || 'N/A'}
-                        </span>
-                      </button>
-                    ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1688,7 +1771,7 @@ const AuctionControl = () => {
                           </div>
                         </div>
 
-                        {/* Budget Info */}
+                        {/* Budget Info with Safe Bid */}
                         <div className="text-right">
                           <div className="text-2xl font-bold text-green-600">
                             ₹{team.remaining?.toLocaleString()}
@@ -1696,10 +1779,37 @@ const AuctionControl = () => {
                           <div className="text-xs text-gray-500 uppercase tracking-wider font-medium">
                             remaining budget
                           </div>
-                          <div className="text-xs text-gray-400 mt-1">
-                            of ₹{team.budget?.toLocaleString()} total
-                          </div>
-                        </div>
+
+                          {/* Safe Bid Information */}
+                          {teamsSafeBidSummary && (() => {
+                            const safeBidInfo = teamsSafeBidSummary.teams.find(t => t.team_id === team.id);
+                            if (safeBidInfo) {
+                              return (
+                                <div className="mt-2 p-2 bg-white/50 rounded-lg border">
+                                  <div className="text-xs font-semibold text-blue-600 mb-1">
+                                    Safe Bid Capacity
+                                  </div>
+                                  <div className="text-lg font-bold text-blue-700">
+                                    ₹{safeBidInfo.max_safe_bid_with_buffer.toLocaleString()}
+                                  </div>
+                                  <div className={`text-xs font-medium ${safeBidInfo.risk_level === 'low' ? 'text-green-600' :
+                                    safeBidInfo.risk_level === 'medium' ? 'text-yellow-600' : 'text-red-600'
+                                    }`}>
+                                    {safeBidInfo.risk_level === 'low' ? '🟢 Low Risk' :
+                                      safeBidInfo.risk_level === 'medium' ? '🟡 Medium Risk' : '🔴 High Risk'}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    Reserved: ₹{safeBidInfo.base_price_obligations.toLocaleString()}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div className="text-xs text-gray-400 mt-1">
+                                of ₹{team.budget?.toLocaleString()} total
+                              </div>
+                            );
+                          })()}</div>
                       </div>
 
                       {/* Progress Bar for Budget Usage */}

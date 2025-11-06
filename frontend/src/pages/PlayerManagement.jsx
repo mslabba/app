@@ -221,7 +221,7 @@ const PlayerManagement = () => {
     } else if (field === 'category_id') {
       // Auto-fill base price when category changes
       const selectedCategory = categories.find(c => c.id === value);
-      const basePrice = selectedCategory ? selectedCategory.base_price_min : '';
+      const basePrice = selectedCategory ? selectedCategory.base_price : '';
 
       setFormData(prev => ({
         ...prev,
@@ -230,7 +230,7 @@ const PlayerManagement = () => {
       }));
 
       if (selectedCategory) {
-        toast.info(`Base price auto-filled to ₹${basePrice.toLocaleString()} (category minimum)`);
+        toast.info(`Base price auto-filled to ₹${basePrice.toLocaleString()} (category base price)`);
       }
     } else {
       setFormData(prev => ({ ...prev, [field]: value }));
@@ -247,10 +247,10 @@ const PlayerManagement = () => {
     return team ? team.name : 'Unknown Team';
   };
 
-  const getCategoryPriceRange = (categoryId) => {
+  const getCategoryBasePrice = (categoryId) => {
     const category = categories.find(c => c.id === categoryId);
     if (!category) return '';
-    return `₹${category.base_price_min?.toLocaleString()} - ₹${category.base_price_max?.toLocaleString()}`;
+    return `₹${category.base_price?.toLocaleString()}`;
   };
 
   return (
@@ -321,7 +321,7 @@ const PlayerManagement = () => {
                     />
                     {formData.category_id && (
                       <p className="text-xs text-gray-500 mt-1">
-                        Category range: {getCategoryPriceRange(formData.category_id)}
+                        Category base price: {getCategoryBasePrice(formData.category_id)}
                       </p>
                     )}
                   </div>

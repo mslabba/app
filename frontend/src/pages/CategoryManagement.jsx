@@ -30,8 +30,7 @@ const CategoryManagement = () => {
     min_players: '',
     max_players: '',
     color: '#3B82F6',
-    base_price_min: '',
-    base_price_max: ''
+    base_price: ''
   });
 
   useEffect(() => {
@@ -77,8 +76,7 @@ const CategoryManagement = () => {
         min_players: parseInt(formData.min_players) || 1,
         max_players: parseInt(formData.max_players) || 50,
         color: formData.color || '#3B82F6',
-        base_price_min: parseInt(formData.base_price_min) || 10000,
-        base_price_max: parseInt(formData.base_price_max) || 1000000,
+        base_price: parseInt(formData.base_price) || 50000,
       };
 
       // Validate min/max values
@@ -88,8 +86,8 @@ const CategoryManagement = () => {
         return;
       }
 
-      if (categoryData.base_price_min >= categoryData.base_price_max) {
-        toast.error('Maximum base price must be greater than minimum base price');
+      if (categoryData.base_price <= 0) {
+        toast.error('Base price must be greater than zero');
         setLoading(false);
         return;
       }
@@ -116,7 +114,21 @@ const CategoryManagement = () => {
     } catch (error) {
       console.error('Category save error:', error);
       console.error('Error response:', error.response?.data);
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to save category';
+
+      let errorMessage = 'Failed to save category';
+
+      if (error.response?.data?.detail) {
+        const detail = error.response.data.detail;
+        if (Array.isArray(detail)) {
+          // Handle validation errors array
+          errorMessage = detail.map(err => err.msg || err.message || 'Validation error').join(', ');
+        } else if (typeof detail === 'string') {
+          errorMessage = detail;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -131,8 +143,7 @@ const CategoryManagement = () => {
       min_players: category.min_players?.toString() || '',
       max_players: category.max_players?.toString() || '',
       color: category.color || '#3B82F6',
-      base_price_min: category.base_price_min?.toString() || '',
-      base_price_max: category.base_price_max?.toString() || ''
+      base_price: category.base_price?.toString() || ''
     });
     setIsDialogOpen(true);
   };
@@ -159,8 +170,7 @@ const CategoryManagement = () => {
       min_players: '',
       max_players: '',
       color: '#3B82F6',
-      base_price_min: '',
-      base_price_max: ''
+      base_price: ''
     });
   };
 
@@ -266,29 +276,19 @@ const CategoryManagement = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="base_price_min">Min Base Price (₹) *</Label>
-                    <Input
-                      id="base_price_min"
-                      type="number"
-                      value={formData.base_price_min}
-                      onChange={(e) => handleChange('base_price_min', e.target.value)}
-                      placeholder="e.g., 50000"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="base_price_max">Max Base Price (₹) *</Label>
-                    <Input
-                      id="base_price_max"
-                      type="number"
-                      value={formData.base_price_max}
-                      onChange={(e) => handleChange('base_price_max', e.target.value)}
-                      placeholder="e.g., 500000"
-                      required
-                    />
-                  </div>
+                <div>
+                  <Label htmlFor="base_price">Category Base Price (₹) *</Label>
+                  <Input
+                    id="base_price"
+                    type="number"
+                    value={formData.base_price}
+                    onChange={(e) => handleChange('base_price', e.target.value)}
+                    placeholder="e.g., 100000"
+                    required
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Base price for this category (used for budget calculations and player pricing)
+                  </p>
                 </div>
 
                 <div className="flex justify-end space-x-2 pt-4">
@@ -362,13 +362,9 @@ const CategoryManagement = () => {
                           <span>Player Range:</span>
                           <span>{category.min_players} - {category.max_players}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span>Min Price:</span>
-                          <span>₹{category.base_price_min?.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Max Price:</span>
-                          <span>₹{category.base_price_max?.toLocaleString()}</span>
+                        <div className="flex justify-between font-semibold text-yellow-300 bg-yellow-500/20 p-2 rounded">
+                          <span>Base Price:</span>
+                          <span>₹{category.base_price?.toLocaleString() || 'Not Set'}</span>
                         </div>
                         <div className="flex justify-between border-t border-white/20 pt-2 mt-2">
                           <span>Players:</span>
