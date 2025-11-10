@@ -2204,6 +2204,18 @@ async def health():
 # Include router in main app
 app.include_router(api_router)
 
+# Add root-level health check for Railway deployment
+@app.get("/health")
+async def root_health():
+    return {
+        "status": "healthy",
+        "firebase": "connected" if db else "disconnected"
+    }
+
+@app.get("/")
+async def root():
+    return {"message": "Sports Auction API", "status": "running", "version": "1.0.0"}
+
 # Add CORS middleware - Temporary fix for deployment
 # Allow all origins to troubleshoot CORS issues
 logger.info("Setting up CORS middleware with permissive settings")

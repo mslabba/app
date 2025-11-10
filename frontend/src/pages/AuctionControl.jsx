@@ -1358,6 +1358,16 @@ const AuctionControl = () => {
                         Start Auction
                       </Button>
                     )}
+                    {auctionState?.status === 'paused' && (
+                      <Button
+                        onClick={startAuction}
+                        disabled={loading}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        <Play className="w-4 h-4 mr-2" />
+                        Resume Auction
+                      </Button>
+                    )}
                     {auctionState?.status === 'in_progress' && (
                       <Button
                         onClick={pauseAuction}
