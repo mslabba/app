@@ -10,6 +10,7 @@ import time
 from typing import List, Optional
 
 from firebase_config import db, firebase_auth
+from firebase_admin import firestore
 from models import *
 from auth_middleware import verify_token, get_current_user, require_super_admin, require_team_admin
 
@@ -1721,6 +1722,101 @@ async def finalize_bid(player_id: str, event_id: str, current_user: dict = Depen
         return {"message": "Bid finalized successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/bids/complete-transaction")
+async def complete_bid_transaction(
+    transaction_data: dict,
+    current_user: dict = Depends(require_super_admin)
+):
+    """Complete bid transaction in a single optimized call"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        player_id = transaction_data.get('player_id')
+        team_id = transaction_data.get('team_id')
+        amount = transaction_data.get('amount')
+        event_id = transaction_data.get('event_id')
+        
+        if not all([player_id, team_id, amount, event_id]):
+            raise HTTPException(status_code=400, detail="Missing required transaction data")
+        
+        # Use Firestore transaction for atomicity
+        transaction = db.transaction()
+        
+        @firestore.transactional
+        def update_transaction(transaction):
+            # Get player
+            player_ref = db.collection('players').document(player_id)
+            player_doc = transaction.get(player_ref)
+            if not player_doc.exists:
+                raise HTTPException(status_code=404, detail="Player not found")
+            
+            # Get team
+            team_ref = db.collection('teams').document(team_id)
+            team_doc = transaction.get(team_ref)
+            if not team_doc.exists:
+                raise HTTPException(status_code=404, detail="Team not found")
+            
+            team_data = team_doc.to_dict()
+            
+            # Validate team has enough budget
+            if team_data.get('remaining', 0) < amount:
+                raise HTTPException(status_code=400, detail="Team has insufficient budget")
+            
+            # Update player status
+            transaction.update(player_ref, {
+                'status': PlayerStatus.SOLD.value,
+                'sold_to_team_id': team_id,
+                'sold_price': amount
+            })
+            
+            # Update team budget
+            new_spent = team_data.get('spent', 0) + amount
+            new_remaining = team_data['budget'] - new_spent
+            new_players_count = team_data.get('players_count', 0) + 1
+            
+            transaction.update(team_ref, {
+                'spent': new_spent,
+                'remaining': new_remaining,
+                'players_count': new_players_count
+            })
+            
+            # Clear auction state
+            auction_state_id = f"auction_{event_id}"
+            auction_ref = db.collection('auction_state').document(auction_state_id)
+            transaction.update(auction_ref, {
+                'current_player_id': None,
+                'current_bid': None,
+                'current_team_id': None,
+                'current_team_name': None,
+                'status': AuctionStatus.IN_PROGRESS.value,
+                'bid_history': []
+            })
+            
+            return team_data
+        
+        # Execute transaction
+        team_data = update_transaction(transaction)
+        
+        return {
+            "success": True,
+            "message": f"Player sold successfully to {team_data['name']}",
+            "player_id": player_id,
+            "team_id": team_id,
+            "team_name": team_data['name'],
+            "final_price": f"₹{amount:,}",
+            "auction_state": {
+                "current_player_id": None,
+                "status": "in_progress"
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Transaction error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Transaction failed: {str(e)}")
 
 @api_router.post("/players/{player_id}/sell")
 async def sell_player_directly(

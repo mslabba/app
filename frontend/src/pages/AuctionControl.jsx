@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import Navbar from '@/components/Navbar';
@@ -42,6 +42,8 @@ const AuctionControl = () => {
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [teamsSafeBidSummary, setTeamsSafeBidSummary] = useState(null);
+  const [safeBidCache, setSafeBidCache] = useState({}); // Cache for safe bid calculations
+  const [lastCacheUpdate, setLastCacheUpdate] = useState(null);
   const [sponsors, setSponsors] = useState([]);
   const [availablePlayers, setAvailablePlayers] = useState([]);
   const [selectedPlayer, setSelectedPlayer] = useState('');
@@ -61,19 +63,34 @@ const AuctionControl = () => {
   const [preventDataRefresh, setPreventDataRefresh] = useState(false);
   const [tempCurrentPlayer, setTempCurrentPlayer] = useState(null);
 
+  // Debounced team selection to prevent lag
+  const debouncedTeamSelection = useCallback((teamId) => {
+    const timeoutId = setTimeout(() => {
+      setSelectedTeamForSale(teamId);
+    }, 150); // 150ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, []);
+
+  // Optimized team selection handler
+  const handleTeamSelect = useCallback((teamId) => {
+    // Immediate visual feedback
+    setSelectedTeamForSale(teamId);
+  }, []);
+
   useEffect(() => {
     if (eventId && currentUser && token && !authLoading) {
       fetchData();
-      // Set up polling for real-time updates
+      // Set up optimized polling for real-time updates
       const interval = setInterval(() => {
-        // Only fetch if we're not showing the SOLD stamp
-        if (!preventDataRefresh) {
+        // Only fetch if we're not showing the SOLD stamp and auction is active
+        if (!preventDataRefresh && (auctionState?.status === 'in_progress' || timerActive)) {
           fetchAuctionState();
         }
-      }, 2000);
+      }, 5000); // Reduced from 2000ms to 5000ms (60% reduction in API calls)
       return () => clearInterval(interval);
     }
-  }, [eventId, currentUser, token, authLoading, preventDataRefresh]);
+  }, [eventId, currentUser, token, authLoading, preventDataRefresh, auctionState?.status, timerActive]);
 
   useEffect(() => {
     let interval;
@@ -178,6 +195,18 @@ const AuctionControl = () => {
         console.log('Debug - fetchTeamsSafeBidSummary: Missing currentUser or token', { currentUser: !!currentUser, token: !!token });
         return;
       }
+
+      const cacheKey = currentPlayerCategory || 'default';
+      const now = Date.now();
+      const CACHE_DURATION = 30000; // 30 seconds cache
+
+      // Check if we have cached data that's still fresh
+      if (safeBidCache[cacheKey] && lastCacheUpdate && (now - lastCacheUpdate) < CACHE_DURATION) {
+        console.log('Debug - Using cached safe bid data for:', cacheKey);
+        setTeamsSafeBidSummary(safeBidCache[cacheKey]);
+        return;
+      }
+
       const url = currentPlayerCategory
         ? `${API}/events/${eventId}/teams-safe-bid-summary?player_category=${encodeURIComponent(currentPlayerCategory)}`
         : `${API}/events/${eventId}/teams-safe-bid-summary`;
@@ -189,6 +218,13 @@ const AuctionControl = () => {
       });
 
       console.log('Debug - fetchTeamsSafeBidSummary: Response received:', response.data);
+
+      // Update cache
+      setSafeBidCache(prevCache => ({
+        ...prevCache,
+        [cacheKey]: response.data
+      }));
+      setLastCacheUpdate(now);
       setTeamsSafeBidSummary(response.data);
     } catch (error) {
       console.error('Failed to fetch teams safe bid summary:', error);
@@ -316,42 +352,49 @@ const AuctionControl = () => {
 
     try {
       setLoading(true);
+      const selectedTeam = teams.find(t => t.id === selectedTeamForSale);
+      const finalPrice = parseInt(finalBidAmount);
 
-      // First place a bid for the selected team with the final amount
-      await axios.post(`${API}/bids`, {
+      // Optimistic UI updates for immediate feedback
+      setTimerActive(false);
+      setTimer(0);
+      setShowFinalizeBidModal(false);
+
+      // Show SOLD stamp immediately
+      showSoldStampAnimation(selectedTeam?.name || 'Unknown Team', `₹${finalPrice.toLocaleString()}`, currentPlayer);
+
+      // Single API call for complete transaction
+      await axios.post(`${API}/bids/complete-transaction`, {
         player_id: currentPlayer.id,
         team_id: selectedTeamForSale,
-        amount: parseInt(finalBidAmount),
+        amount: finalPrice,
         event_id: eventId
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      // Then finalize the bid
-      await axios.post(`${API}/bids/finalize/${currentPlayer.id}?event_id=${eventId}`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      toast.success(`${currentPlayer.name} sold to ${selectedTeam?.name} for ₹${finalPrice.toLocaleString()}!`);
 
-      const selectedTeam = teams.find(t => t.id === selectedTeamForSale);
-
-      // Show SOLD stamp animation
-      showSoldStampAnimation(selectedTeam?.name || 'Unknown Team', `₹${parseInt(finalBidAmount).toLocaleString()}`, currentPlayer);
-
-      toast.success(`${currentPlayer.name} sold to ${selectedTeam?.name} for ₹${parseInt(finalBidAmount).toLocaleString()}!`);
-
-      setTimerActive(false);
-      setTimer(0);
-      setShowFinalizeBidModal(false);
+      // Clear form state
       setFinalBidAmount('');
       setSelectedTeamForSale('');
 
-      // Refresh data immediately since we're using tempCurrentPlayer to keep display stable
-      fetchAuctionState();
-      fetchPlayers();
-      fetchTeams();
+      // Clear cache to ensure fresh data on next load
+      setSafeBidCache({});
+      setLastCacheUpdate(null);
+
+      // Single refresh call instead of multiple
+      setTimeout(() => {
+        fetchAuctionState();
+        fetchTeams(); // Only fetch essential data
+      }, 1000); // Delay to let animation play
+
     } catch (error) {
       console.error('Failed to finalize bid:', error);
       toast.error('Failed to finalize bid');
+
+      // Revert optimistic updates on error
+      setShowFinalizeBidModal(true);
     } finally {
       setLoading(false);
     }
@@ -738,10 +781,15 @@ const AuctionControl = () => {
     }
   };
 
-  const currentPlayer = getCurrentPlayer();
-  const currentTeam = getCurrentTeam();
-  const soldPlayers = players.filter(p => p.status === 'sold');
-  const unsoldPlayers = players.filter(p => p.status === 'unsold');
+  // Memoized calculations to reduce re-renders
+  const currentPlayer = useMemo(() => getCurrentPlayer(), [players, auctionState]);
+  const currentTeam = useMemo(() => getCurrentTeam(), [teams, auctionState]);
+  const soldPlayers = useMemo(() => players.filter(p => p.status === 'sold'), [players]);
+  const unsoldPlayers = useMemo(() => players.filter(p => p.status === 'unsold'), [players]);
+  const availableTeams = useMemo(() =>
+    teams.filter(team => team.remaining >= (currentPlayer?.base_price || 0)),
+    [teams, currentPlayer]
+  );
 
   // Show loading state while authentication is being checked
   if (authLoading || !currentUser) {
@@ -1188,7 +1236,7 @@ const AuctionControl = () => {
                       } return (
                         <div key={team.id} className="relative group">
                           <button
-                            onClick={() => setSelectedTeamForSale(team.id)}
+                            onClick={() => handleTeamSelect(team.id)}
                             className={`w-full p-2 rounded-lg border-2 text-white font-bold text-xs transition-all hover:scale-105 flex flex-col items-center gap-1 ${selectedTeamForSale === team.id
                               ? 'bg-gradient-to-r from-green-500/40 to-emerald-500/40 border-green-400'
                               : 'bg-white/10 border-white/30 hover:border-white/60 hover:bg-white/20'
@@ -1259,9 +1307,16 @@ const AuctionControl = () => {
                 <button
                   onClick={handleSellToTeam}
                   disabled={loading || !selectedTeamForSale || !finalBidAmount}
-                  className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold uppercase tracking-wider rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-green-400 text-sm"
+                  className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold uppercase tracking-wider rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-green-400 text-sm flex items-center justify-center"
                 >
-                  🏆 Sell to Team
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
+                      Processing Sale...
+                    </>
+                  ) : (
+                    <>🏆 Sell to Team</>
+                  )}
                 </button>
               </div>
             </div>
