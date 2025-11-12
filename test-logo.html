@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Logo Test</title>
+    <link rel="icon" type="image/png" href="images/sports/logo-transparent.png" />
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -9,12 +11,14 @@
             background: #1a1a2e;
             color: white;
         }
+
         .test-section {
             margin: 20px 0;
             padding: 20px;
-            background: rgba(255,255,255,0.1);
+            background: rgba(255, 255, 255, 0.1);
             border-radius: 8px;
         }
+
         img {
             border: 2px solid #4CAF50;
             background: white;
@@ -22,34 +26,35 @@
         }
     </style>
 </head>
+
 <body>
     <h1>🧪 Logo Loading Test</h1>
-    
+
     <div class="test-section">
         <h2>Test 1: Direct Path</h2>
         <img src="/images/sports/logo.png" alt="Logo Test" style="height: 100px;">
         <p>Path: <code>/images/sports/logo.png</code></p>
     </div>
-    
+
     <div class="test-section">
         <h2>Test 2: Relative Path</h2>
         <img src="./images/sports/logo.png" alt="Logo Test" style="height: 100px;">
         <p>Path: <code>./images/sports/logo.png</code></p>
     </div>
-    
+
     <div class="test-section">
         <h2>Test 3: Full Path</h2>
         <img src="http://localhost:3000/images/sports/logo.png" alt="Logo Test" style="height: 100px;">
         <p>Path: <code>http://localhost:3000/images/sports/logo.png</code></p>
     </div>
-    
+
     <div class="test-section">
         <h2>File Info</h2>
         <p>Expected location: <code>frontend/public/images/sports/logo.png</code></p>
         <p>File size: 177,892 bytes</p>
         <p>File type: PNG</p>
     </div>
-    
+
     <script>
         // Log any image load errors
         document.querySelectorAll('img').forEach((img, index) => {
@@ -58,4 +63,5 @@
         });
     </script>
 </body>
+
 </html>
