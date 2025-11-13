@@ -4,6 +4,7 @@ import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
@@ -19,6 +20,7 @@ const RegisterPage = () => {
     display_name: '',
     role: 'team_admin'
   });
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { isAuthenticated, isSuperAdmin, loading: authLoading } = useAuth();
@@ -34,6 +36,12 @@ const RegisterPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!termsAccepted) {
+      toast.error('Please accept the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -136,18 +144,41 @@ const RegisterPage = () => {
                 </Select>
               </div>
 
+              <div className="space-y-3">
+                <div className="flex items-start space-x-2">
+                  <Checkbox
+                    id="terms"
+                    checked={termsAccepted}
+                    onCheckedChange={setTermsAccepted}
+                    className="mt-1"
+                  />
+                  <div className="text-sm text-white/80 leading-relaxed">
+                    <Label htmlFor="terms" className="cursor-pointer">
+                      I agree to the{' '}
+                      <Link to="/terms-of-service" className="text-blue-300 hover:text-blue-200 underline" target="_blank">
+                        Terms of Service
+                      </Link>{' '}
+                      and{' '}
+                      <Link to="/privacy-policy" className="text-blue-300 hover:text-blue-200 underline" target="_blank">
+                        Privacy Policy
+                      </Link>
+                    </Label>
+                  </div>
+                </div>
+              </div>
+
               <Button
                 type="submit"
                 className="w-full bg-white text-purple-700 hover:bg-white/90 font-semibold"
-                disabled={loading}
+                disabled={loading || !termsAccepted}
               >
                 {loading ? 'Creating Account...' : 'Create Account'}
               </Button>
             </form>
 
             <div className="text-center">
-              <Link 
-                to="/login" 
+              <Link
+                to="/login"
                 className="inline-flex items-center text-white/80 hover:text-white text-sm"
               >
                 <ArrowLeft className="w-4 h-4 mr-1" />

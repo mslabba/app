@@ -25,6 +25,8 @@ import TestPage from '@/pages/TestPage';
 import PromoteToAdmin from '@/pages/PromoteToAdmin';
 import LogoutPage from '@/pages/LogoutPage';
 import CloudinaryTest from '@/pages/CloudinaryTest';
+import PrivacyPolicy from '@/pages/PrivacyPolicy';
+import TermsOfService from '@/pages/TermsOfService';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 // Dashboard redirect component for authenticated users
@@ -87,6 +89,8 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/logout" element={<LogoutPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
             <Route path="/promote-to-admin" element={<PromoteToAdmin />} />
             <Route path="/display/:eventId" element={<AuctionDisplay />} />
             <Route path="/events/:eventId/register" element={<PublicPlayerRegistration />} />

@@ -25,8 +25,8 @@ const Navbar = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-8">
             <Link to={isSuperAdmin ? "/admin" : "/team"} className="flex items-center space-x-2">
-              <img 
-                src="/images/sports/logo-transparent.png" 
+              <img
+                src="/images/sports/logo-final.png"
                 alt="PowerAuctions Logo"
                 className="h-10 w-auto"
                 onError={(e) => {
@@ -39,7 +39,7 @@ const Navbar = () => {
                 <span className="text-xs text-white/60">Powered by Turgut</span>
               </div>
             </Link>
-            
+
             {isSuperAdmin && (
               <div className="hidden md:flex items-center space-x-4">
                 <Link to="/admin" className="text-white/80 hover:text-white flex items-center space-x-1">
