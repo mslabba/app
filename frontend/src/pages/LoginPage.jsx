@@ -144,8 +144,6 @@ const LoginPage = () => {
             </Button>
 
             <div className="text-center text-sm text-white/60 space-y-2">
-              <p>Demo Credentials:</p>
-              <p className="text-xs">Email: admin@auction.com | Password: admin123</p>
               <div className="pt-2 border-t border-white/20">
                 <p>Don't have an account?</p>
                 <Link to="/register" className="text-white hover:text-white/80 underline">
