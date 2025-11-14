@@ -29,7 +29,7 @@ const FloatingMenu = () => {
       id: 'dashboard',
       label: 'Dashboard',
       icon: Home,
-      path: currentUser?.role === 'super_admin' ? '/admin' : '/team',
+      path: currentUser?.role === 'super_admin' || currentUser?.role === 'event_organizer' ? '/admin' : '/team',
       color: 'bg-blue-500 hover:bg-blue-600',
       description: 'Main Dashboard'
     },

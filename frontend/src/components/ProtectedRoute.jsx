@@ -2,9 +2,9 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 
 const ProtectedRoute = ({ children, requireSuperAdmin = false }) => {
-  const { isAuthenticated, isSuperAdmin, loading } = useAuth();
+  const { isAuthenticated, isSuperAdmin, isEventOrganizer, loading } = useAuth();
 
-  console.log('ProtectedRoute render:', { isAuthenticated, isSuperAdmin, loading, requireSuperAdmin });
+  console.log('ProtectedRoute render:', { isAuthenticated, isSuperAdmin, isEventOrganizer, loading, requireSuperAdmin });
 
   if (loading) {
     return (
@@ -21,7 +21,8 @@ const ProtectedRoute = ({ children, requireSuperAdmin = false }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (requireSuperAdmin && !isSuperAdmin) {
+  // Allow both super admins and event organizers to access super admin routes
+  if (requireSuperAdmin && !isSuperAdmin && !isEventOrganizer) {
     return <Navigate to="/team" replace />;
   }
 

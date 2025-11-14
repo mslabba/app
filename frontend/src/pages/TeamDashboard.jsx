@@ -37,14 +37,22 @@ const TeamDashboard = () => {
 
       // Fetch events
       console.log('Fetching events...');
-      const eventsResponse = await axios.get(`${API}/events`);
+      const eventsResponse = await axios.get(`${API}/events`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
       setEvents(eventsResponse.data);
       console.log('Events fetched:', eventsResponse.data);
 
       // If user has a team, fetch team data
       if (userProfile?.team_id) {
         console.log('User has team_id:', userProfile.team_id);
-        const teamResponse = await axios.get(`${API}/teams/${userProfile.team_id}`);
+        const teamResponse = await axios.get(`${API}/teams/${userProfile.team_id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
         setTeam(teamResponse.data);
         console.log('Team fetched:', teamResponse.data);
 
@@ -148,12 +156,6 @@ const TeamDashboard = () => {
                 <h3 className="text-white font-semibold mb-2">Debug Info:</h3>
                 <p className="text-white/80 text-sm">User Profile: {JSON.stringify(userProfile, null, 2)}</p>
                 <div className="mt-4 flex gap-2 justify-center">
-                  <Button
-                    onClick={() => window.location.href = '/promote-to-admin'}
-                    className="bg-purple-600 hover:bg-purple-700"
-                  >
-                    Promote to Admin
-                  </Button>
                   <Button
                     onClick={() => window.location.href = '/test'}
                     className="bg-gray-600 hover:bg-gray-700"

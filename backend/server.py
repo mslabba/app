@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, File, UploadFile
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, File, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
@@ -12,7 +12,7 @@ from typing import List, Optional
 from firebase_config import db, firebase_auth
 from firebase_admin import firestore
 from models import *
-from auth_middleware import verify_token, get_current_user, require_super_admin, require_team_admin
+from auth_middleware import verify_token, get_current_user, require_super_admin, require_team_admin, require_event_organizer
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -30,6 +30,42 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Helper function to check event ownership
+async def check_event_ownership(event_id: str, current_user: dict) -> bool:
+    """Check if the current user owns the event"""
+    try:
+        if not db:
+            return False
+        
+        event_doc = db.collection('events').document(event_id).get()
+        if not event_doc.exists:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        event_data = event_doc.to_dict()
+        created_by = event_data.get('created_by', '')
+        
+        # Super admins can access all events
+        user_role = current_user.get('role', '')
+        if user_role == 'super_admin':
+            return True
+            
+        # Check if user created this event
+        return created_by == current_user['uid']
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking event ownership: {str(e)}")
+        return False
+
+async def require_event_access(event_id: str, current_user: dict = Depends(require_event_organizer)) -> dict:
+    """Require event organizer role and event ownership"""
+    if not await check_event_ownership(event_id, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only access events you created"
+        )
+    return current_user
+
 # ============= AUTHENTICATION ROUTES =============
 
 @api_router.post("/auth/register", response_model=TokenResponse)
@@ -42,6 +78,9 @@ async def register(user_data: UserCreate):
             password=user_data.password,
             display_name=user_data.display_name
         )
+        
+        # Set custom claims for the user role
+        firebase_auth.set_custom_user_claims(user.uid, {'role': user_data.role.value})
         
         # Store additional user data in Firestore
         user_doc = {
@@ -91,16 +130,29 @@ async def get_me(current_user: dict = Depends(get_current_user)):
             if user_doc.exists:
                 user_data = user_doc.to_dict()
                 print(f"User data from Firestore: {user_data}")  # Debug log
+                
+                # Ensure custom claims are set in Firebase Auth
+                try:
+                    firebase_auth.set_custom_user_claims(current_user['uid'], {'role': user_data.get('role', 'event_organizer')})
+                except Exception as claim_error:
+                    print(f"Error setting custom claims: {claim_error}")
+                
                 return UserResponse(**user_data)
         
         # If user doesn't exist in Firestore, create them with default role
         user_data = {
             'uid': current_user['uid'],
             'email': current_user.get('email', ''),
-            'role': 'team_admin',  # Default role
+            'role': 'event_organizer',  # Default role for new registrations
             'display_name': current_user.get('name', current_user.get('email', '').split('@')[0]),
             'team_id': None
         }
+        
+        # Set custom claims in Firebase Auth
+        try:
+            firebase_auth.set_custom_user_claims(current_user['uid'], {'role': 'event_organizer'})
+        except Exception as claim_error:
+            print(f"Error setting custom claims: {claim_error}")
         
         # Save to Firestore
         if db:
@@ -132,7 +184,7 @@ async def promote_to_admin(current_user: dict = Depends(get_current_user)):
 # ============= EVENT ROUTES =============
 
 @api_router.post("/events", response_model=Event)
-async def create_event(event_data: EventCreate, current_user: dict = Depends(require_super_admin)):
+async def create_event(event_data: EventCreate, current_user: dict = Depends(require_event_organizer)):
     """Create a new auction event"""
     try:
         event_id = str(uuid.uuid4())
@@ -157,13 +209,29 @@ async def create_event(event_data: EventCreate, current_user: dict = Depends(req
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.get("/events", response_model=List[Event])
-async def get_events():
-    """Get all events"""
+async def get_events(current_user: dict = Depends(get_current_user)):
+    """Get events - all events for super admin, only owned events for event organizers"""
     try:
         if not db:
             return []
         
-        events = db.collection('events').order_by('created_at', direction='DESCENDING').stream()
+        # Get user role from Firestore
+        user_doc = db.collection('users').document(current_user['uid']).get()
+        user_role = 'viewer'  # default
+        if user_doc.exists:
+            user_data = user_doc.to_dict()
+            user_role = user_data.get('role', 'viewer')
+        
+        # Super admins see all events
+        if user_role == 'super_admin':
+            events = db.collection('events').order_by('created_at', direction='DESCENDING').stream()
+        # Event organizers see only their own events
+        elif user_role == 'event_organizer':
+            events = db.collection('events').where('created_by', '==', current_user['uid']).order_by('created_at', direction='DESCENDING').stream()
+        else:
+            # Other roles can see all events (for now)
+            events = db.collection('events').order_by('created_at', direction='DESCENDING').stream()
+            
         return [Event(**{**event.to_dict(), 'rules': EventRules(**event.to_dict()['rules'])}) for event in events]
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -188,10 +256,18 @@ async def get_event(event_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.put("/events/{event_id}")
-async def update_event(event_id: str, event_data: EventCreate, current_user: dict = Depends(require_super_admin)):
-    """Update event"""
+async def update_event(event_id: str, event_data: EventCreate, current_user: dict = Depends(require_event_organizer)):
+    """Update event - only event owner can update"""
     try:
         if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Check if user owns this event (unless super admin)
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only update events you created"
+            )
             raise HTTPException(status_code=503, detail="Database not available")
         
         db.collection('events').document(event_id).update({
@@ -209,9 +285,16 @@ async def update_event(event_id: str, event_data: EventCreate, current_user: dic
 # ============= CATEGORY ROUTES =============
 
 @api_router.post("/categories", response_model=Category)
-async def create_category(category_data: CategoryCreate):
-    """Create a new category"""
+async def create_category(category_data: CategoryCreate, current_user: dict = Depends(require_event_organizer)):
+    """Create a new category - only event owner can create"""
     try:
+        # Check if user owns the event this category belongs to
+        if not await check_event_ownership(category_data.event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only create categories for events you created"
+            )
+        
         category_id = str(uuid.uuid4())
         category_doc = {
             'id': category_id,
@@ -292,16 +375,25 @@ async def get_categories_for_event(event_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.put("/categories/{category_id}", response_model=Category)
-async def update_category(category_id: str, category_data: CategoryCreate, current_user: dict = Depends(require_super_admin)):
-    """Update a category"""
+async def update_category(category_id: str, category_data: CategoryCreate, current_user: dict = Depends(require_event_organizer)):
+    """Update a category - only event owner can update"""
     try:
         if not db:
             raise HTTPException(status_code=500, detail="Database not available")
         
-        # Check if category exists
+        # Check if category exists and get its event_id
         category_doc = db.collection('categories').document(category_id).get()
         if not category_doc.exists:
             raise HTTPException(status_code=404, detail="Category not found")
+        
+        existing_category = category_doc.to_dict()
+        
+        # Check if user owns the event this category belongs to
+        if not await check_event_ownership(existing_category['event_id'], current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only update categories for events you created"
+            )
         
         # Update category data
         updated_data = {
@@ -323,16 +415,25 @@ async def update_category(category_id: str, category_data: CategoryCreate, curre
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.delete("/categories/{category_id}")
-async def delete_category(category_id: str, current_user: dict = Depends(require_super_admin)):
-    """Delete a category"""
+async def delete_category(category_id: str, current_user: dict = Depends(require_event_organizer)):
+    """Delete a category - only event owner can delete"""
     try:
         if not db:
             raise HTTPException(status_code=500, detail="Database not available")
         
-        # Check if category exists
+        # Check if category exists and get its event_id
         category_doc = db.collection('categories').document(category_id).get()
         if not category_doc.exists:
             raise HTTPException(status_code=404, detail="Category not found")
+        
+        category_data = category_doc.to_dict()
+        
+        # Check if user owns the event this category belongs to
+        if not await check_event_ownership(category_data['event_id'], current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only delete categories for events you created"
+            )
         
         # Delete all players in this category first
         players = db.collection('players').where('category_id', '==', category_id).stream()
@@ -349,9 +450,15 @@ async def delete_category(category_id: str, current_user: dict = Depends(require
 # ============= TEAM ROUTES =============
 
 @api_router.post("/teams", response_model=Team)
-async def create_team(team_data: TeamCreate, current_user: dict = Depends(require_super_admin)):
-    """Create a new team"""
+async def create_team(team_data: TeamCreate, current_user: dict = Depends(require_event_organizer)):
+    """Create a new team - only event owner can create"""
     try:
+        # Check if user owns the event this team belongs to
+        if not await check_event_ownership(team_data.event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only create teams for events you created"
+            )
         team_id = str(uuid.uuid4())
         admin_uid = None
         
@@ -903,11 +1010,18 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.get("/events/{event_id}/registrations")
-async def get_event_registrations(event_id: str, current_user: dict = Depends(require_super_admin)):
-    """Get all player registrations for an event (admin only)"""
+async def get_event_registrations(event_id: str, current_user: dict = Depends(require_event_organizer)):
+    """Get all player registrations for an event - only event owner can view"""
     try:
         if not db:
             return []
+        
+        # Check if user owns this event
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view registrations for events you created"
+            )
         
         registrations = db.collection('player_registrations').where('event_id', '==', event_id).stream()
         return [reg.to_dict() for reg in registrations]
@@ -915,13 +1029,25 @@ async def get_event_registrations(event_id: str, current_user: dict = Depends(re
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/registrations/{registration_id}/approve")
-async def approve_player_registration(registration_id: str, approval_data: ApprovalRequest, current_user: dict = Depends(require_super_admin)):
-    """Approve a player registration and convert to actual player"""
+async def approve_player_registration(registration_id: str, approval_data: ApprovalRequest, current_user: dict = Depends(require_event_organizer)):
+    """Approve a player registration and convert to actual player - only event owner can approve"""
     try:
         if not db:
             raise HTTPException(status_code=500, detail="Database not available")
         
         # Get registration
+        reg_doc = db.collection('player_registrations').document(registration_id).get()
+        if not reg_doc.exists:
+            raise HTTPException(status_code=404, detail="Registration not found")
+        
+        reg_data = reg_doc.to_dict()
+        
+        # Check if user owns the event this registration belongs to
+        if not await check_event_ownership(reg_data['event_id'], current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only approve registrations for events you created"
+            )
         reg_doc = db.collection('player_registrations').document(registration_id).get()
         if not reg_doc.exists:
             raise HTTPException(status_code=404, detail="Registration not found")
@@ -985,9 +1111,22 @@ async def reject_player_registration(registration_id: str, current_user: dict = 
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/players", response_model=Player)
-async def create_player(player_data: PlayerCreate, current_user: dict = Depends(require_super_admin)):
-    """Create a new player"""
+async def create_player(player_data: PlayerCreate, current_user: dict = Depends(require_event_organizer)):
+    """Create a new player - only event owner can create"""
     try:
+        # Get category to check event ownership
+        category_doc = db.collection('categories').document(player_data.category_id).get()
+        if not category_doc.exists:
+            raise HTTPException(status_code=404, detail="Category not found")
+        
+        category_data = category_doc.to_dict()
+        
+        # Check if user owns the event this player's category belongs to
+        if not await check_event_ownership(category_data['event_id'], current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only create players for events you created"
+            )
         player_id = str(uuid.uuid4())
         player_doc = {
             'id': player_id,
@@ -1157,11 +1296,18 @@ async def delete_player(player_id: str, current_user: dict = Depends(require_sup
 # ============= AUCTION CONTROL ROUTES =============
 
 @api_router.post("/auction/start/{event_id}")
-async def start_auction(event_id: str, current_user: dict = Depends(require_super_admin)):
-    """Start auction for an event"""
+async def start_auction(event_id: str, current_user: dict = Depends(require_event_organizer)):
+    """Start auction for an event - only event owner can start"""
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Check if user owns this event
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only start auctions for events you created"
+            )
         
         # Update event status
         db.collection('events').document(event_id).update({
@@ -1190,11 +1336,18 @@ async def start_auction(event_id: str, current_user: dict = Depends(require_supe
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/auction/pause/{event_id}")
-async def pause_auction(event_id: str, current_user: dict = Depends(require_super_admin)):
-    """Pause auction"""
+async def pause_auction(event_id: str, current_user: dict = Depends(require_event_organizer)):
+    """Pause auction - only event owner can pause"""
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Check if user owns this event
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only pause auctions for events you created"
+            )
         
         db.collection('events').document(event_id).update({
             'status': AuctionStatus.PAUSED.value
@@ -1210,10 +1363,18 @@ async def pause_auction(event_id: str, current_user: dict = Depends(require_supe
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.post("/auction/next-player/{event_id}")
-async def next_player(event_id: str, player_id: str, current_user: dict = Depends(require_super_admin)):
-    """Set next player for bidding"""
+async def next_player(event_id: str, player_id: str, current_user: dict = Depends(require_event_organizer)):
+    """Set next player for bidding - only event owner can control"""
     try:
         if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Check if user owns this event
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only control auctions for events you created"
+            )
             raise HTTPException(status_code=503, detail="Database not available")
         
         # Get player details

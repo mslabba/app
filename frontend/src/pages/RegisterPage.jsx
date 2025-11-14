@@ -18,21 +18,21 @@ const RegisterPage = () => {
     email: '',
     password: '',
     display_name: '',
-    role: 'team_admin'
+    role: 'event_organizer'
   });
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { isAuthenticated, isSuperAdmin, loading: authLoading } = useAuth();
+  const { isAuthenticated, isSuperAdmin, isEventOrganizer, loading: authLoading } = useAuth();
 
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       // Redirect to appropriate dashboard based on role
-      const dashboardRoute = isSuperAdmin ? '/admin' : '/dashboard';
+      const dashboardRoute = (isSuperAdmin || isEventOrganizer) ? '/admin' : '/dashboard';
       navigate(dashboardRoute, { replace: true });
     }
-  }, [isAuthenticated, isSuperAdmin, authLoading, navigate]);
+  }, [isAuthenticated, isSuperAdmin, isEventOrganizer, authLoading, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -137,11 +137,12 @@ const RegisterPage = () => {
                     <SelectValue placeholder="Select your role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="team_admin">Team Admin</SelectItem>
-                    <SelectItem value="auctioneer">Auctioneer</SelectItem>
-                    <SelectItem value="viewer">Viewer</SelectItem>
+                    <SelectItem value="event_organizer">Event Organizer</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-white/60">
+                  Event Organizers can create and manage events, categories, sponsors, players, and control auctions.
+                </p>
               </div>
 
               <div className="space-y-3">
