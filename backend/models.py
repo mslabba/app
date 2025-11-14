@@ -5,6 +5,7 @@ from enum import Enum
 
 class UserRole(str, Enum):
     SUPER_ADMIN = "super_admin"
+    EVENT_ORGANIZER = "event_organizer" 
     TEAM_ADMIN = "team_admin"
     AUCTIONEER = "auctioneer"
     VIEWER = "viewer"
@@ -25,7 +26,7 @@ class PlayerStatus(str, Enum):
 class UserCreate(BaseModel):
     email: str
     password: str
-    role: UserRole = UserRole.TEAM_ADMIN
+    role: UserRole = UserRole.EVENT_ORGANIZER
     display_name: str
     team_id: Optional[str] = None
 

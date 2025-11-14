@@ -17,7 +17,7 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 
 const LandingPage = () => {
-  const { isAuthenticated, isSuperAdmin, loading } = useAuth();
+  const { isAuthenticated, isSuperAdmin, isEventOrganizer, loading } = useAuth();
 
   const features = [
     {
@@ -100,7 +100,7 @@ const LandingPage = () => {
             <div className="flex items-center space-x-4">
               {isAuthenticated ? (
                 <Link
-                  to={isSuperAdmin ? "/admin" : "/dashboard"}
+                  to={(isSuperAdmin || isEventOrganizer) ? "/admin" : "/dashboard"}
                   className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-2 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center"
                 >
                   <LayoutDashboard className="w-4 h-4 mr-2" />
@@ -182,7 +182,7 @@ const LandingPage = () => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               {isAuthenticated ? (
                 <Link
-                  to={isSuperAdmin ? "/admin" : "/dashboard"}
+                  to={(isSuperAdmin || isEventOrganizer) ? "/admin" : "/dashboard"}
                   className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-purple-700 hover:to-blue-700 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center group"
                 >
                   <LayoutDashboard className="w-5 h-5 mr-2" />

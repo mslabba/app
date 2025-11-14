@@ -14,16 +14,16 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { isAuthenticated, isSuperAdmin, loading: authLoading } = useAuth();
+  const { isAuthenticated, isSuperAdmin, isEventOrganizer, loading: authLoading } = useAuth();
 
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       // Redirect to appropriate dashboard based on role
-      const dashboardRoute = isSuperAdmin ? '/admin' : '/dashboard';
+      const dashboardRoute = (isSuperAdmin || isEventOrganizer) ? '/admin' : '/dashboard';
       navigate(dashboardRoute, { replace: true });
     }
-  }, [isAuthenticated, isSuperAdmin, authLoading, navigate]);
+  }, [isAuthenticated, isSuperAdmin, isEventOrganizer, authLoading, navigate]);
 
   const handleEmailLogin = async (e) => {
     e.preventDefault();

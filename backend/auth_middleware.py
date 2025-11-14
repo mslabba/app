@@ -80,3 +80,33 @@ async def require_team_admin(current_user: dict = Depends(get_current_user)) -> 
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error checking user permissions"
         )
+
+async def require_event_organizer(current_user: dict = Depends(get_current_user)) -> dict:
+    """Require event organizer or super admin role"""
+    try:
+        # Check role from Firestore instead of token
+        if db:
+            user_doc = db.collection('users').document(current_user['uid']).get()
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                role = user_data.get('role', '')
+                if role in [UserRole.EVENT_ORGANIZER.value, UserRole.SUPER_ADMIN.value]:
+                    return current_user
+        
+        # Fallback to token role
+        role = current_user.get('role', '')
+        if role in [UserRole.EVENT_ORGANIZER.value, UserRole.SUPER_ADMIN.value]:
+            return current_user
+            
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Event organizer access required. Current role: {role}"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in require_event_organizer: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error checking user permissions"
+        )

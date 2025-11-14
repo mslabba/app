@@ -75,7 +75,7 @@ export const AuthProvider = ({ children }) => {
           const defaultProfile = {
             uid: user.uid,
             email: user.email,
-            role: 'team_admin',
+            role: 'event_organizer',
             display_name: user.displayName || user.email?.split('@')[0] || 'User',
             team_id: null
           };
@@ -112,6 +112,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     isAuthenticated: !!currentUser,
     isSuperAdmin: userProfile?.role === 'super_admin',
+    isEventOrganizer: userProfile?.role === 'event_organizer',
     isTeamAdmin: userProfile?.role === 'team_admin',
   };
 

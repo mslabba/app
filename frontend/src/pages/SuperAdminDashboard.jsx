@@ -17,16 +17,31 @@ const SuperAdminDashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchEvents();
-  }, []);
+    if (token) {
+      fetchEvents();
+    }
+  }, [token]);
 
   const fetchEvents = async () => {
+    if (!token) {
+      console.log('No token available yet');
+      setLoading(false);
+      return;
+    }
+    
     try {
-      const response = await axios.get(`${API}/events`);
+      console.log('Fetching events with token:', token ? 'Token present' : 'No token');
+      const response = await axios.get(`${API}/events`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
       setEvents(response.data);
+      console.log('Events loaded successfully:', response.data.length);
     } catch (error) {
       console.error('Failed to fetch events:', error);
-      toast.error('Failed to load events');
+      console.error('Error response:', error.response?.data);
+      toast.error(error.response?.data?.detail || 'Failed to load events');
     } finally {
       setLoading(false);
     }

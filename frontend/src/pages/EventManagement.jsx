@@ -37,12 +37,18 @@ const EventManagement = () => {
   });
 
   useEffect(() => {
-    fetchEvents();
-  }, []);
+    if (token) {
+      fetchEvents();
+    }
+  }, [token]);
 
   const fetchEvents = async () => {
     try {
-      const response = await axios.get(`${API}/events`);
+      const response = await axios.get(`${API}/events`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
       setEvents(response.data);
     } catch (error) {
       toast.error('Failed to load events');
@@ -282,8 +288,8 @@ const EventManagement = () => {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${event.status === 'in_progress' ? 'bg-green-500/20 text-green-300' :
-                        event.status === 'completed' ? 'bg-blue-500/20 text-blue-300' :
-                          'bg-yellow-500/20 text-yellow-300'
+                      event.status === 'completed' ? 'bg-blue-500/20 text-blue-300' :
+                        'bg-yellow-500/20 text-yellow-300'
                       }`}>
                       {event.status.replace('_', ' ').toUpperCase()}
                     </span>

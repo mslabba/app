@@ -6,7 +6,7 @@ import { LogOut, Home, Users, TrendingUp, DollarSign, Settings } from 'lucide-re
 import { toast } from 'sonner';
 
 const Navbar = () => {
-  const { userProfile, isSuperAdmin } = useAuth();
+  const { userProfile, isSuperAdmin, isEventOrganizer } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -24,7 +24,7 @@ const Navbar = () => {
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-8">
-            <Link to={isSuperAdmin ? "/admin" : "/team"} className="flex items-center space-x-2">
+            <Link to={(isSuperAdmin || isEventOrganizer) ? "/admin" : "/team"} className="flex items-center space-x-2">
               <img
                 src="/images/sports/logo-final.png"
                 alt="PowerAuctions Logo"
@@ -40,7 +40,7 @@ const Navbar = () => {
               </div>
             </Link>
 
-            {isSuperAdmin && (
+            {(isSuperAdmin || isEventOrganizer) && (
               <div className="hidden md:flex items-center space-x-4">
                 <Link to="/admin" className="text-white/80 hover:text-white flex items-center space-x-1">
                   <Home className="w-4 h-4" />
