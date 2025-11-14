@@ -191,7 +191,7 @@ const CategoryManagement = () => {
 
         <div className="flex justify-between items-center mb-8">
           <div className="text-white/60">
-            <p>Categories define player types (e.g., Batsmen, Bowlers, All-rounders)</p>
+            <p>Categories define player types (e.g., Icon, Premium, A+, B etc)</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
             console.log('Category Dialog state changing to:', open);
