@@ -73,9 +73,23 @@ const LoginPage = () => {
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
       <div className="w-full max-w-md fade-in">
         <Card className="glass border-white/20 shadow-2xl" data-testid="login-card">
-          <CardHeader className="text-center space-y-2">
-            <CardTitle className="text-3xl font-bold text-white">PowerAuctions</CardTitle>
-            <CardDescription className="text-white/80">powered by Turgut - Sign in to manage your auction</CardDescription>
+          <CardHeader className="text-center space-y-4">
+            <div className="flex items-center justify-center space-x-2">
+              <img
+                src="/images/sports/logo-final.png"
+                alt="PowerAuction Logo"
+                className="h-12 w-auto"
+                onError={(e) => {
+                  console.error('Logo failed to load:', e.target.src);
+                  e.target.style.display = 'none';
+                }}
+              />
+              <div className="flex flex-col items-start">
+                <span className="text-2xl font-bold text-white">Power<span className="text-red-500">Auction</span></span>
+                <span className="text-xs text-white/60">Powered by Turgut</span>
+              </div>
+            </div>
+            <CardDescription className="text-white/80">Sign in to manage your auction</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <form onSubmit={handleEmailLogin} className="space-y-4" data-testid="login-form">
