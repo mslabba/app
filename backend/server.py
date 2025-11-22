@@ -88,6 +88,7 @@ async def register(user_data: UserCreate):
             'email': user_data.email,
             'role': user_data.role.value,
             'display_name': user_data.display_name,
+            'mobile_number': user_data.mobile_number,
             'team_id': user_data.team_id,
             'created_at': datetime.now(timezone.utc).isoformat()
         }
@@ -145,6 +146,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
             'email': current_user.get('email', ''),
             'role': 'event_organizer',  # Default role for new registrations
             'display_name': current_user.get('name', current_user.get('email', '').split('@')[0]),
+            'mobile_number': None,
             'team_id': None
         }
         
@@ -187,6 +189,16 @@ async def promote_to_admin(current_user: dict = Depends(get_current_user)):
 async def create_event(event_data: EventCreate, current_user: dict = Depends(require_event_organizer)):
     """Create a new auction event"""
     try:
+        # Get organizer details from Firestore
+        organizer_name = None
+        organizer_mobile = None
+        if db:
+            user_doc = db.collection('users').document(current_user['uid']).get()
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                organizer_name = user_data.get('display_name')
+                organizer_mobile = user_data.get('mobile_number')
+        
         event_id = str(uuid.uuid4())
         event_doc = {
             'id': event_id,
@@ -198,7 +210,9 @@ async def create_event(event_data: EventCreate, current_user: dict = Depends(req
             'logo_url': event_data.logo_url,
             'banner_url': event_data.banner_url,
             'created_at': datetime.now(timezone.utc).isoformat(),
-            'created_by': current_user['uid']
+            'created_by': current_user['uid'],
+            'organizer_name': organizer_name,
+            'organizer_mobile': organizer_mobile
         }
         
         if db:

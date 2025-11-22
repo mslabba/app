@@ -28,6 +28,7 @@ class UserCreate(BaseModel):
     password: str
     role: UserRole = UserRole.EVENT_ORGANIZER
     display_name: str
+    mobile_number: Optional[str] = None
     team_id: Optional[str] = None
 
 class UserResponse(BaseModel):
@@ -35,6 +36,7 @@ class UserResponse(BaseModel):
     email: str
     role: UserRole
     display_name: str
+    mobile_number: Optional[str] = None
     team_id: Optional[str] = None
 
 class LoginRequest(BaseModel):
@@ -73,6 +75,8 @@ class Event(BaseModel):
     banner_url: Optional[str] = None
     created_at: str
     created_by: str
+    organizer_name: Optional[str] = None
+    organizer_mobile: Optional[str] = None
 
 # Category Models
 class CategoryCreate(BaseModel):
