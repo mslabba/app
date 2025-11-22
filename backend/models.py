@@ -155,6 +155,7 @@ class Player(BaseModel):
     sold_price: Optional[int] = None
     previous_team: Optional[str] = None
     cricheroes_link: Optional[str] = None
+    contact_number: Optional[str] = None
 
 # Public Player Registration Model
 class PublicPlayerRegistration(BaseModel):

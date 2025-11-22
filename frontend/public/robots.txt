@@ -1,0 +1,26 @@
+# Robots.txt for PowerAuction
+# https://thepowerauction.com
+
+User-agent: *
+Allow: /
+
+# Disallow private/admin areas
+Disallow: /admin/
+Disallow: /api/
+Disallow: /private/
+
+# Allow major search engine bots
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+# Sitemap location
+Sitemap: https://thepowerauction.com/sitemap.xml
+
+# Crawl-delay for good behavior
+Crawl-delay: 1

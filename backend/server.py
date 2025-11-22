@@ -1066,6 +1066,7 @@ async def approve_player_registration(registration_id: str, approval_data: Appro
             'specialty': reg_data.get('specialty'),
             'previous_team': reg_data.get('previous_team'),
             'cricheroes_link': reg_data.get('cricheroes_link'),
+            'contact_number': reg_data.get('contact_number'),
             'stats': reg_data.get('stats'),
             'status': PlayerStatus.AVAILABLE.value,
             'photo_url': reg_data.get('photo_url'),
