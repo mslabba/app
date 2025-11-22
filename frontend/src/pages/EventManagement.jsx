@@ -284,6 +284,14 @@ const EventManagement = () => {
                 <div className="text-white/80">
                   <p className="text-sm">Date: {event.date}</p>
                   <p className="text-sm mt-1">{event.description || 'No description'}</p>
+                  {event.organizer_name && (
+                    <p className="text-sm mt-2 text-white/90">
+                      <span className="font-medium">Organizer:</span> {event.organizer_name}
+                      {event.organizer_mobile && (
+                        <span className="ml-2 text-green-400">📱 {event.organizer_mobile}</span>
+                      )}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">

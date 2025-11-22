@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Mail, Lock, User, ArrowLeft } from 'lucide-react';
+import { Mail, Lock, User, ArrowLeft, Phone } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -18,6 +18,7 @@ const RegisterPage = () => {
     email: '',
     password: '',
     display_name: '',
+    mobile_number: '',
     role: 'event_organizer'
   });
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -122,6 +123,22 @@ const RegisterPage = () => {
                     placeholder="Enter your email"
                     value={formData.email}
                     onChange={(e) => handleChange('email', e.target.value)}
+                    required
+                    className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/40"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="mobile_number" className="text-white">Mobile Number</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 w-5 h-5 text-white/60" />
+                  <Input
+                    id="mobile_number"
+                    type="tel"
+                    placeholder="Enter your mobile number"
+                    value={formData.mobile_number}
+                    onChange={(e) => handleChange('mobile_number', e.target.value)}
                     required
                     className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/40"
                   />
