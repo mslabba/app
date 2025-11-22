@@ -13,9 +13,11 @@ import {
   User,
   RefreshCw,
   Share2,
-  Eye
+  Eye,
+  Download
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { generateTeamRosterPDF } from '@/utils/pdfGenerator';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -533,13 +535,23 @@ Check console for full details.`);
                     <Trophy className="w-5 h-5 text-yellow-600" />
                     <span>Bought Players ({players.length})</span>
                   </div>
-                  <button
-                    onClick={fetchTeamData}
-                    className="flex items-center space-x-1 px-3 py-1 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    <span className="text-sm">Refresh</span>
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => generateTeamRosterPDF(team, players, categories, event)}
+                      disabled={players.length === 0}
+                      className="flex items-center space-x-1 px-3 py-1 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span className="text-sm">Download PDF</span>
+                    </button>
+                    <button
+                      onClick={fetchTeamData}
+                      className="flex items-center space-x-1 px-3 py-1 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      <span className="text-sm">Refresh</span>
+                    </button>
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent>

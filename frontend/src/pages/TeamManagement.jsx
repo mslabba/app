@@ -8,11 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Users, DollarSign, Edit, Eye, RefreshCw, Share2, Copy, ExternalLink } from 'lucide-react';
+import { Plus, Users, DollarSign, Edit, Eye, RefreshCw, Share2, Copy, ExternalLink, Download } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
 import FloatingMenu from '@/components/FloatingMenu';
+import { generateTeamRosterPDF } from '@/utils/pdfGenerator';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -386,16 +387,28 @@ const TeamManagement = () => {
                   <Users className="w-5 h-5" />
                   {selectedTeam?.name} - Squad ({teamPlayers.length}/{selectedTeam?.max_squad_size})
                 </DialogTitle>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleRefreshPlayers}
-                  disabled={loadingPlayers}
-                  className="flex items-center gap-2"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loadingPlayers ? 'animate-spin' : ''}`} />
-                  Refresh
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => generateTeamRosterPDF(selectedTeam, teamPlayers, categories, event)}
+                    disabled={loadingPlayers || teamPlayers.length === 0}
+                    className="flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download PDF
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleRefreshPlayers}
+                    disabled={loadingPlayers}
+                    className="flex items-center gap-2"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingPlayers ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                </div>
               </div>
             </DialogHeader>
             <div className="space-y-6">

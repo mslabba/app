@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Trophy, User, CheckCircle, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import ImageUpload from '@/components/ImageUpload';
+import ImageUploadWithCrop from '@/components/ImageUploadWithCrop';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -332,12 +332,14 @@ const PublicPlayerRegistration = () => {
               {/* Photo Upload */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-gray-800">Player Photo</h3>
-                <ImageUpload
+                <ImageUploadWithCrop
                   label="Upload Your Photo"
                   value={formData.photo_url}
                   onChange={(url) => handleChange('photo_url', url)}
                   placeholder="Upload your photo or enter URL"
                   sampleType={{ type: 'players', subtype: 'photos' }}
+                  enableCrop={true}
+                  cropAspect={1}
                 />
               </div>
 
