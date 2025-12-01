@@ -185,9 +185,9 @@ async def promote_to_admin(current_user: dict = Depends(get_current_user)):
 
 # ============= EVENT ROUTES =============
 
-@api_router.post("/events", response_model=Event)
-async def create_event(event_data: EventCreate, current_user: dict = Depends(require_event_organizer)):
-    """Create a new auction event"""
+@api_router.post("/auctions", response_model=Event)
+async def create_auction(event_data: EventCreate, current_user: dict = Depends(require_event_organizer)):
+    """Create a new auction"""
     try:
         # Get organizer details from Firestore
         organizer_name = None
@@ -222,9 +222,9 @@ async def create_event(event_data: EventCreate, current_user: dict = Depends(req
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@api_router.get("/events", response_model=List[Event])
-async def get_events(current_user: dict = Depends(get_current_user)):
-    """Get events - all events for super admin, only owned events for event organizers"""
+@api_router.get("/auctions", response_model=List[Event])
+async def get_auctions(current_user: dict = Depends(get_current_user)):
+    """Get auctions - all auctions for super admin, only owned auctions for auction organizers"""
     try:
         if not db:
             return []
@@ -250,9 +250,9 @@ async def get_events(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@api_router.get("/events/{event_id}", response_model=Event)
-async def get_event(event_id: str):
-    """Get event by ID"""
+@api_router.get("/auctions/{event_id}", response_model=Event)
+async def get_auction(event_id: str):
+    """Get auction by ID"""
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -269,9 +269,9 @@ async def get_event(event_id: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@api_router.put("/events/{event_id}")
-async def update_event(event_id: str, event_data: EventCreate, current_user: dict = Depends(require_event_organizer)):
-    """Update event - only event owner can update"""
+@api_router.put("/auctions/{event_id}")
+async def update_auction(event_id: str, event_data: EventCreate, current_user: dict = Depends(require_event_organizer)):
+    """Update auction - only auction owner can update"""
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -355,9 +355,9 @@ async def get_event_categories(event_id: str):
         logger.error(f"Error fetching categories for event {event_id}: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@api_router.get("/events/{event_id}/categories", response_model=List[Category])
-async def get_categories_for_event(event_id: str):
-    """Get categories for an event (alternative endpoint)"""
+@api_router.get("/auctions/{event_id}/categories", response_model=List[Category])
+async def get_categories_for_auction(event_id: str):
+    """Get categories for an auction (alternative endpoint)"""
     try:
         if not db:
             return []
@@ -1009,9 +1009,9 @@ async def get_public_auction_state(team_id: str, token: str):
 
 # ============= PLAYER ROUTES =============
 
-@api_router.post("/events/{event_id}/register-player")
+@api_router.post("/auctions/{event_id}/register-player")
 async def register_player_public(event_id: str, player_data: PublicPlayerRegistration):
-    """Public endpoint for players to register for an event"""
+    """Public endpoint for players to register for an auction"""
     try:
         if not db:
             raise HTTPException(status_code=500, detail="Database not available")
@@ -1041,9 +1041,9 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@api_router.get("/events/{event_id}/registrations")
-async def get_event_registrations(event_id: str, current_user: dict = Depends(require_event_organizer)):
-    """Get all player registrations for an event - only event owner can view"""
+@api_router.get("/auctions/{event_id}/registrations")
+async def get_auction_registrations(event_id: str, current_user: dict = Depends(require_event_organizer)):
+    """Get all player registrations for an auction - only auction owner can view"""
     try:
         if not db:
             return []
@@ -1242,9 +1242,9 @@ async def get_player(player_id: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@api_router.get("/events/{event_id}/players", response_model=List[Player])
-async def get_event_players(event_id: str):
-    """Get all players for an event"""
+@api_router.get("/auctions/{event_id}/players", response_model=List[Player])
+async def get_auction_players(event_id: str):
+    """Get all players for an auction"""
     try:
         if not db:
             return []
@@ -1490,7 +1490,7 @@ async def next_player(event_id: str, player_id: str, current_user: dict = Depend
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@api_router.post("/events/{event_id}/fix-current-players")
+@api_router.post("/auctions/{event_id}/fix-current-players")
 async def fix_current_players(event_id: str, current_user: dict = Depends(require_event_organizer)):
     """Fix multiple CURRENT players by resetting all to AVAILABLE except the one in auction state"""
     try:
@@ -1710,9 +1710,9 @@ async def get_max_safe_bid_amount(team_id: str, event_id: str, player_category: 
         logger.error(f"Error calculating max safe bid: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@api_router.get("/events/{event_id}/teams-safe-bid-summary")
+@api_router.get("/auctions/{event_id}/teams-safe-bid-summary")
 async def get_all_teams_safe_bid_summary(event_id: str, player_category: str = None):
-    """Get safe bid summary for all teams in an event (for super admin view)"""
+    """Get safe bid summary for all teams in an auction (for super admin view)"""
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -2232,9 +2232,9 @@ async def make_player_available(player_id: str, current_user: dict = Depends(req
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@api_router.post("/events/{event_id}/make-all-unsold-available")
+@api_router.post("/auctions/{event_id}/make-all-unsold-available")
 async def make_all_unsold_available(event_id: str, current_user: dict = Depends(require_event_organizer)):
-    """Make all unsold players in an event available for auction again"""
+    """Make all unsold players in an auction available for auction again"""
     try:
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -2270,7 +2270,7 @@ async def make_all_unsold_available(event_id: str, current_user: dict = Depends(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@api_router.post("/events/{event_id}/fix-current-players")
+@api_router.post("/auctions/{event_id}/fix-current-players")
 async def fix_current_players(event_id: str, current_user: dict = Depends(require_super_admin)):
     """Fix multiple CURRENT players by resetting all to AVAILABLE except the one in auction state"""
     try:
