@@ -70,7 +70,7 @@ const SponsorManagement = () => {
 
   const fetchEvent = async () => {
     try {
-      const response = await axios.get(`${API}/events/${eventId}`, {
+      const response = await axios.get(`${API}/auctions/${eventId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setEvent(response.data);

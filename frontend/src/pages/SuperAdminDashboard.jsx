@@ -28,16 +28,16 @@ const SuperAdminDashboard = () => {
       setLoading(false);
       return;
     }
-    
+
     try {
-      console.log('Fetching events with token:', token ? 'Token present' : 'No token');
-      const response = await axios.get(`${API}/events`, {
+      console.log('Fetching auctions with token:', token ? 'Token present' : 'No token');
+      const response = await axios.get(`${API}/auctions`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
       setEvents(response.data);
-      console.log('Events loaded successfully:', response.data.length);
+      console.log('Auctions loaded successfully:', response.data.length);
     } catch (error) {
       console.error('Failed to fetch events:', error);
       console.error('Error response:', error.response?.data);
@@ -53,7 +53,7 @@ const SuperAdminDashboard = () => {
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8" data-testid="admin-dashboard">
           <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Super Admin</h1>
-          <p className="text-white/80">powered by Turgut - Manage your sports auction events</p>
+          <p className="text-white/80">powered by Turgut - Manage your sports auctions</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -62,7 +62,7 @@ const SuperAdminDashboard = () => {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-white/60 text-sm">Total Events</p>
+                    <p className="text-white/60 text-sm">Total Auctions</p>
                     <h3 className="text-3xl font-bold text-white">{events.length}</h3>
                   </div>
                   <Calendar className="w-12 h-12 text-white/60" />
@@ -107,7 +107,7 @@ const SuperAdminDashboard = () => {
                   <Link to="/admin/events">
                     <Button className="mt-2 bg-white text-purple-700 hover:bg-white/90" data-testid="create-event-button">
                       <Plus className="w-4 h-4 mr-2" />
-                      New Event
+                      New Auction
                     </Button>
                   </Link>
                 </div>
@@ -119,7 +119,7 @@ const SuperAdminDashboard = () => {
 
         <Card className="glass border-white/20">
           <CardHeader>
-            <CardTitle className="text-white">Recent Events</CardTitle>
+            <CardTitle className="text-white">Recent Auctions</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -128,11 +128,11 @@ const SuperAdminDashboard = () => {
               </div>
             ) : events.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-white/60">No events yet. Create your first event!</p>
+                <p className="text-white/60">No auctions yet. Create your first auction!</p>
                 <Link to="/admin/events">
                   <Button className="mt-4 bg-white text-purple-700 hover:bg-white/90">
                     <Plus className="w-4 h-4 mr-2" />
-                    Create Event
+                    Create Auction
                   </Button>
                 </Link>
               </div>

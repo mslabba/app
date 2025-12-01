@@ -54,12 +54,12 @@ const PublicPlayerRegistration = () => {
     try {
       console.log('Testing basic connectivity...');
       console.log('API URL:', API);
-      console.log('Full URL:', `${API}/events/${eventId}`);
+      console.log('Full URL:', `${API}/auctions/${eventId}`);
       console.log('Network online:', navigator.onLine);
       console.log('User agent:', navigator.userAgent);
 
       // Test basic connectivity
-      const testResponse = await fetch(`${API}/events/${eventId}`, {
+      const testResponse = await fetch(`${API}/auctions/${eventId}`, {
         method: 'HEAD',
         mode: 'cors'
       });
@@ -77,7 +77,7 @@ const PublicPlayerRegistration = () => {
     try {
       await testConnectivity();
 
-      const response = await axios.get(`${API}/events/${eventId}`, {
+      const response = await axios.get(`${API}/auctions/${eventId}`, {
         timeout: 10000, // 10 second timeout
         headers: {
           'Accept': 'application/json',
@@ -94,7 +94,7 @@ const PublicPlayerRegistration = () => {
         response: error.response,
         status: error.response?.status,
         statusText: error.response?.statusText,
-        url: `${API}/events/${eventId}`,
+        url: `${API}/auctions/${eventId}`,
         userAgent: navigator.userAgent,
         isNetworkError: !error.response,
         isTimeoutError: error.code === 'ECONNABORTED'
@@ -145,7 +145,7 @@ const PublicPlayerRegistration = () => {
         }
       };
 
-      const response = await axios.post(`${API}/events/${eventId}/register-player`, registrationData);
+      const response = await axios.post(`${API}/auctions/${eventId}/register-player`, registrationData);
 
       toast.success('Registration submitted successfully!');
       setSubmitted(true);

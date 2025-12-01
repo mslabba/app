@@ -41,7 +41,7 @@ const SoldPlayersManagement = () => {
 
   const fetchSoldPlayers = async () => {
     try {
-      const response = await axios.get(`${API}/events/${eventId}/players`);
+      const response = await axios.get(`${API}/auctions/${eventId}/players`);
       const soldPlayersData = response.data.filter(player => player.status === 'sold');
       setSoldPlayers(soldPlayersData);
     } catch (error) {
@@ -62,7 +62,7 @@ const SoldPlayersManagement = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await axios.get(`${API}/events/${eventId}/categories`);
+      const response = await axios.get(`${API}/auctions/${eventId}/categories`);
       setCategories(response.data);
     } catch (error) {
       console.error('Failed to fetch categories:', error);

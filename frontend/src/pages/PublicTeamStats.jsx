@@ -537,7 +537,10 @@ Check console for full details.`);
                   </div>
                   <div className="flex items-center space-x-2">
                     <button
-                      onClick={() => generateTeamRosterPDF(team, players, categories, event)}
+                      onClick={async () => {
+                        console.log('Generating PDF with images...');
+                        await generateTeamRosterPDF(team, players, categories, event);
+                      }}
                       disabled={players.length === 0}
                       className="flex items-center space-x-1 px-3 py-1 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >

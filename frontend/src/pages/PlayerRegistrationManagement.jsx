@@ -25,6 +25,7 @@ import {
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import FloatingMenu from '@/components/FloatingMenu';
+import { generateRegistrationsPDF } from '@/utils/pdfGenerator';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -34,6 +35,7 @@ const PlayerRegistrationManagement = () => {
   const [registrations, setRegistrations] = useState([]);
   const [players, setPlayers] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selectedRegistrations, setSelectedRegistrations] = useState([]);
   const [bulkCategory, setBulkCategory] = useState('');
@@ -49,14 +51,17 @@ const PlayerRegistrationManagement = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [registrationsRes, playersRes, categoriesRes] = await Promise.all([
-        axios.get(`${API}/events/${eventId}/registrations`, {
+      const [registrationsRes, playersRes, categoriesRes, eventRes] = await Promise.all([
+        axios.get(`${API}/auctions/${eventId}/registrations`, {
           headers: { Authorization: `Bearer ${token}` }
         }),
-        axios.get(`${API}/events/${eventId}/players`, {
+        axios.get(`${API}/auctions/${eventId}/players`, {
           headers: { Authorization: `Bearer ${token}` }
         }),
-        axios.get(`${API}/events/${eventId}/categories`, {
+        axios.get(`${API}/auctions/${eventId}/categories`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API}/auctions/${eventId}`, {
           headers: { Authorization: `Bearer ${token}` }
         })
       ]);
@@ -64,11 +69,23 @@ const PlayerRegistrationManagement = () => {
       setRegistrations(registrationsRes.data);
       setPlayers(playersRes.data);
       setCategories(categoriesRes.data);
+      setEvent(eventRes.data);
     } catch (error) {
       console.error('Failed to fetch data:', error);
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportPDF = async (statusFilter) => {
+    try {
+      toast.info('Generating PDF...');
+      await generateRegistrationsPDF(registrations, event, statusFilter);
+      toast.success('PDF downloaded successfully!');
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+      toast.error('Failed to generate PDF');
     }
   };
 
@@ -216,6 +233,16 @@ const PlayerRegistrationManagement = () => {
             <h1 className="text-4xl font-bold text-white mb-2">Player Registration Management</h1>
             <p className="text-white/80">Manage player registrations and approved players</p>
           </div>
+          <Button
+            size="lg"
+            variant="outline"
+            className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+            onClick={() => handleExportPDF('all')}
+            disabled={registrations.length === 0}
+          >
+            <Download className="w-5 h-5 mr-2" />
+            Export All Registrations
+          </Button>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -243,10 +270,22 @@ const PlayerRegistrationManagement = () => {
             <Card className="glass border-white/20">
               <CardHeader>
                 <div className="flex justify-between items-center">
-                  <CardTitle className="text-white flex items-center">
-                    <Clock className="w-5 h-5 mr-2" />
-                    Pending Registrations
-                  </CardTitle>
+                  <div className="flex items-center space-x-3">
+                    <CardTitle className="text-white flex items-center">
+                      <Clock className="w-5 h-5 mr-2" />
+                      Pending Registrations
+                    </CardTitle>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                      onClick={() => handleExportPDF('pending_approval')}
+                      disabled={pendingRegistrations.length === 0}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Export PDF
+                    </Button>
+                  </div>
                   {selectedRegistrations.length > 0 && (
                     <div className="flex items-center space-x-4">
                       <Select value={bulkCategory} onValueChange={(value) => handleCategoryChange(value, true)}>
@@ -370,10 +409,22 @@ const PlayerRegistrationManagement = () => {
           <TabsContent value="approved">
             <Card className="glass border-white/20">
               <CardHeader>
-                <CardTitle className="text-white flex items-center">
-                  <CheckCircle className="w-5 h-5 mr-2" />
-                  Approved Registrations
-                </CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-white flex items-center">
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    Approved Registrations
+                  </CardTitle>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                    onClick={() => handleExportPDF('approved')}
+                    disabled={approvedRegistrations.length === 0}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export PDF
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -471,10 +522,22 @@ const PlayerRegistrationManagement = () => {
           <TabsContent value="rejected">
             <Card className="glass border-white/20">
               <CardHeader>
-                <CardTitle className="text-white flex items-center">
-                  <XCircle className="w-5 h-5 mr-2" />
-                  Rejected Registrations
-                </CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-white flex items-center">
+                    <XCircle className="w-5 h-5 mr-2" />
+                    Rejected Registrations
+                  </CardTitle>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                    onClick={() => handleExportPDF('rejected')}
+                    disabled={rejectedRegistrations.length === 0}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export PDF
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

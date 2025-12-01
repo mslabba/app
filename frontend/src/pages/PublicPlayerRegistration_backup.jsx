@@ -42,7 +42,7 @@ const PublicPlayerRegistration = () => {
 
   const fetchEvent = async () => {
     try {
-      const response = await axios.get(`${API}/events/${eventId}`);
+      const response = await axios.get(`${API}/auctions/${eventId}`);
       setEvent(response.data);
     } catch (error) {
       console.error('Failed to fetch event:', error);
@@ -93,7 +93,7 @@ const PublicPlayerRegistration = () => {
         }
       };
 
-      const response = await axios.post(`${API}/events/${eventId}/register-player`, registrationData);
+      const response = await axios.post(`${API}/auctions/${eventId}/register-player`, registrationData);
       
       toast.success('Registration submitted successfully!');
       setSubmitted(true);

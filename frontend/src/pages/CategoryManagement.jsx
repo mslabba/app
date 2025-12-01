@@ -40,7 +40,7 @@ const CategoryManagement = () => {
 
   const fetchEvent = async () => {
     try {
-      const response = await axios.get(`${API}/events/${eventId}`);
+      const response = await axios.get(`${API}/auctions/${eventId}`);
       setEvent(response.data);
     } catch (error) {
       console.error('Failed to fetch event:', error);
@@ -49,7 +49,7 @@ const CategoryManagement = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await axios.get(`${API}/events/${eventId}/categories`);
+      const response = await axios.get(`${API}/auctions/${eventId}/categories`);
       setCategories(response.data);
     } catch (error) {
       console.error('Failed to fetch categories:', error);

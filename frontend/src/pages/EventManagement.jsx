@@ -44,14 +44,14 @@ const EventManagement = () => {
 
   const fetchEvents = async () => {
     try {
-      const response = await axios.get(`${API}/events`, {
+      const response = await axios.get(`${API}/auctions`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
       setEvents(response.data);
     } catch (error) {
-      toast.error('Failed to load events');
+      toast.error('Failed to load auctions');
     }
   };
   const handleSubmit = async (e) => {
@@ -60,20 +60,20 @@ const EventManagement = () => {
 
     try {
       if (editingEvent) {
-        await axios.put(`${API}/events/${editingEvent.id}`, formData, {
+        await axios.put(`${API}/auctions/${editingEvent.id}`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        toast.success('Event updated successfully!');
+        toast.success('Auction updated successfully!');
       } else {
-        await axios.post(`${API}/events`, formData, {
+        await axios.post(`${API}/auctions`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        toast.success('Event created successfully!');
+        toast.success('Auction created successfully!');
       }
       fetchEvents();
       resetForm();
     } catch (error) {
-      toast.error(editingEvent ? 'Failed to update event' : 'Failed to create event');
+      toast.error(editingEvent ? 'Failed to update auction' : 'Failed to create auction');
     } finally {
       setLoading(false);
     }
@@ -112,7 +112,7 @@ const EventManagement = () => {
   };
 
   const copyRegistrationLink = (eventId) => {
-    const registrationUrl = `${window.location.origin}/events/${eventId}/register`;
+    const registrationUrl = `${window.location.origin}/auctions/${eventId}/register`;
     navigator.clipboard.writeText(registrationUrl).then(() => {
       toast.success('Registration link copied to clipboard!');
     }).catch(() => {
@@ -126,8 +126,8 @@ const EventManagement = () => {
       <div className="container mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Event Management</h1>
-            <p className="text-white/80">powered by Turgut - Create and manage auction events</p>
+            <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Auction Management</h1>
+            <p className="text-white/80">powered by Turgut - Create and manage auctions</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
             console.log('Dialog state changing to:', open);
@@ -139,21 +139,21 @@ const EventManagement = () => {
                 className="bg-white text-purple-700 hover:bg-white/90"
                 data-testid="create-event-button"
                 onClick={() => {
-                  console.log('Create Event button clicked');
+                  console.log('Create Auction button clicked');
                   setIsDialogOpen(true);
                 }}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Create Event
+                Create Auction
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>{editingEvent ? 'Edit Event' : 'Create New Event'}</DialogTitle>
+                <DialogTitle>{editingEvent ? 'Edit Auction' : 'Create New Auction'}</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4" data-testid="event-form">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Event Name</Label>
+                  <Label htmlFor="name">Auction Name</Label>
                   <Input
                     id="name"
                     value={formData.name}
@@ -185,20 +185,20 @@ const EventManagement = () => {
                 </div>
 
                 <div className="border-t pt-4">
-                  <h3 className="font-semibold mb-3">Event Images</h3>
+                  <h3 className="font-semibold mb-3">Auction Images</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <ImageUpload
-                      label="Event Logo"
+                      label="Auction Logo"
                       value={formData.logo_url}
                       onChange={(url) => setFormData({ ...formData, logo_url: url })}
-                      placeholder="Upload event logo or enter URL"
+                      placeholder="Upload auction logo or enter URL"
                       sampleType={{ type: 'events', subtype: 'logos' }}
                     />
                     <ImageUpload
-                      label="Event Banner"
+                      label="Auction Banner"
                       value={formData.banner_url}
                       onChange={(url) => setFormData({ ...formData, banner_url: url })}
-                      placeholder="Upload event banner or enter URL"
+                      placeholder="Upload auction banner or enter URL"
                       sampleType={{ type: 'events', subtype: 'banners' }}
                     />
                   </div>

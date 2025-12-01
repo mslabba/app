@@ -137,7 +137,7 @@ const AuctionControl = () => {
         console.log('User or token not available');
         return;
       }
-      const response = await axios.get(`${API}/events/${eventId}`, {
+      const response = await axios.get(`${API}/auctions/${eventId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setEvent(response.data);
@@ -165,7 +165,7 @@ const AuctionControl = () => {
       if (!currentUser || !token) {
         return;
       }
-      const response = await axios.get(`${API}/events/${eventId}/players`, {
+      const response = await axios.get(`${API}/auctions/${eventId}/players`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setPlayers(response.data);
@@ -208,8 +208,8 @@ const AuctionControl = () => {
       }
 
       const url = currentPlayerCategory
-        ? `${API}/events/${eventId}/teams-safe-bid-summary?player_category=${encodeURIComponent(currentPlayerCategory)}`
-        : `${API}/events/${eventId}/teams-safe-bid-summary`;
+        ? `${API}/auctions/${eventId}/teams-safe-bid-summary?player_category=${encodeURIComponent(currentPlayerCategory)}`
+        : `${API}/auctions/${eventId}/teams-safe-bid-summary`;
 
       console.log('Debug - fetchTeamsSafeBidSummary: Making API call to:', url);
 
@@ -255,7 +255,7 @@ const AuctionControl = () => {
       if (!currentUser || !token) {
         return;
       }
-      const response = await axios.get(`${API}/events/${eventId}/categories`, {
+      const response = await axios.get(`${API}/auctions/${eventId}/categories`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setCategories(response.data);
@@ -271,6 +271,11 @@ const AuctionControl = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       toast.success('Auction started successfully!');
+      // Start the timer when auction starts
+      if (currentPlayer) {
+        setTimer(60);
+        setTimerActive(true);
+      }
       fetchAuctionState();
     } catch (error) {
       console.error('Failed to start auction:', error);
@@ -308,10 +313,10 @@ const AuctionControl = () => {
       await axios.post(`${API}/auction/next-player/${eventId}?player_id=${selectedPlayer}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      toast.success('Player set for bidding');
+      toast.success('Player set for bidding - Click "Start Auction" to begin timer');
       setSelectedPlayer('');
       setTimer(60); // Reset timer to 60 seconds
-      setTimerActive(true);
+      setTimerActive(false); // Don't auto-start timer
       fetchAuctionState();
       fetchPlayers(); // Refresh to update player status
     } catch (error) {
@@ -410,6 +415,15 @@ const AuctionControl = () => {
     setTimerActive(false);
   };
 
+  const toggleTimer = () => {
+    if (timer > 0) {
+      setTimerActive(!timerActive);
+      toast.info(timerActive ? 'Timer paused' : 'Timer resumed');
+    } else {
+      toast.error('Timer has expired. Reset it to continue.');
+    }
+  };
+
   const makePlayerAvailable = async (playerId, playerName) => {
     try {
       setLoading(true);
@@ -429,7 +443,7 @@ const AuctionControl = () => {
   const makeAllUnsoldAvailable = async () => {
     try {
       setLoading(true);
-      const response = await axios.post(`${API}/events/${eventId}/make-all-unsold-available`, {}, {
+      const response = await axios.post(`${API}/auctions/${eventId}/make-all-unsold-available`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       toast.success(response.data.message);
@@ -639,13 +653,13 @@ const AuctionControl = () => {
 
         // Update UI states
         setSelectedPlayer('');
-        setTimerActive(true);
+        setTimerActive(false); // Don't auto-start timer
 
         // Refresh data
         fetchAuctionState();
         fetchPlayers();
 
-        toast.success(`${nextPlayer.name} randomly selected for next auction!`);
+        toast.success(`${nextPlayer.name} randomly selected - Click "Start Auction" to begin`);
       } catch (error) {
         console.error('Failed to set next player:', error);
         toast.error('Failed to set next player');
@@ -692,7 +706,7 @@ const AuctionControl = () => {
 
     try {
       setLoading(true);
-      const response = await axios.post(`${API}/events/${eventId}/fix-current-players`, {}, {
+      const response = await axios.post(`${API}/auctions/${eventId}/fix-current-players`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -869,16 +883,23 @@ const AuctionControl = () => {
                   Powered by Turgut
                 </div>
               </div>
-              {/* Countdown Timer */}
-              <div className={`flex items-center gap-3 px-6 py-3 rounded-full border-2 ${timer <= 10 && timerActive ?
-                'bg-red-500/20 border-red-500 animate-pulse' :
-                'bg-white/10 border-white/30'
-                }`}>
+              {/* Countdown Timer - Clickable to pause/resume */}
+              <div
+                onClick={toggleTimer}
+                className={`flex items-center gap-3 px-6 py-3 rounded-full border-2 cursor-pointer transition-all hover:scale-105 ${timer <= 10 && timerActive ?
+                  'bg-red-500/20 border-red-500 animate-pulse hover:bg-red-500/30' :
+                  'bg-white/10 border-white/30 hover:bg-white/20'
+                  }`}
+                title={timerActive ? 'Click to pause timer' : 'Click to resume timer'}
+              >
                 <Clock className="w-6 h-6 text-white" />
                 <span className={`text-2xl font-mono font-bold ${timer <= 10 && timerActive ? 'text-red-300' : 'text-white'
                   }`}>
                   {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
                 </span>
+                {!timerActive && timer > 0 && (
+                  <span className="text-xs text-yellow-300 ml-2 uppercase font-bold">Paused</span>
+                )}
               </div>
             </div>
 

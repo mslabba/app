@@ -22,24 +22,24 @@ const FloatingMenu = () => {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
   const { eventId } = useParams();
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile, isSuperAdmin, isEventOrganizer } = useAuth();
 
   const menuItems = [
     {
       id: 'dashboard',
       label: 'Dashboard',
       icon: Home,
-      path: currentUser?.role === 'super_admin' || currentUser?.role === 'event_organizer' ? '/admin' : '/team',
+      path: isSuperAdmin || isEventOrganizer ? '/admin' : '/team',
       color: 'bg-blue-500 hover:bg-blue-600',
       description: 'Main Dashboard'
     },
     {
       id: 'events',
-      label: 'Events',
+      label: 'Auctions',
       icon: Calendar,
       path: '/admin/events',
       color: 'bg-purple-500 hover:bg-purple-600',
-      description: 'Manage Events',
+      description: 'Manage Auctions',
       requiresRole: ['super_admin']
     },
     ...(eventId ? [
@@ -101,7 +101,7 @@ const FloatingMenu = () => {
         description: 'Auction Analytics'
       }
     ] : []),
-    ...(currentUser?.role === 'super_admin' ? [
+    ...(isSuperAdmin ? [
       {
         id: 'admin',
         label: 'Admin Panel',
@@ -120,7 +120,7 @@ const FloatingMenu = () => {
 
   const filteredMenuItems = menuItems.filter(item => {
     if (!item.requiresRole) return true;
-    return item.requiresRole.includes(currentUser?.role);
+    return item.requiresRole.includes(userProfile?.role);
   });
 
   return (

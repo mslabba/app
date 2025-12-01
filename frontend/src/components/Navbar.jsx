@@ -48,7 +48,7 @@ const Navbar = () => {
                 </Link>
                 <Link to="/admin/events" className="text-white/80 hover:text-white flex items-center space-x-1">
                   <Settings className="w-4 h-4" />
-                  <span>Events</span>
+                  <span>Auctions</span>
                 </Link>
               </div>
             )}

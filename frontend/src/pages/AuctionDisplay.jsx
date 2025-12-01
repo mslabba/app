@@ -36,15 +36,15 @@ const AuctionDisplay = () => {
 
         // Fetch teams safe bid summary for current player's category
         const safeBidUrl = playerResponse.data.category
-          ? `${API}/events/${eventId}/teams-safe-bid-summary?player_category=${encodeURIComponent(playerResponse.data.category)}`
-          : `${API}/events/${eventId}/teams-safe-bid-summary`;
+          ? `${API}/auctions/${eventId}/teams-safe-bid-summary?player_category=${encodeURIComponent(playerResponse.data.category)}`
+          : `${API}/auctions/${eventId}/teams-safe-bid-summary`;
 
         const safeBidResponse = await axios.get(safeBidUrl);
         setTeamsSafeBidSummary(safeBidResponse.data);
       } else {
         setCurrentPlayer(null);
         // Fetch general safe bid summary
-        const safeBidResponse = await axios.get(`${API}/events/${eventId}/teams-safe-bid-summary`);
+        const safeBidResponse = await axios.get(`${API}/auctions/${eventId}/teams-safe-bid-summary`);
         setTeamsSafeBidSummary(safeBidResponse.data);
       }
 

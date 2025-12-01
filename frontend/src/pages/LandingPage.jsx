@@ -98,6 +98,12 @@ const LandingPage = () => {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              <Link
+                to="/contact"
+                className="text-white/80 hover:text-white transition-colors px-4 py-2 rounded-lg hover:bg-white/10"
+              >
+                Contact Us
+              </Link>
               {isAuthenticated ? (
                 <Link
                   to={(isSuperAdmin || isEventOrganizer) ? "/admin" : "/dashboard"}
@@ -498,7 +504,7 @@ const LandingPage = () => {
               <h4 className="text-white font-semibold mb-4">Support</h4>
               <ul className="space-y-2 text-white/60">
                 <li><a href="#" className="hover:text-white transition-colors">Help Center</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Contact Us</a></li>
+                <li><Link to="/contact" className="hover:text-white transition-colors">Contact Us</Link></li>
                 <li><Link to="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
                 <li><Link to="/terms-of-service" className="hover:text-white transition-colors">Terms of Service</Link></li>
               </ul>

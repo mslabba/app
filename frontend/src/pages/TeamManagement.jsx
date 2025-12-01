@@ -50,7 +50,7 @@ const TeamManagement = () => {
 
   const fetchEvent = async () => {
     try {
-      const response = await axios.get(`${API}/events/${eventId}`);
+      const response = await axios.get(`${API}/auctions/${eventId}`);
       setEvent(response.data);
     } catch (error) {
       toast.error('Failed to load event');
@@ -391,7 +391,10 @@ const TeamManagement = () => {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => generateTeamRosterPDF(selectedTeam, teamPlayers, categories, event)}
+                    onClick={async () => {
+                      toast.info('Generating PDF with images...');
+                      await generateTeamRosterPDF(selectedTeam, teamPlayers, categories, event);
+                    }}
                     disabled={loadingPlayers || teamPlayers.length === 0}
                     className="flex items-center gap-2"
                   >

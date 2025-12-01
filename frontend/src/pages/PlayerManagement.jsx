@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Edit, Trash2, User, Unlock, RotateCcw } from 'lucide-react';
+import { Plus, Users, Edit, Trash2, User, Unlock, RotateCcw, Search, Filter } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
@@ -27,6 +27,8 @@ const PlayerManagement = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [formData, setFormData] = useState({
     name: '',
     category_id: '',
@@ -54,7 +56,7 @@ const PlayerManagement = () => {
 
   const fetchPlayers = async () => {
     try {
-      const response = await axios.get(`${API}/events/${eventId}/players`);
+      const response = await axios.get(`${API}/auctions/${eventId}/players`);
       setPlayers(response.data);
     } catch (error) {
       console.error('Failed to fetch players:', error);
@@ -64,7 +66,7 @@ const PlayerManagement = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await axios.get(`${API}/events/${eventId}/categories`);
+      const response = await axios.get(`${API}/auctions/${eventId}/categories`);
       setCategories(response.data);
     } catch (error) {
       console.error('Failed to fetch categories:', error);
@@ -253,6 +255,17 @@ const PlayerManagement = () => {
     return `₹${category.base_price?.toLocaleString()}`;
   };
 
+  // Filter and search players
+  const filteredPlayers = players.filter(player => {
+    const matchesSearch = player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      player.position?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      player.previous_team?.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesCategory = selectedCategory === 'all' || player.category_id === selectedCategory;
+
+    return matchesSearch && matchesCategory;
+  });
+
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
       <Navbar />
@@ -433,26 +446,86 @@ const PlayerManagement = () => {
           </Dialog>
         </div>
 
+        {/* Search and Filter Section */}
+        <Card className="glass border-white/20 mb-6">
+          <CardContent className="p-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              {/* Search Bar */}
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-white/60" />
+                  <Input
+                    type="text"
+                    placeholder="Search by name, position, or previous team..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/40"
+                  />
+                </div>
+              </div>
+
+              {/* Category Filter */}
+              <div className="md:w-64">
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
+                    <Filter className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Filter by category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {categories.map(category => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Clear Filters Button */}
+              {(searchQuery || selectedCategory !== 'all') && (
+                <Button
+                  variant="outline"
+                  className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSelectedCategory('all');
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              )}
+            </div>
+
+            {/* Results Count */}
+            {(searchQuery || selectedCategory !== 'all') && (
+              <div className="mt-3 text-white/80 text-sm">
+                Showing {filteredPlayers.length} of {players.length} players
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card className="glass border-white/20">
           <CardHeader>
             <CardTitle className="text-white flex items-center justify-between">
-              <span>Players ({players.length})</span>
+              <span>Players ({filteredPlayers.length})</span>
               <div className="flex items-center space-x-4 text-sm">
                 <div className="flex items-center">
                   <span className="w-2 h-2 rounded-full bg-green-400 mr-1"></span>
-                  Available: {players.filter(p => p.status === 'available').length}
+                  Available: {filteredPlayers.filter(p => p.status === 'available').length}
                 </div>
                 <div className="flex items-center">
                   <span className="w-2 h-2 rounded-full bg-yellow-400 mr-1"></span>
-                  Current: {players.filter(p => p.status === 'current').length}
+                  Current: {filteredPlayers.filter(p => p.status === 'current').length}
                 </div>
                 <div className="flex items-center">
                   <span className="w-2 h-2 rounded-full bg-blue-400 mr-1"></span>
-                  Sold: {players.filter(p => p.status === 'sold').length}
+                  Sold: {filteredPlayers.filter(p => p.status === 'sold').length}
                 </div>
                 <div className="flex items-center">
                   <span className="w-2 h-2 rounded-full bg-red-400 mr-1"></span>
-                  Unsold: {players.filter(p => p.status === 'unsold').length}
+                  Unsold: {filteredPlayers.filter(p => p.status === 'unsold').length}
                 </div>
               </div>
             </CardTitle>
@@ -464,9 +537,15 @@ const PlayerManagement = () => {
                 <p className="text-white/60">No players added yet</p>
                 <p className="text-white/40 text-sm mt-2">Add players to start the auction</p>
               </div>
+            ) : filteredPlayers.length === 0 ? (
+              <div className="text-center py-8">
+                <Search className="w-16 h-16 text-white/40 mx-auto mb-4" />
+                <p className="text-white/60">No players found</p>
+                <p className="text-white/40 text-sm mt-2">Try adjusting your search or filters</p>
+              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {players.map((player) => (
+                {filteredPlayers.map((player) => (
                   <Card key={player.id} className="bg-white/10 border-white/20">
                     <CardContent className="p-4">
                       {player.photo_url && (
