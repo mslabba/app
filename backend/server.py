@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 import uuid
 import time
 from typing import List, Optional
+import requests
+import re
 
 from firebase_config import db, firebase_auth
 from firebase_admin import firestore
@@ -29,6 +31,11 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Cloudinary configuration (using unsigned uploads, no API secret needed)
+CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', 'drok5rkeb')
+CLOUDINARY_UPLOAD_PRESET = os.getenv('CLOUDINARY_UPLOAD_PRESET', 'auction_uploads')
+logger.info(f"Cloudinary configured for unsigned uploads: {CLOUDINARY_CLOUD_NAME}")
 
 # Helper function to check event ownership
 async def check_event_ownership(event_id: str, current_user: dict) -> bool:
@@ -65,6 +72,89 @@ async def require_event_access(event_id: str, current_user: dict = Depends(requi
             detail="You can only access events you created"
         )
     return current_user
+
+def upload_google_drive_image_to_cloudinary(google_drive_url: str) -> Optional[str]:
+    """
+    Download image from Google Drive and upload to Cloudinary using unsigned uploads.
+    Returns Cloudinary URL or None if upload fails.
+    """
+    if not google_drive_url or not isinstance(google_drive_url, str):
+        return None
+    
+    try:
+        # Extract file ID from Google Drive URL
+        patterns = [
+            r'drive\.google\.com/file/d/([a-zA-Z0-9_-]+)',
+            r'drive\.google\.com/open\?id=([a-zA-Z0-9_-]+)',
+            r'drive\.google\.com/uc\?id=([a-zA-Z0-9_-]+)',
+            r'lh3\.googleusercontent\.com/d/([a-zA-Z0-9_-]+)',
+            r'id=([a-zA-Z0-9_-]+)'
+        ]
+        
+        file_id = None
+        for pattern in patterns:
+            match = re.search(pattern, google_drive_url)
+            if match:
+                file_id = match.group(1)
+                break
+        
+        if not file_id:
+            logger.warning(f"Could not extract file ID from URL: {google_drive_url}")
+            return None
+        
+        # Try different Google Drive URL formats
+        drive_urls = [
+            f"https://lh3.googleusercontent.com/d/{file_id}",
+            f"https://drive.google.com/uc?export=view&id={file_id}",
+        ]
+        
+        image_data = None
+        for url in drive_urls:
+            try:
+                response = requests.get(url, timeout=10)
+                if response.status_code == 200 and response.headers.get('content-type', '').startswith('image/'):
+                    image_data = response.content
+                    break
+            except Exception as e:
+                logger.debug(f"Failed to fetch from {url}: {str(e)}")
+                continue
+        
+        if not image_data:
+            logger.warning(f"Could not download image from Google Drive: {file_id}")
+            return None
+        
+        # Upload to Cloudinary using unsigned upload
+        upload_url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
+        
+        files = {'file': image_data}
+        data = {
+            'upload_preset': CLOUDINARY_UPLOAD_PRESET,
+            'folder': 'auction_players',
+            'resource_type': 'image'
+        }
+        
+        response = requests.post(upload_url, files=files, data=data, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            cloudinary_url = result.get('secure_url')
+            logger.info(f"Successfully uploaded image to Cloudinary: {cloudinary_url}")
+            return cloudinary_url
+        else:
+            logger.error(f"Cloudinary upload failed: {response.status_code} - {response.text}")
+            return None
+        
+    except Exception as e:
+        logger.error(f"Error uploading to Cloudinary: {str(e)}")
+        return None
+        
+        cloudinary_url = upload_result.get('secure_url')
+        logger.info(f"Successfully uploaded image to Cloudinary: {cloudinary_url}")
+        return cloudinary_url
+        
+    except Exception as e:
+        logger.error(f"Error uploading to Cloudinary: {str(e)}")
+        return None
 
 # ============= AUTHENTICATION ROUTES =============
 
@@ -106,6 +196,86 @@ async def register(user_data: UserCreate):
     except Exception as e:
         logger.error(f"Registration error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(email: str):
+    """Send password reset email"""
+    try:
+        from email_service import generate_reset_token, send_password_reset_email
+        import threading
+        
+        # Check if user exists
+        try:
+            user = firebase_auth.get_user_by_email(email)
+        except Exception:
+            # Don't reveal if email exists or not (security best practice)
+            return {"message": "If this email is registered, you will receive a password reset link shortly"}
+        
+        # Generate reset token
+        token = generate_reset_token(email)
+        
+        # Create reset link
+        reset_link = f"https://thepowerauction.com/reset-password?token={token}"
+        
+        # Send email in background thread to avoid timeout
+        def send_email_background():
+            try:
+                send_password_reset_email(email, reset_link)
+                logger.info(f"Password reset email sent successfully to {email}")
+            except Exception as e:
+                logger.error(f"Failed to send email to {email}: {e}")
+        
+        thread = threading.Thread(target=send_email_background)
+        thread.daemon = True
+        thread.start()
+        
+        # Return immediately without waiting for email
+        return {"message": "Password reset email sent successfully"}
+    except Exception as e:
+        logger.error(f"Forgot password error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process password reset request")
+
+@api_router.post("/auth/reset-password")
+async def reset_password(token: str, new_password: str):
+    """Reset password using token"""
+    try:
+        from email_service import verify_reset_token
+        
+        # Verify token
+        email = verify_reset_token(token)
+        if not email:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+        
+        # Get user by email
+        user = firebase_auth.get_user_by_email(email)
+        
+        # Update password
+        firebase_auth.update_user(user.uid, password=new_password)
+        
+        return {"message": "Password reset successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Reset password error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to reset password")
+
+@api_router.get("/auth/email-config-check")
+async def check_email_config(current_user: dict = Depends(require_super_admin)):
+    """Check email configuration (Super Admin only)"""
+    try:
+        import os
+        smtp_user = os.getenv("SMTP_USER", "")
+        smtp_password_set = bool(os.getenv("SMTP_PASSWORD", ""))
+        
+        return {
+            "smtp_user": smtp_user,
+            "smtp_password_configured": smtp_password_set,
+            "smtp_host": "smtppro.zoho.in",
+            "smtp_port": 465
+        }
+    except Exception as e:
+        logger.error(f"Email config check error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to check email configuration")
 
 @api_router.post("/auth/set-role")
 async def set_user_role(uid: str, role: UserRole, current_user: dict = Depends(require_super_admin)):
@@ -1194,6 +1364,175 @@ async def create_player(player_data: PlayerCreate, current_user: dict = Depends(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@api_router.post("/auctions/{event_id}/bulk-upload-players")
+async def bulk_upload_players(
+    event_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_event_organizer)
+):
+    """
+    Bulk upload players from Excel file.
+    
+    Excel columns expected:
+    - name (required)
+    - phone (required)
+    - email (required) 
+    - position (required)
+    - specialty (required)
+    - photo_url (optional) - Can be Google Drive link
+    - category_id (optional) - Will use default if not provided
+    - base_price (optional) - Will use category base price if not provided
+    - age (optional)
+    - previous_team (optional)
+    - stats.matches, stats.runs, stats.wickets, stats.goals, stats.assists (optional)
+    """
+    import pandas as pd
+    import re
+    import io
+    
+    try:
+        # Check event ownership
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only upload players to events you created"
+            )
+        
+        # Validate file type
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            raise HTTPException(
+                status_code=400,
+                detail="File must be an Excel file (.xlsx or .xls)"
+            )
+        
+        # Read Excel file
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents))
+        
+        # Validate required columns
+        required_columns = ['name', 'phone', 'email', 'position', 'specialty']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required columns: {', '.join(missing_columns)}"
+            )
+        
+        # Get event categories
+        categories = []
+        if db:
+            categories_query = db.collection('categories').where('event_id', '==', event_id).stream()
+            categories = [{'id': cat.id, **cat.to_dict()} for cat in categories_query]
+        
+        if not categories:
+            raise HTTPException(
+                status_code=400,
+                detail="No categories found for this event. Please create categories first."
+            )
+        
+        # Use first category as default
+        default_category = categories[0]
+        
+        # Process each row
+        created_players = []
+        errors = []
+        
+        for index, row in df.iterrows():
+            try:
+                # Get category_id and base_price
+                category_id = row.get('category_id', default_category['id'])
+                if pd.isna(category_id):
+                    category_id = default_category['id']
+                
+                # Find the category to get base price
+                selected_category = next((c for c in categories if c['id'] == category_id), default_category)
+                base_price = row.get('base_price', selected_category.get('base_price', 1000))
+                if pd.isna(base_price):
+                    base_price = selected_category.get('base_price', 1000)
+                
+                # Handle photo URL - upload to Cloudinary if it's a Google Drive link
+                photo_url = None
+                if pd.notna(row.get('photo_url')):
+                    original_url = str(row['photo_url']).strip()
+                    if 'drive.google.com' in original_url or 'googleusercontent.com' in original_url:
+                        # Upload Google Drive image to Cloudinary
+                        logger.info(f"Uploading image to Cloudinary for player: {row['name']}")
+                        photo_url = upload_google_drive_image_to_cloudinary(original_url)
+                        if not photo_url:
+                            logger.warning(f"Failed to upload image for {row['name']}, will use original URL")
+                            # Fall back to original Google Drive URL
+                            photo_url = original_url
+                    else:
+                        # Direct URL, use as is
+                        photo_url = original_url
+                
+                # Create player document
+                player_id = str(uuid.uuid4())
+                player_doc = {
+                    'id': player_id,
+                    'name': str(row['name']).strip(),
+                    'category_id': str(category_id).strip(),
+                    'base_price': int(base_price),
+                    'current_price': None,
+                    'photo_url': photo_url,
+                    'position': str(row['position']).strip() if pd.notna(row.get('position')) else None,
+                    'specialty': str(row['specialty']).strip() if pd.notna(row.get('specialty')) else None,
+                    'age': int(row['age']) if pd.notna(row.get('age')) else None,
+                    'previous_team': str(row['previous_team']).strip() if pd.notna(row.get('previous_team')) else None,
+                    'status': PlayerStatus.AVAILABLE.value,
+                    'sold_to_team_id': None,
+                    'sold_price': None,
+                    'phone': str(row['phone']).strip() if pd.notna(row.get('phone')) else None,
+                    'email': str(row['email']).strip().lower() if pd.notna(row.get('email')) else None,
+                }
+                
+                # Handle stats if present
+                stats = {}
+                stat_fields = ['matches', 'runs', 'wickets', 'goals', 'assists']
+                for stat in stat_fields:
+                    if stat in df.columns and pd.notna(row.get(stat)):
+                        try:
+                            stats[stat] = int(float(row[stat]))
+                        except (ValueError, TypeError):
+                            pass
+                
+                if stats:
+                    player_doc['stats'] = stats
+                else:
+                    player_doc['stats'] = None
+                
+                # Save to Firestore
+                if db:
+                    db.collection('players').document(player_id).set(player_doc)
+                
+                created_players.append({
+                    'id': player_id,
+                    'name': player_doc['name'],
+                    'category_id': player_doc['category_id']
+                })
+                
+            except Exception as e:
+                errors.append({
+                    'row': index + 2,  # +2 because Excel rows start at 1 and have header
+                    'name': row.get('name', 'Unknown'),
+                    'error': str(e)
+                })
+        
+        return {
+            'success': True,
+            'created_count': len(created_players),
+            'error_count': len(errors),
+            'created_players': created_players,
+            'errors': errors,
+            'message': f"Successfully created {len(created_players)} players. {len(errors)} errors encountered."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Bulk upload error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Bulk upload failed: {str(e)}")
+
 @api_router.get("/players/category/{category_id}", response_model=List[Player])
 async def get_category_players(category_id: str):
     """Get players by category"""
@@ -1243,8 +1582,13 @@ async def get_player(player_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.get("/auctions/{event_id}/players", response_model=List[Player])
-async def get_auction_players(event_id: str):
-    """Get all players for an auction"""
+async def get_auction_players(
+    event_id: str, 
+    limit: Optional[int] = None, 
+    offset: Optional[int] = 0,
+    status: Optional[str] = None
+):
+    """Get all players for an auction with optional pagination and filtering"""
     try:
         if not db:
             return []
@@ -1256,11 +1600,29 @@ async def get_auction_players(event_id: str):
         if not category_ids:
             return []
         
-        # Get all players for these categories
+        # Get all players for these categories with pagination
         result = []
+        total_fetched = 0
+        
         for category_id in category_ids:
-            players = db.collection('players').where('category_id', '==', category_id).stream()
+            query = db.collection('players').where('category_id', '==', category_id)
+            
+            # Apply status filter if provided
+            if status:
+                query = query.where('status', '==', status.lower())
+            
+            players = query.stream()
+            
             for player in players:
+                # Skip if we haven't reached offset yet
+                if total_fetched < offset:
+                    total_fetched += 1
+                    continue
+                
+                # Stop if we've reached the limit
+                if limit and len(result) >= limit:
+                    break
+                
                 player_data = player.to_dict()
                 if player_data.get('stats'):
                     player_data['stats'] = PlayerStats(**player_data['stats'])
@@ -1270,6 +1632,11 @@ async def get_auction_players(event_id: str):
                     player_data['status'] = player_data['status'].lower()
                 
                 result.append(Player(**player_data))
+                total_fetched += 1
+            
+            # Break outer loop if we've reached limit
+            if limit and len(result) >= limit:
+                break
         
         return result
     except Exception as e:
