@@ -10,11 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Edit, Trash2, User, Unlock, RotateCcw, Search, Filter } from 'lucide-react';
+import { Plus, Users, Edit, Trash2, User, Unlock, RotateCcw, Search, Filter, Download } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
 import FloatingMenu from '@/components/FloatingMenu';
+import { convertGoogleDriveUrl } from '@/utils/imageUtils';
+import jsPDF from 'jspdf';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -24,11 +26,13 @@ const PlayerManagement = () => {
   const [players, setPlayers] = useState([]);
   const [categories, setCategories] = useState([]);
   const [teams, setTeams] = useState([]);
+  const [event, setEvent] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all');
   const [formData, setFormData] = useState({
     name: '',
     category_id: '',
@@ -39,6 +43,7 @@ const PlayerManagement = () => {
     previous_team: '',
     photo_url: '',
     cricheroes_link: '',
+    contact_number: '',
     stats: {
       matches: '',
       runs: '',
@@ -49,10 +54,21 @@ const PlayerManagement = () => {
   });
 
   useEffect(() => {
+    fetchEvent();
     fetchPlayers();
     fetchCategories();
     fetchTeams();
   }, [eventId]);
+
+  const fetchEvent = async () => {
+    try {
+      const response = await axios.get(`${API}/auctions/${eventId}`);
+      setEvent(response.data);
+    } catch (error) {
+      console.error('Error fetching event:', error);
+      toast.error('Failed to fetch event details');
+    }
+  };
 
   const fetchPlayers = async () => {
     try {
@@ -136,6 +152,7 @@ const PlayerManagement = () => {
       previous_team: player.previous_team || '',
       photo_url: player.photo_url || '',
       cricheroes_link: player.cricheroes_link || '',
+      contact_number: player.contact_number || '',
       stats: {
         matches: player.stats?.matches?.toString() || '',
         runs: player.stats?.runs?.toString() || '',
@@ -203,6 +220,7 @@ const PlayerManagement = () => {
       previous_team: '',
       photo_url: '',
       cricheroes_link: '',
+      contact_number: '',
       stats: {
         matches: '',
         runs: '',
@@ -263,8 +281,292 @@ const PlayerManagement = () => {
 
     const matchesCategory = selectedCategory === 'all' || player.category_id === selectedCategory;
 
-    return matchesSearch && matchesCategory;
+    const matchesStatus = selectedStatus === 'all' || player.status === selectedStatus;
+
+    return matchesSearch && matchesCategory && matchesStatus;
   });
+
+  const generatePlayerCardsPDF = async () => {
+    try {
+      const playersToExport = filteredPlayers.length > 0 ? filteredPlayers : players;
+      toast.info(`Loading ${playersToExport.length} player images...`);
+
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+
+      // Card dimensions - calculate based on actual content height needed
+      const cardsPerRow = 4;
+      const rowsPerPage = 6;
+      const cardWidth = (pageWidth - 20) / cardsPerRow; // 20mm for margins
+      const cardHeight = 35; // Fixed height of 35mm
+      const margin = 10;
+      const cardPadding = 2;
+      const headerHeight = 25; // Space for logo and title
+      const marginTop = headerHeight + 5; // Top margin after header
+      const gapBetweenRows = 3; // Small gap between rows
+
+      // Helper function to load logo
+      const loadLogo = () => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            try {
+              const base64 = canvas.toDataURL('image/png');
+              resolve(base64);
+            } catch (e) {
+              console.error('Error converting logo:', e);
+              resolve(null);
+            }
+          };
+          img.onerror = () => resolve(null);
+          img.src = '/images/sports/logo-transparent.png'; // Use transparent logo
+        });
+      };
+
+      // Helper function to load event logo
+      const loadEventLogo = (logoUrl) => {
+        if (!logoUrl) return Promise.resolve(null);
+
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            try {
+              const base64 = canvas.toDataURL('image/png', 0.8);
+              resolve(base64);
+            } catch (e) {
+              console.error('Error converting event logo:', e);
+              resolve(null);
+            }
+          };
+          img.onerror = () => resolve(null);
+          img.src = logoUrl;
+        });
+      };
+
+      // Load logos
+      const logoData = await loadLogo();
+      const eventLogoData = event?.logo_url ? await loadEventLogo(event.logo_url) : null;
+
+      // Helper function to sleep/delay
+      const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+      // Helper function to load image as base64 with timeout
+      const loadImageAsBase64 = (url, timeout = 5000) => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+
+          const timeoutId = setTimeout(() => {
+            img.src = ''; // Cancel loading
+            resolve(null);
+          }, timeout);
+
+          img.onload = () => {
+            clearTimeout(timeoutId);
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            try {
+              const base64 = canvas.toDataURL('image/jpeg', 0.6);
+              resolve(base64);
+            } catch (e) {
+              console.error('Error converting image:', e);
+              resolve(null);
+            }
+          };
+
+          img.onerror = () => {
+            clearTimeout(timeoutId);
+            resolve(null);
+          };
+
+          img.src = url;
+        });
+      };
+
+      // Pre-load all images with delays to avoid rate limiting
+      const imageCache = {};
+      for (let i = 0; i < playersToExport.length; i++) {
+        const player = playersToExport[i];
+        if (player.photo_url) {
+          try {
+            // Use smaller image size to reduce load
+            const convertedUrl = convertGoogleDriveUrl(player.photo_url).replace('=w400', '=w200');
+            const imageData = await loadImageAsBase64(convertedUrl);
+            imageCache[player.id] = imageData;
+
+            // Add delay after each image to avoid rate limiting (except last one)
+            if (i < playersToExport.length - 1) {
+              await sleep(1000); // 1 second delay between each image
+            }
+          } catch (error) {
+            console.error('Error loading image for', player.name, error);
+            imageCache[player.id] = null;
+          }
+        }
+      }
+
+      toast.info('Generating PDF...');
+
+      // Function to draw header on each page
+      const drawHeader = () => {
+        let currentX = margin;
+
+        // Add PowerAuction logo (left side)
+        if (logoData) {
+          const logoWidth = 18;
+          const logoHeight = 14;
+          doc.addImage(logoData, 'PNG', currentX, 5, logoWidth, logoHeight);
+          currentX += logoWidth + 3;
+        }
+
+        // Add event logo (after PowerAuction logo)
+        if (eventLogoData) {
+          const eventLogoWidth = 16;
+          const eventLogoHeight = 14;
+          doc.addImage(eventLogoData, 'PNG', currentX, 5, eventLogoWidth, eventLogoHeight);
+          currentX += eventLogoWidth + 5;
+        }
+
+        // Add titles
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(102, 45, 145); // Purple color
+        const mainTitle = event?.name || 'PowerAuction';
+        doc.text(mainTitle, currentX, 10, { align: 'left' });
+
+        // Add subtitle
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text('Player Cards', currentX, 15, { align: 'left' });
+
+        // Add date on the right side
+        const dateText = new Date().toLocaleDateString();
+        doc.setFontSize(8);
+        doc.setTextColor(120, 120, 120);
+        doc.text(dateText, pageWidth - margin, 12, { align: 'right' });
+
+        // Add horizontal line below header
+        doc.setDrawColor(200, 200, 200);
+        doc.setLineWidth(0.5);
+        doc.line(margin, headerHeight - 2, pageWidth - margin, headerHeight - 2);
+      };
+
+      // Draw header on first page
+      drawHeader();
+
+      for (let i = 0; i < playersToExport.length; i++) {
+        const player = playersToExport[i];
+
+        // Calculate position on page
+        const cardIndex = i % (cardsPerRow * rowsPerPage);
+        const row = Math.floor(cardIndex / cardsPerRow);
+        const col = cardIndex % cardsPerRow;
+
+        // Add new page if needed
+        if (i > 0 && cardIndex === 0) {
+          doc.addPage();
+          drawHeader(); // Add header to new page
+        }
+
+        const x = margin + col * cardWidth;
+        const y = marginTop + row * (cardHeight + gapBetweenRows); // Use fixed height + gap
+
+        // Draw card border with rounded corners
+        doc.setDrawColor(150, 150, 150);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2);
+
+        // Add player photo if available
+        const photoY = y + cardPadding + 1;
+        const photoSize = 18; // 18mm square photo
+        const photoX = x + (cardWidth - photoSize) / 2;
+
+        // Use cached image or draw placeholder
+        const imageData = imageCache[player.id];
+        if (imageData) {
+          // Add subtle shadow effect
+          doc.setFillColor(240, 240, 240);
+          doc.roundedRect(photoX + 0.5, photoY + 0.5, photoSize, photoSize, 1, 1, 'F');
+          doc.addImage(imageData, 'JPEG', photoX, photoY, photoSize, photoSize);
+        } else {
+          // Draw placeholder circle with initial
+          doc.setFillColor(128, 90, 213); // Purple
+          doc.circle(photoX + photoSize / 2, photoY + photoSize / 2, photoSize / 2, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(13);
+          doc.setFont(undefined, 'bold');
+          doc.text(player.name.charAt(0).toUpperCase(), photoX + photoSize / 2, photoY + photoSize / 2 + 2.8, { align: 'center' });
+        }
+
+        // Player name
+        const textStartY = photoY + photoSize + 4;
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(8.5);
+        doc.setFont(undefined, 'bold');
+        const nameLines = doc.splitTextToSize(player.name, cardWidth - 2 * cardPadding);
+        doc.text(nameLines, x + cardWidth / 2, textStartY, { align: 'center', maxWidth: cardWidth - 2 * cardPadding });
+
+        // Position
+        let currentY = textStartY + (nameLines.length * 3);
+        if (player.position) {
+          doc.setFontSize(7);
+          doc.setFont(undefined, 'normal');
+          doc.setTextColor(80, 80, 80);
+          doc.text(player.position, x + cardWidth / 2, currentY, { align: 'center', maxWidth: cardWidth - 2 * cardPadding });
+          currentY += 2.5;
+        }
+
+        // Specialty
+        if (player.specialty) {
+          doc.setFontSize(7);
+          doc.setFont(undefined, 'italic');
+          doc.setTextColor(100, 100, 100);
+          const specialtyLines = doc.splitTextToSize(player.specialty, cardWidth - 2 * cardPadding);
+          doc.text(specialtyLines, x + cardWidth / 2, currentY, { align: 'center', maxWidth: cardWidth - 2 * cardPadding });
+          currentY += (specialtyLines.length * 2.5);
+        }
+
+        // Mobile Number
+        if (player.contact_number) {
+          doc.setFontSize(6.5);
+          doc.setFont(undefined, 'normal');
+          doc.setTextColor(60, 60, 60);
+          doc.text(player.contact_number, x + cardWidth / 2, currentY, { align: 'center', maxWidth: cardWidth - 2 * cardPadding });
+        }
+      }
+
+      // Save the PDF
+      const isFiltered = searchQuery || selectedCategory !== 'all' || selectedStatus !== 'all';
+      const statusText = selectedStatus !== 'all' ? `-${selectedStatus}` : '';
+      const fileName = `players${statusText}-${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+
+      const filterMessage = isFiltered ? ' (filtered results)' : '';
+      toast.success(`PDF generated with ${playersToExport.length} players${filterMessage}!`);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF');
+    }
+  };
 
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
@@ -272,178 +574,200 @@ const PlayerManagement = () => {
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl font-bold text-white">PowerAuctions - Player Management</h1>
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            console.log('Player Dialog state changing to:', open);
-            setIsDialogOpen(open);
-          }}>
-            <DialogTrigger asChild>
-              <Button
-                className="bg-white text-purple-700 hover:bg-white/90"
-                onClick={() => {
-                  console.log('Add Player button clicked');
-                  setIsDialogOpen(true);
-                }}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Player
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingPlayer ? 'Edit Player' : 'Add New Player'}
-                </DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="name">Player Name *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => handleChange('name', e.target.value)}
-                      required
-                    />
+          <div className="flex gap-3">
+            <Button
+              onClick={generatePlayerCardsPDF}
+              className="bg-green-600 text-white hover:bg-green-700"
+              disabled={players.length === 0}
+              title={filteredPlayers.length < players.length ? `Export ${filteredPlayers.length} filtered players` : `Export all ${players.length} players`}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export PDF {filteredPlayers.length < players.length && `(${filteredPlayers.length})`}
+            </Button>
+            <Dialog open={isDialogOpen} onOpenChange={(open) => {
+              console.log('Player Dialog state changing to:', open);
+              setIsDialogOpen(open);
+            }}>
+              <DialogTrigger asChild>
+                <Button
+                  className="bg-white text-purple-700 hover:bg-white/90"
+                  onClick={() => {
+                    console.log('Add Player button clicked');
+                    setIsDialogOpen(true);
+                  }}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Player
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>
+                    {editingPlayer ? 'Edit Player' : 'Add New Player'}
+                  </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="name">Player Name *</Label>
+                      <Input
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) => handleChange('name', e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="category">Category *</Label>
+                      <Select value={formData.category_id} onValueChange={(value) => handleChange('category_id', value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((category) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="category">Category *</Label>
-                    <Select value={formData.category_id} onValueChange={(value) => handleChange('category_id', value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="base_price">Base Price (₹) *</Label>
-                    <Input
-                      id="base_price"
-                      type="number"
-                      value={formData.base_price}
-                      onChange={(e) => handleChange('base_price', e.target.value)}
-                      required
-                    />
-                    {formData.category_id && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Category base price: {getCategoryBasePrice(formData.category_id)}
-                      </p>
-                    )}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="base_price">Base Price (₹) *</Label>
+                      <Input
+                        id="base_price"
+                        type="number"
+                        value={formData.base_price}
+                        onChange={(e) => handleChange('base_price', e.target.value)}
+                        required
+                      />
+                      {formData.category_id && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Category base price: {getCategoryBasePrice(formData.category_id)}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="age">Age</Label>
+                      <Input
+                        id="age"
+                        type="number"
+                        value={formData.age}
+                        onChange={(e) => handleChange('age', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="position">Position</Label>
+                      <Input
+                        id="position"
+                        value={formData.position}
+                        onChange={(e) => handleChange('position', e.target.value)}
+                        placeholder="e.g., Batsman, Forward"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="age">Age</Label>
-                    <Input
-                      id="age"
-                      type="number"
-                      value={formData.age}
-                      onChange={(e) => handleChange('age', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="position">Position</Label>
-                    <Input
-                      id="position"
-                      value={formData.position}
-                      onChange={(e) => handleChange('position', e.target.value)}
-                      placeholder="e.g., Batsman, Forward"
-                    />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="specialty">Specialty</Label>
-                    <Input
-                      id="specialty"
-                      value={formData.specialty}
-                      onChange={(e) => handleChange('specialty', e.target.value)}
-                      placeholder="e.g., Right-hand bat, Left-foot"
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="specialty">Specialty</Label>
+                      <Input
+                        id="specialty"
+                        value={formData.specialty}
+                        onChange={(e) => handleChange('specialty', e.target.value)}
+                        placeholder="e.g., Right-hand bat, Left-foot"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="previous_team">Previous Team</Label>
+                      <Input
+                        id="previous_team"
+                        value={formData.previous_team}
+                        onChange={(e) => handleChange('previous_team', e.target.value)}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="previous_team">Previous Team</Label>
-                    <Input
-                      id="previous_team"
-                      value={formData.previous_team}
-                      onChange={(e) => handleChange('previous_team', e.target.value)}
-                    />
-                  </div>
-                </div>
 
-                <div>
-                  <Label htmlFor="cricheroes_link">CricHeroes Profile Link</Label>
-                  <Input
-                    id="cricheroes_link"
-                    value={formData.cricheroes_link}
-                    onChange={(e) => handleChange('cricheroes_link', e.target.value)}
-                    placeholder="https://cricheroes.com/profile/..."
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="cricheroes_link">CricHeroes Profile Link</Label>
+                      <Input
+                        id="cricheroes_link"
+                        value={formData.cricheroes_link}
+                        onChange={(e) => handleChange('cricheroes_link', e.target.value)}
+                        placeholder="https://cricheroes.com/profile/..."
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="contact_number">Mobile Number</Label>
+                      <Input
+                        id="contact_number"
+                        value={formData.contact_number}
+                        onChange={(e) => handleChange('contact_number', e.target.value)}
+                        placeholder="e.g., +91 98765 43210"
+                      />
+                    </div>
+                  </div>
+
+                  <ImageUpload
+                    label="Player Photo"
+                    value={formData.photo_url}
+                    onChange={(url) => handleChange('photo_url', url)}
+                    placeholder="Upload player photo or enter URL"
+                    sampleType={{ type: 'players', subtype: 'photos' }}
                   />
-                </div>
 
-                <ImageUpload
-                  label="Player Photo"
-                  value={formData.photo_url}
-                  onChange={(url) => handleChange('photo_url', url)}
-                  placeholder="Upload player photo or enter URL"
-                  sampleType={{ type: 'players', subtype: 'photos' }}
-                />
-
-                <div>
-                  <Label>Player Statistics</Label>
-                  <div className="grid grid-cols-3 gap-4 mt-2">
-                    <div>
-                      <Label htmlFor="matches">Matches</Label>
-                      <Input
-                        id="matches"
-                        type="number"
-                        value={formData.stats.matches}
-                        onChange={(e) => handleChange('stats.matches', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="runs">Runs/Goals</Label>
-                      <Input
-                        id="runs"
-                        type="number"
-                        value={formData.stats.runs || formData.stats.goals}
-                        onChange={(e) => handleChange('stats.runs', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="wickets">Wickets/Assists</Label>
-                      <Input
-                        id="wickets"
-                        type="number"
-                        value={formData.stats.wickets || formData.stats.assists}
-                        onChange={(e) => handleChange('stats.wickets', e.target.value)}
-                      />
+                  <div>
+                    <Label>Player Statistics</Label>
+                    <div className="grid grid-cols-3 gap-4 mt-2">
+                      <div>
+                        <Label htmlFor="matches">Matches</Label>
+                        <Input
+                          id="matches"
+                          type="number"
+                          value={formData.stats.matches}
+                          onChange={(e) => handleChange('stats.matches', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="runs">Runs/Goals</Label>
+                        <Input
+                          id="runs"
+                          type="number"
+                          value={formData.stats.runs || formData.stats.goals}
+                          onChange={(e) => handleChange('stats.runs', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="wickets">Wickets/Assists</Label>
+                        <Input
+                          id="wickets"
+                          type="number"
+                          value={formData.stats.wickets || formData.stats.assists}
+                          onChange={(e) => handleChange('stats.wickets', e.target.value)}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex justify-end space-x-2 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={loading}>
-                    {loading ? 'Saving...' : editingPlayer ? 'Update Player' : 'Add Player'}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <div className="flex justify-end space-x-2 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={loading}>
+                      {loading ? 'Saving...' : editingPlayer ? 'Update Player' : 'Add Player'}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Search and Filter Section */}
@@ -482,14 +806,31 @@ const PlayerManagement = () => {
                 </Select>
               </div>
 
+              {/* Status Filter */}
+              <div className="md:w-48">
+                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="available">Available</SelectItem>
+                    <SelectItem value="current">Current</SelectItem>
+                    <SelectItem value="sold">Sold</SelectItem>
+                    <SelectItem value="unsold">Unsold</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Clear Filters Button */}
-              {(searchQuery || selectedCategory !== 'all') && (
+              {(searchQuery || selectedCategory !== 'all' || selectedStatus !== 'all') && (
                 <Button
                   variant="outline"
                   className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                   onClick={() => {
                     setSearchQuery('');
                     setSelectedCategory('all');
+                    setSelectedStatus('all');
                   }}
                 >
                   Clear Filters
@@ -498,7 +839,7 @@ const PlayerManagement = () => {
             </div>
 
             {/* Results Count */}
-            {(searchQuery || selectedCategory !== 'all') && (
+            {(searchQuery || selectedCategory !== 'all' || selectedStatus !== 'all') && (
               <div className="mt-3 text-white/80 text-sm">
                 Showing {filteredPlayers.length} of {players.length} players
               </div>
@@ -548,14 +889,46 @@ const PlayerManagement = () => {
                 {filteredPlayers.map((player) => (
                   <Card key={player.id} className="bg-white/10 border-white/20">
                     <CardContent className="p-4">
-                      {player.photo_url && (
+                      {player.photo_url ? (
                         <div className="flex justify-center mb-4">
-                          <img
-                            src={player.photo_url}
-                            alt={`${player.name} photo`}
-                            className="w-20 h-20 rounded-xl object-cover border-2 border-white/30 shadow-lg bg-white/10 p-1"
-                            onError={(e) => { e.target.style.display = 'none'; }}
-                          />
+                          <div className="relative w-20 h-20">
+                            <img
+                              src={convertGoogleDriveUrl(player.photo_url)}
+                              alt={`${player.name} photo`}
+                              className="w-20 h-20 rounded-xl object-cover border-2 border-white/30 shadow-lg bg-white/10 p-1"
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                // Try alternative URL format
+                                const fileIdMatch = player.photo_url.match(/id=([a-zA-Z0-9_-]+)/);
+                                if (fileIdMatch && !e.target.dataset.retried) {
+                                  e.target.dataset.retried = 'true';
+                                  e.target.src = `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
+                                } else if (fileIdMatch && !e.target.dataset.retriedSecond) {
+                                  e.target.dataset.retriedSecond = 'true';
+                                  e.target.src = `https://drive.google.com/uc?export=view&id=${fileIdMatch[1]}`;
+                                } else {
+                                  // Show placeholder
+                                  e.target.style.display = 'none';
+                                  if (e.target.nextElementSibling) {
+                                    e.target.nextElementSibling.style.display = 'flex';
+                                  }
+                                }
+                              }}
+                            />
+                            <div
+                              className="w-20 h-20 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-bold text-2xl border-2 border-white/30 shadow-lg"
+                              style={{ display: 'none' }}
+                            >
+                              {player.name.charAt(0).toUpperCase()}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex justify-center mb-4">
+                          <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center text-white font-bold text-2xl border-2 border-white/30 shadow-lg">
+                            {player.name.charAt(0).toUpperCase()}
+                          </div>
                         </div>
                       )}
                       <div className="mb-3">
@@ -591,6 +964,7 @@ const PlayerManagement = () => {
                         {player.position && <div>Position: {player.position}</div>}
                         {player.age && <div>Age: {player.age}</div>}
                         {player.previous_team && <div>Previous: {player.previous_team}</div>}
+                        {player.contact_number && <div>Mobile: {player.contact_number}</div>}
 
                         {/* Player Status */}
                         <div className="flex items-center">

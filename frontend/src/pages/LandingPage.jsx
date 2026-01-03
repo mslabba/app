@@ -218,7 +218,7 @@ const LandingPage = () => {
       </section>
 
       {/* Features Section */}
-      <section className="py-20 px-6 bg-black/20 relative">
+      <section id="features" className="py-20 px-6 bg-black/20 relative">
         {/* Sports equipment background */}
         <div className="absolute inset-0 opacity-5">
           <div className="absolute top-20 left-10 text-6xl">🏏</div>
@@ -493,10 +493,9 @@ const LandingPage = () => {
             <div>
               <h4 className="text-white font-semibold mb-4">Product</h4>
               <ul className="space-y-2 text-white/60">
-                <li><a href="#" className="hover:text-white transition-colors">Features</a></li>
+                <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">Demo</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">API</a></li>
               </ul>
             </div>
 

@@ -56,6 +56,7 @@ const AuctionControl = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [filteredPlayers, setFilteredPlayers] = useState([]);
   const [showFinalizeBidModal, setShowFinalizeBidModal] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
   const [finalBidAmount, setFinalBidAmount] = useState('');
   const [selectedTeamForSale, setSelectedTeamForSale] = useState('');
   const [showSoldStamp, setShowSoldStamp] = useState(false);
@@ -78,19 +79,25 @@ const AuctionControl = () => {
     setSelectedTeamForSale(teamId);
   }, []);
 
+  // Initial data fetch - runs once on mount
   useEffect(() => {
     if (eventId && currentUser && token && !authLoading) {
       fetchData();
-      // Set up optimized polling for real-time updates
-      const interval = setInterval(() => {
-        // Only fetch if we're not showing the SOLD stamp and auction is active
-        if (!preventDataRefresh && (auctionState?.status === 'in_progress' || timerActive)) {
-          fetchAuctionState();
-        }
-      }, 5000); // Reduced from 2000ms to 5000ms (60% reduction in API calls)
-      return () => clearInterval(interval);
     }
-  }, [eventId, currentUser, token, authLoading, preventDataRefresh, auctionState?.status, timerActive]);
+  }, [eventId, currentUser, token, authLoading]);
+
+  // Separate polling effect with proper cleanup
+  useEffect(() => {
+    if (!eventId || !currentUser || !token || authLoading) return;
+
+    const interval = setInterval(() => {
+      if (!preventDataRefresh) {
+        fetchAuctionState();
+      }
+    }, 10000); // Increased to 10 seconds - reduces API calls by 50%
+
+    return () => clearInterval(interval);
+  }, [eventId, currentUser, token, authLoading, preventDataRefresh]);
 
   useEffect(() => {
     let interval;
@@ -111,15 +118,22 @@ const AuctionControl = () => {
 
   const fetchData = async () => {
     try {
+      setLoading(true);
+      // Fetch critical data in parallel
       await Promise.all([
         fetchEvent(),
         fetchAuctionState(),
-        fetchPlayers(),
         fetchTeams(),
-        fetchSponsors(),
         fetchCategories()
       ]);
-      // Fetch safe bid summary after getting current auction state
+
+      // Fetch players separately (only available ones)
+      await fetchPlayers();
+
+      // Fetch less critical data
+      await fetchSponsors();
+
+      // Fetch safe bid summary after auction state is loaded
       const auctionResponse = await axios.get(`${API}/auction/state/${eventId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -128,6 +142,8 @@ const AuctionControl = () => {
     } catch (error) {
       console.error('Failed to fetch data:', error);
       toast.error('Failed to load auction data');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -165,11 +181,21 @@ const AuctionControl = () => {
       if (!currentUser || !token) {
         return;
       }
-      const response = await axios.get(`${API}/auctions/${eventId}/players`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setPlayers(response.data);
-      setAvailablePlayers(response.data.filter(p => p.status === 'available'));
+      // Fetch ALL players without limit to ensure we get all 300+ players
+      // Backend pagination will handle performance
+      const response = await axios.get(
+        `${API}/auctions/${eventId}/players`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      const fetchedPlayers = response.data;
+      console.log(`Fetched ${fetchedPlayers.length} total players`);
+      setPlayers(fetchedPlayers);
+      // Filter for only available players in the dropdown
+      const available = fetchedPlayers.filter(p => p.status === 'available');
+      console.log(`${available.length} players are available`);
+      setAvailablePlayers(available);
     } catch (error) {
       console.error('Failed to fetch players:', error);
     }
@@ -1046,10 +1072,14 @@ const AuctionControl = () => {
 
                   {/* Player Image with Team Color Frame */}
                   <div className="relative">
-                    <div className={`w-full h-80 rounded-2xl flex items-center justify-center relative overflow-hidden shadow-2xl ${currentPlayer.status === 'sold' && currentTeam ?
-                      'ring-4 ring-green-400 shadow-green-400/50' :
-                      'bg-gradient-to-br from-purple-500 to-blue-600'
-                      }`}>
+                    <div
+                      className={`w-full h-80 rounded-2xl flex items-center justify-center relative overflow-hidden shadow-2xl cursor-pointer transition-transform hover:scale-105 ${currentPlayer.status === 'sold' && currentTeam ?
+                        'ring-4 ring-green-400 shadow-green-400/50' :
+                        'bg-gradient-to-br from-purple-500 to-blue-600'
+                        }`}
+                      onClick={() => setShowImageModal(true)}
+                      title="Click to view full image"
+                    >
                       {currentPlayer.photo_url ? (
                         <img
                           src={currentPlayer.photo_url}
@@ -1369,6 +1399,45 @@ const AuctionControl = () => {
             </div>
           </div>
         </div>
+
+        {/* Image Modal for Fullscreen Photo View */}
+        {showImageModal && currentPlayer?.photo_url && (
+          <div
+            className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-8"
+            onClick={() => setShowImageModal(false)}
+          >
+            <div className="relative max-w-6xl max-h-full">
+              {/* Close Button */}
+              <button
+                onClick={() => setShowImageModal(false)}
+                className="absolute -top-4 -right-4 w-12 h-12 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-2xl font-bold shadow-2xl transition-all hover:scale-110 z-10"
+                title="Close"
+              >
+                ×
+              </button>
+
+              {/* Full Image */}
+              <img
+                src={currentPlayer.photo_url}
+                alt={currentPlayer.name}
+                className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+
+              {/* Player Name Overlay */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6 rounded-b-2xl">
+                <h2 className="text-4xl font-bold text-white text-center">
+                  {currentPlayer.name}
+                </h2>
+                {currentPlayer.position && (
+                  <p className="text-xl text-cyan-300 text-center mt-2">
+                    {currentPlayer.position}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Floating Menu */}
         <FloatingMenu />

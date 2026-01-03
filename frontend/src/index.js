@@ -4,9 +4,29 @@ import './index.css';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 
+// Suppress ResizeObserver errors globally (must be before any other code)
+const resizeObserverErrSuppressor = () => {
+  const resizeObserverErr = window.console.error;
+  window.console.error = (...args) => {
+    if (args[0] && typeof args[0] === 'string' && args[0].includes('ResizeObserver loop')) {
+      return;
+    }
+    resizeObserverErr(...args);
+  };
+};
+
+resizeObserverErrSuppressor();
+
 // Suppress extension-related errors and DOM manipulation errors
 window.addEventListener('error', (event) => {
   if (event.filename && event.filename.includes('extension')) {
+    event.preventDefault();
+    return false;
+  }
+
+  // Suppress ResizeObserver errors (harmless, occur during layout calculations)
+  if (event.message && event.message.includes('ResizeObserver loop')) {
+    event.stopImmediatePropagation();
     event.preventDefault();
     return false;
   }

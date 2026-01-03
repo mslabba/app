@@ -20,12 +20,16 @@ import {
   XCircle,
   Clock,
   Filter,
-  Download
+  Download,
+  Upload,
+  FileSpreadsheet,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import FloatingMenu from '@/components/FloatingMenu';
 import { generateRegistrationsPDF } from '@/utils/pdfGenerator';
+import { convertGoogleDriveUrl } from '@/utils/imageUtils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -43,6 +47,12 @@ const PlayerRegistrationManagement = () => {
   const [viewingRegistration, setViewingRegistration] = useState(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('pending');
+  const [isBulkUploadDialogOpen, setIsBulkUploadDialogOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadResults, setUploadResults] = useState(null);
+  const [selectedPlayers, setSelectedPlayers] = useState([]);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -194,6 +204,152 @@ const PlayerRegistrationManagement = () => {
     } catch (error) {
       console.error('Rejection failed:', error);
       toast.error('Failed to reject registration');
+    }
+  };
+
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+        toast.error('Please upload an Excel file (.xlsx or .xls)');
+        return;
+      }
+      setUploadFile(file);
+      setUploadResults(null);
+    }
+  };
+
+  const handleBulkUpload = async () => {
+    if (!uploadFile) {
+      toast.error('Please select a file to upload');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+
+      const response = await axios.post(
+        `${API}/auctions/${eventId}/bulk-upload-players`,
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+
+      setUploadResults(response.data);
+
+      if (response.data.created_count > 0) {
+        toast.success(`Successfully uploaded ${response.data.created_count} players!`);
+        fetchData(); // Refresh the player list
+      }
+
+      if (response.data.error_count > 0) {
+        toast.warning(`${response.data.error_count} rows had errors. Check the results below.`);
+      }
+
+      // Clear the file input
+      setUploadFile(null);
+    } catch (error) {
+      console.error('Bulk upload failed:', error);
+      toast.error(error.response?.data?.detail || 'Failed to upload players');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const downloadSampleTemplate = () => {
+    // Create sample data
+    const sampleData = [
+      {
+        name: 'John Doe',
+        phone: '9876543210',
+        email: 'john@example.com',
+        position: 'Forward',
+        specialty: 'Striker',
+        photo_url: 'https://drive.google.com/open?id=1OO-3zEgPBsOhDrfLhynaB2Zz6cwus1Nu',
+        age: 25,
+        previous_team: 'Team A'
+      },
+      {
+        name: 'Jane Smith',
+        phone: '9876543211',
+        email: 'jane@example.com',
+        position: 'Midfielder',
+        specialty: 'Playmaker',
+        photo_url: '',
+        age: 23,
+        previous_team: ''
+      }
+    ];
+
+    // Convert to CSV format (Excel can open CSV files)
+    const headers = Object.keys(sampleData[0]).join(',');
+    const rows = sampleData.map(row => Object.values(row).join(','));
+    const csv = [headers, ...rows].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'player_upload_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    toast.success('Template downloaded! You can open it in Excel.');
+  };
+
+  const handlePlayerSelect = (playerId, checked) => {
+    if (checked) {
+      setSelectedPlayers([...selectedPlayers, playerId]);
+    } else {
+      setSelectedPlayers(selectedPlayers.filter(id => id !== playerId));
+    }
+  };
+
+  const handleSelectAllPlayers = (checked) => {
+    if (checked) {
+      const allPlayerIds = players.map(player => player.id);
+      setSelectedPlayers(allPlayerIds);
+    } else {
+      setSelectedPlayers([]);
+    }
+  };
+
+  const handleBulkDeletePlayers = async () => {
+    if (selectedPlayers.length === 0) {
+      toast.error('No players selected');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete ${selectedPlayers.length} player(s)? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      const deletePromises = selectedPlayers.map(playerId =>
+        axios.delete(`${API}/players/${playerId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      );
+
+      await Promise.all(deletePromises);
+      toast.success(`Successfully deleted ${selectedPlayers.length} player(s)`);
+      setSelectedPlayers([]);
+      fetchData(); // Refresh the player list
+    } catch (error) {
+      console.error('Failed to delete players:', error);
+      toast.error('Failed to delete some players');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -360,9 +516,12 @@ const PlayerRegistrationManagement = () => {
 
                         {registration.photo_url && (
                           <img
-                            src={registration.photo_url}
+                            src={convertGoogleDriveUrl(registration.photo_url)}
                             alt={registration.name}
                             className="w-16 h-16 rounded-full object-cover mx-auto mb-3"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
                           />
                         )}
 
@@ -443,11 +602,20 @@ const PlayerRegistrationManagement = () => {
 
                         {registration.photo_url && (
                           <img
-                            src={registration.photo_url}
+                            src={convertGoogleDriveUrl(registration.photo_url)}
                             alt={registration.name}
                             className="w-16 h-16 rounded-full object-cover mx-auto mb-3"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
                           />
                         )}
+
+                        <div className="text-sm text-white/90 mb-3">
+                          {registration.email && <div>📧 {registration.email}</div>}
+                          {registration.contact_number && <div>📱 {registration.contact_number}</div>}
+                          {registration.previous_team && <div>🏆 {registration.previous_team}</div>}
+                        </div>
 
                         <Button
                           size="sm"
@@ -477,23 +645,259 @@ const PlayerRegistrationManagement = () => {
           <TabsContent value="players">
             <Card className="glass border-white/20">
               <CardHeader>
-                <CardTitle className="text-white flex items-center">
-                  <Users className="w-5 h-5 mr-2" />
-                  Active Players
-                </CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-white flex items-center">
+                    <Users className="w-5 h-5 mr-2" />
+                    Active Players
+                  </CardTitle>
+                  <Dialog open={isBulkUploadDialogOpen} onOpenChange={setIsBulkUploadDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Bulk Upload Players
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle className="flex items-center text-xl">
+                          <Upload className="w-6 h-6 mr-2" />
+                          Bulk Upload Players from Excel
+                        </DialogTitle>
+                      </DialogHeader>
+
+                      <div className="space-y-6 py-4">
+                        {/* Instructions */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <h3 className="font-semibold text-blue-900 mb-2">📋 Excel Format Requirements:</h3>
+                          <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                            <li><strong>Required columns:</strong> name, phone, email, position, specialty</li>
+                            <li><strong>Optional columns:</strong> photo_url, age, previous_team, category_id, base_price</li>
+                            <li><strong>Photo URL:</strong> Can be Google Drive link (e.g., https://drive.google.com/open?id=FILE_ID)</li>
+                            <li>If category_id or base_price is not provided, default category will be used</li>
+                          </ul>
+                        </div>
+
+                        {/* Download Template Button */}
+                        <div className="flex justify-center">
+                          <Button
+                            variant="outline"
+                            onClick={downloadSampleTemplate}
+                            className="w-full max-w-md"
+                          >
+                            <FileSpreadsheet className="w-4 h-4 mr-2" />
+                            Download Sample Template
+                          </Button>
+                        </div>
+
+                        {/* File Upload */}
+                        <div className="space-y-2">
+                          <Label htmlFor="excel-file" className="text-base font-semibold">
+                            Upload Excel File
+                          </Label>
+                          <Input
+                            id="excel-file"
+                            type="file"
+                            accept=".xlsx,.xls"
+                            onChange={handleFileChange}
+                            disabled={isUploading}
+                            className="cursor-pointer"
+                          />
+                          {uploadFile && (
+                            <p className="text-sm text-green-600 flex items-center">
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              Selected: {uploadFile.name}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Upload Button */}
+                        <Button
+                          onClick={handleBulkUpload}
+                          disabled={!uploadFile || isUploading}
+                          className="w-full"
+                        >
+                          {isUploading ? (
+                            <>
+                              <Clock className="w-4 h-4 mr-2 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4 mr-2" />
+                              Upload Players
+                            </>
+                          )}
+                        </Button>
+
+                        {/* Upload Results */}
+                        {uploadResults && (
+                          <div className="mt-6 space-y-4">
+                            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                              <h3 className="font-semibold text-gray-900 mb-3">Upload Results</h3>
+
+                              <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div className="bg-green-50 border border-green-200 rounded p-3 text-center">
+                                  <p className="text-2xl font-bold text-green-700">{uploadResults.created_count}</p>
+                                  <p className="text-sm text-green-600">Players Created</p>
+                                </div>
+                                <div className="bg-red-50 border border-red-200 rounded p-3 text-center">
+                                  <p className="text-2xl font-bold text-red-700">{uploadResults.error_count}</p>
+                                  <p className="text-sm text-red-600">Errors</p>
+                                </div>
+                              </div>
+
+                              {uploadResults.errors && uploadResults.errors.length > 0 && (
+                                <div className="mt-4">
+                                  <h4 className="font-semibold text-red-800 mb-2">Errors:</h4>
+                                  <div className="max-h-40 overflow-y-auto space-y-2">
+                                    {uploadResults.errors.map((error, index) => (
+                                      <div key={index} className="bg-red-50 border border-red-200 rounded p-2 text-sm">
+                                        <p className="font-medium text-red-900">Row {error.row}: {error.name}</p>
+                                        <p className="text-red-700">{error.error}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {uploadResults.created_players && uploadResults.created_players.length > 0 && (
+                                <div className="mt-4">
+                                  <h4 className="font-semibold text-green-800 mb-2">
+                                    Successfully Created Players ({uploadResults.created_players.length}):
+                                  </h4>
+                                  <div className="max-h-40 overflow-y-auto">
+                                    <ul className="text-sm text-gray-700 space-y-1">
+                                      {uploadResults.created_players.slice(0, 10).map((player, index) => (
+                                        <li key={index} className="flex items-center">
+                                          <CheckCircle className="w-3 h-3 mr-2 text-green-600" />
+                                          {player.name}
+                                        </li>
+                                      ))}
+                                      {uploadResults.created_players.length > 10 && (
+                                        <li className="text-gray-500 italic">
+                                          ... and {uploadResults.created_players.length - 10} more
+                                        </li>
+                                      )}
+                                    </ul>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </CardHeader>
               <CardContent>
+                {/* Bulk Actions Toolbar */}
+                {players.length > 0 && (
+                  <div className="mb-4 flex items-center justify-between bg-white/10 border-white/20 rounded-lg p-3">
+                    <div className="flex items-center space-x-4">
+                      <Checkbox
+                        id="select-all-players"
+                        checked={selectedPlayers.length === players.length && players.length > 0}
+                        onCheckedChange={handleSelectAllPlayers}
+                        className="border-white/40"
+                      />
+                      <label
+                        htmlFor="select-all-players"
+                        className="text-sm text-white font-medium cursor-pointer"
+                      >
+                        Select All ({selectedPlayers.length} of {players.length})
+                      </label>
+                    </div>
+                    {selectedPlayers.length > 0 && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleBulkDeletePlayers}
+                        disabled={isDeleting}
+                      >
+                        {isDeleting ? (
+                          <>
+                            <Clock className="w-4 h-4 mr-2 animate-spin" />
+                            Deleting...
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete Selected ({selectedPlayers.length})
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {players.map((player) => (
-                    <Card key={player.id} className="bg-white/95 backdrop-blur-sm border-white/30">
+                    <Card key={player.id} className="bg-white/95 backdrop-blur-sm border-white/30 relative">
                       <CardContent className="p-4">
+                        {/* Checkbox in top-right corner */}
+                        <div className="absolute top-2 right-2">
+                          <Checkbox
+                            id={`player-${player.id}`}
+                            checked={selectedPlayers.includes(player.id)}
+                            onCheckedChange={(checked) => handlePlayerSelect(player.id, checked)}
+                            className="border-gray-400"
+                          />
+                        </div>
+
                         <div className="text-center">
-                          {player.photo_url && (
-                            <img
-                              src={player.photo_url}
-                              alt={player.name}
-                              className="w-20 h-20 rounded-full object-cover mx-auto mb-3"
-                            />
+                          {player.photo_url ? (
+                            <div className="relative w-20 h-20 mx-auto mb-3">
+                              <img
+                                src={convertGoogleDriveUrl(player.photo_url)}
+                                alt={player.name}
+                                className="w-20 h-20 rounded-full object-cover"
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  console.log('Image load error for:', player.name, player.photo_url);
+                                  // Try alternative URL format
+                                  const fileIdMatch = player.photo_url.match(/id=([a-zA-Z0-9_-]+)/);
+                                  if (fileIdMatch && !e.target.dataset.retried) {
+                                    e.target.dataset.retried = 'true';
+                                    // Try lh3.googleusercontent.com format (better CORS support)
+                                    const altUrl = `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
+                                    console.log('Retrying with alternative URL:', altUrl);
+                                    e.target.src = altUrl;
+                                  } else if (fileIdMatch && !e.target.dataset.retriedSecond) {
+                                    // Try uc?export=view format
+                                    e.target.dataset.retriedSecond = 'true';
+                                    const altUrl2 = `https://drive.google.com/uc?export=view&id=${fileIdMatch[1]}`;
+                                    console.log('Retrying with second alternative URL:', altUrl2);
+                                    e.target.src = altUrl2;
+                                  } else {
+                                    // Show placeholder after all attempts
+                                    console.log('All formats failed, showing placeholder');
+                                    e.target.style.display = 'none';
+                                    if (e.target.nextElementSibling) {
+                                      e.target.nextElementSibling.style.display = 'flex';
+                                    }
+                                  }
+                                }}
+                                onLoad={() => {
+                                  console.log('Image loaded successfully:', player.name);
+                                }}
+                              />
+                              <div
+                                className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-bold text-2xl"
+                                style={{ display: 'none' }}
+                              >
+                                {player.name.charAt(0).toUpperCase()}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center text-white font-bold text-2xl mx-auto mb-3">
+                              {player.name.charAt(0).toUpperCase()}
+                            </div>
                           )}
                           <h3 className="font-semibold text-gray-800 mb-1">{player.name}</h3>
                           <p className="text-sm text-gray-600 mb-2">
@@ -590,9 +994,12 @@ const PlayerRegistrationManagement = () => {
                 <div className="flex items-center space-x-4">
                   {viewingRegistration.photo_url && (
                     <img
-                      src={viewingRegistration.photo_url}
+                      src={convertGoogleDriveUrl(viewingRegistration.photo_url)}
                       alt={viewingRegistration.name}
                       className="w-20 h-20 rounded-full object-cover"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
                     />
                   )}
                   <div>

@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, sendPasswordResetEmail } from 'firebase/auth';
 import { getFirestore, collection, doc, getDoc, setDoc, onSnapshot, query, where, orderBy, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
@@ -44,6 +44,11 @@ export const signInWithGoogle = async () => {
 export const logOut = async () => {
   if (!auth) throw new Error('Firebase not initialized');
   return signOut(auth);
+};
+
+export const resetPassword = async (email) => {
+  if (!auth) throw new Error('Firebase not initialized');
+  return sendPasswordResetEmail(auth, email);
 };
 
 // Firestore functions

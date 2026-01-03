@@ -5,14 +5,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Mail, Lock, Chrome } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
+import axios from 'axios';
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
   const navigate = useNavigate();
   const { isAuthenticated, isSuperAdmin, isEventOrganizer, loading: authLoading } = useAuth();
 
@@ -54,6 +61,36 @@ const LoginPage = () => {
       toast.error('Failed to login with Google');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    if (!resetEmail) {
+      toast.error('Please enter your email address');
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      // Use backend API for password reset
+      await axios.post(`${API}/auth/forgot-password`, null, {
+        params: { email: resetEmail }
+      });
+      toast.success('Password reset email sent! Check your inbox at ' + resetEmail);
+      setShowForgotPassword(false);
+      setResetEmail('');
+    } catch (error) {
+      console.error('Password reset error:', error);
+      if (error.response?.status === 404) {
+        toast.error('No account found with this email address');
+      } else if (error.code === 'auth/invalid-email') {
+        toast.error('Invalid email address');
+      } else {
+        toast.error('Failed to send password reset email');
+      }
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -111,7 +148,16 @@ const LoginPage = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-white">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password" className="text-white">Password</Label>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-sm text-white/70 hover:text-white underline transition-colors"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 w-5 h-5 text-white/60" />
                   <Input
@@ -167,6 +213,57 @@ const LoginPage = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Forgot Password Dialog */}
+        <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
+          <DialogContent className="bg-gradient-to-br from-purple-900/95 to-blue-900/95 border-white/20 text-white">
+            <DialogHeader>
+              <DialogTitle className="text-white">Reset Your Password</DialogTitle>
+              <DialogDescription className="text-white/70">
+                Enter your email address and we'll send you a link to reset your password.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="reset-email" className="text-white">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 w-5 h-5 text-white/60" />
+                  <Input
+                    id="reset-email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    required
+                    className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/40"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setResetEmail('');
+                  }}
+                  className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                  disabled={resetLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-white text-purple-700 hover:bg-white/90"
+                  disabled={resetLoading}
+                >
+                  {resetLoading ? 'Sending...' : 'Send Reset Link'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

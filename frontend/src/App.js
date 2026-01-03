@@ -7,6 +7,7 @@ import '@/App.css';
 import LandingPage from '@/pages/LandingPage';
 import LoginPage from '@/pages/LoginPage';
 import RegisterPage from '@/pages/RegisterPage';
+import ResetPasswordPage from '@/pages/ResetPasswordPage';
 import SuperAdminDashboard from '@/pages/SuperAdminDashboard';
 import TeamDashboard from '@/pages/TeamDashboard';
 import AuctionDisplay from '@/pages/AuctionDisplay';
@@ -108,12 +109,13 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/logout" element={<LogoutPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/promote-to-admin" element={<PromoteToAdmin />} />
             <Route path="/display/:eventId" element={<AuctionDisplay />} />
-            <Route path="/events/:eventId/register" element={<PublicPlayerRegistration />} />
+            <Route path="/auctions/:eventId/register" element={<PublicPlayerRegistration />} />
 
             {/* Public Team Statistics - No authentication required */}
             <Route path="/public/team/:teamId/stats" element={<PublicTeamStats />} />
