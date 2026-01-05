@@ -417,6 +417,70 @@ const LandingPage = () => {
         </div>
       </section>
 
+      {/* Clients Section */}
+      <section className="py-20 px-6 relative">
+        <div className="container mx-auto relative z-10">
+          <div className="text-center mb-16">
+            <div className="flex justify-center mb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-full flex items-center justify-center shadow-xl">
+                <Trophy className="w-8 h-8 text-white" />
+              </div>
+            </div>
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
+              Trusted by Industry Leaders
+            </h2>
+            <p className="text-xl text-white/70 max-w-2xl mx-auto">
+              Join 50+ sports organizations already using PowerAuctions. Here are some of them:
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-5xl mx-auto">
+            {[
+              {
+                url: "https://res.cloudinary.com/drok5rkeb/image/upload/v1762408512/events/logos/GSL2_LOGO_t0yjlu.png",
+                name: "GSL2"
+              },
+              {
+                url: "https://res.cloudinary.com/drok5rkeb/image/upload/v1763365644/events/logos/Screenshot_2025-11-17_at_1.16.12_PM_lnl8sq.png",
+                name: "Client 2"
+              },
+              {
+                url: "https://res.cloudinary.com/drok5rkeb/image/upload/v1763558369/events/logos/Screenshot_2025-11-19_at_6.48.21_PM_sfcu2c.png",
+                name: "Client 3"
+              },
+              {
+                url: "https://res.cloudinary.com/drok5rkeb/image/upload/v1765559630/events/logos/WhatsApp_Image_2025-12-12_at_10.36.15_PM_ve647g.jpg",
+                name: "Client 4"
+              }
+            ].map((client, index) => (
+              <div
+                key={index}
+                className="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 hover:bg-white/15 hover:border-white/30 transition-all duration-500 hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/20 group flex items-center justify-center relative overflow-hidden"
+              >
+                {/* Subtle shine effect on hover */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out"></div>
+
+                <img
+                  src={client.url}
+                  alt={client.name}
+                  className="w-full h-24 object-contain filter grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500 relative z-10"
+                  onError={(e) => {
+                    console.error('Client logo failed to load:', e.target.src);
+                    e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23ffffff20" width="100" height="100"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23ffffff60" font-size="12"%3ELogo%3C/text%3E%3C/svg%3E';
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="text-center mt-12">
+            <p className="text-white/50 text-sm">
+              ... and many more sports organizations worldwide
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-20 px-6 relative">
         {/* Sports celebration background */}

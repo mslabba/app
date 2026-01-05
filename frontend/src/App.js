@@ -29,6 +29,7 @@ import CloudinaryTest from '@/pages/CloudinaryTest';
 import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import TermsOfService from '@/pages/TermsOfService';
 import ContactPage from '@/pages/ContactPage';
+import UserManagement from '@/pages/UserManagement';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 // Dashboard redirect component for authenticated users
@@ -193,6 +194,14 @@ function App() {
               element={
                 <ProtectedRoute requireSuperAdmin>
                   <SponsorManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/users"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <UserManagement />
                 </ProtectedRoute>
               }
             />

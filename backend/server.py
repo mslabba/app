@@ -353,6 +353,148 @@ async def promote_to_admin(current_user: dict = Depends(get_current_user)):
         print(f"Error promoting user: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
+@api_router.get("/auth/users")
+async def get_all_users(current_user: dict = Depends(require_super_admin)):
+    """Get all registered users (Super Admin only)"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Fetch all users from Firestore, ordered by creation date (newest first)
+        users_ref = db.collection('users').order_by('created_at', direction=firestore.Query.DESCENDING).stream()
+        
+        users = []
+        for user_doc in users_ref:
+            user_data = user_doc.to_dict()
+            user_data['id'] = user_doc.id
+            users.append(user_data)
+        
+        logger.info(f"Retrieved {len(users)} users")
+        return users
+    except Exception as e:
+        logger.error(f"Error fetching users: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.put("/auth/users/{user_id}")
+async def update_user(user_id: str, user_data: dict, current_user: dict = Depends(require_super_admin)):
+    """Update user details (Super Admin only)"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        user_ref = db.collection('users').document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Update allowed fields
+        update_data = {}
+        if 'display_name' in user_data:
+            update_data['display_name'] = user_data['display_name']
+        if 'mobile_number' in user_data:
+            update_data['mobile_number'] = user_data['mobile_number']
+        if 'role' in user_data:
+            update_data['role'] = user_data['role']
+            # Update Firebase Auth custom claims
+            try:
+                firebase_auth.set_custom_user_claims(user_id, {'role': user_data['role']})
+            except Exception as claim_error:
+                logger.error(f"Error setting custom claims: {claim_error}")
+        
+        if update_data:
+            user_ref.update(update_data)
+            logger.info(f"Updated user {user_id}")
+        
+        return {"message": "User updated successfully", "updated_fields": list(update_data.keys())}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating user: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/auth/users/{user_id}")
+async def delete_user(user_id: str, current_user: dict = Depends(require_super_admin)):
+    """Delete user (Super Admin only)"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Prevent deleting yourself
+        if user_id == current_user['uid']:
+            raise HTTPException(status_code=400, detail="Cannot delete your own account")
+        
+        # Delete from Firestore
+        user_ref = db.collection('users').document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_ref.delete()
+        
+        # Try to delete from Firebase Auth (optional, may fail if user has special protections)
+        try:
+            firebase_auth.delete_user(user_id)
+            logger.info(f"Deleted user {user_id} from Firebase Auth")
+        except Exception as auth_error:
+            logger.warning(f"Could not delete user from Firebase Auth: {auth_error}")
+        
+        logger.info(f"Deleted user {user_id}")
+        return {"message": "User deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting user: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/auth/users/create")
+async def create_user_by_admin(user_data: UserCreate, current_user: dict = Depends(require_super_admin)):
+    """Create a new user (Super Admin only)"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Create user in Firebase Auth
+        try:
+            firebase_user = firebase_auth.create_user(
+                email=user_data.email,
+                password=user_data.password,
+                display_name=user_data.display_name
+            )
+        except Exception as auth_error:
+            error_msg = str(auth_error)
+            if 'EMAIL_EXISTS' in error_msg:
+                raise HTTPException(status_code=400, detail="Email already exists")
+            raise HTTPException(status_code=400, detail=f"Failed to create user: {error_msg}")
+        
+        # Set custom claims
+        try:
+            firebase_auth.set_custom_user_claims(firebase_user.uid, {'role': user_data.role.value})
+        except Exception as claim_error:
+            logger.error(f"Error setting custom claims: {claim_error}")
+        
+        # Create user document in Firestore
+        user_doc = {
+            'uid': firebase_user.uid,
+            'email': user_data.email,
+            'role': user_data.role.value,
+            'display_name': user_data.display_name,
+            'mobile_number': user_data.mobile_number,
+            'team_id': user_data.team_id,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        
+        db.collection('users').document(firebase_user.uid).set(user_doc)
+        
+        logger.info(f"Created new user: {firebase_user.uid} with role: {user_data.role.value}")
+        return {"message": "User created successfully", "uid": firebase_user.uid}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating user: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 # ============= EVENT ROUTES =============
 
 @api_router.post("/auctions", response_model=Event)

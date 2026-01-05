@@ -14,11 +14,14 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const SuperAdminDashboard = () => {
   const { token } = useAuth();
   const [events, setEvents] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [usersLoading, setUsersLoading] = useState(true);
 
   useEffect(() => {
     if (token) {
       fetchEvents();
+      fetchUsers();
     }
   }, [token]);
 
@@ -47,6 +50,30 @@ const SuperAdminDashboard = () => {
     }
   };
 
+  const fetchUsers = async () => {
+    if (!token) {
+      console.log('No token available yet');
+      setUsersLoading(false);
+      return;
+    }
+
+    try {
+      const response = await axios.get(`${API}/auth/users`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      setUsers(response.data);
+      console.log('Users loaded successfully:', response.data.length);
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+      console.error('Error response:', error.response?.data);
+      toast.error(error.response?.data?.detail || 'Failed to load users');
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
       <Navbar />
@@ -66,6 +93,22 @@ const SuperAdminDashboard = () => {
                     <h3 className="text-3xl font-bold text-white">{events.length}</h3>
                   </div>
                   <Calendar className="w-12 h-12 text-white/60" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link to="/admin/users">
+            <Card className="glass border-white/20 card-hover cursor-pointer">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-white/60 text-sm">Registered Users</p>
+                    <h3 className="text-3xl font-bold text-white">
+                      {usersLoading ? '...' : users.length}
+                    </h3>
+                  </div>
+                  <Users className="w-12 h-12 text-white/60" />
                 </div>
               </CardContent>
             </Card>
@@ -198,6 +241,75 @@ const SuperAdminDashboard = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Latest Registered Users */}
+        <Card className="glass border-white/20 mt-8" id="users-section">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center justify-between">
+              <span className="flex items-center">
+                <Users className="w-5 h-5 mr-2" />
+                Latest Registered Users
+              </span>
+              <span className="text-sm font-normal text-white/60">Total: {users.length}</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {usersLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+              </div>
+            ) : users.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-white/60">No users registered yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {users.slice(0, 10).map((user) => (
+                  <div
+                    key={user.id}
+                    className="flex items-center justify-between p-4 bg-white/10 rounded-lg border border-white/10 hover:bg-white/15 transition-all"
+                  >
+                    <div className="flex items-center flex-1">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center mr-3">
+                        <span className="text-white font-bold text-sm">
+                          {user.display_name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-white font-semibold">{user.display_name || 'Unknown User'}</h4>
+                        <p className="text-white/60 text-sm">{user.email}</p>
+                        {user.mobile_number && (
+                          <p className="text-white/50 text-xs">{user.mobile_number}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${user.role === 'super_admin' ? 'bg-red-500/20 text-red-300' :
+                        user.role === 'event_organizer' ? 'bg-purple-500/20 text-purple-300' :
+                          user.role === 'team_admin' ? 'bg-blue-500/20 text-blue-300' :
+                            'bg-gray-500/20 text-gray-300'
+                        }`}>
+                        {user.role?.replace('_', ' ').toUpperCase() || 'USER'}
+                      </span>
+                      {user.created_at && (
+                        <span className="text-white/50 text-xs">
+                          {new Date(user.created_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {users.length > 10 && (
+                  <div className="text-center pt-4">
+                    <p className="text-white/50 text-sm">
+                      Showing 10 of {users.length} users
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
