@@ -7,11 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Calendar, Settings, Share2, Copy } from 'lucide-react';
+import { Plus, Calendar, Settings, Share2, Copy, DollarSign, Users } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
 import FloatingMenu from '@/components/FloatingMenu';
+import { Switch } from '@/components/ui/switch';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -33,7 +34,13 @@ const EventManagement = () => {
       min_bid_increment: 50000,
       timer_duration: 60,
       rtm_cards_per_team: 2
-    }
+    },
+    payment_settings: {
+      collect_payment: false,
+      registration_fee: null
+    },
+    has_registration_limit: false,
+    registration_limit: null
   });
 
   useEffect(() => {
@@ -87,7 +94,13 @@ const EventManagement = () => {
       description: event.description || '',
       logo_url: event.logo_url || '',
       banner_url: event.banner_url || '',
-      rules: event.rules
+      rules: event.rules,
+      payment_settings: event.payment_settings || {
+        collect_payment: false,
+        registration_fee: null
+      },
+      has_registration_limit: event.has_registration_limit || false,
+      registration_limit: event.registration_limit || null
     });
     setIsDialogOpen(true);
   };
@@ -107,7 +120,13 @@ const EventManagement = () => {
         min_bid_increment: 50000,
         timer_duration: 60,
         rtm_cards_per_team: 2
-      }
+      },
+      payment_settings: {
+        collect_payment: false,
+        registration_fee: null
+      },
+      has_registration_limit: false,
+      registration_limit: null
     });
   };
 
@@ -253,6 +272,100 @@ const EventManagement = () => {
                     </div>
                   </div>
                 </div>
+
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold mb-3 flex items-center">
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Payment Settings
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="collect-payment">Collect Payment on Registration</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Enable payment collection for public player registration
+                        </p>
+                      </div>
+                      <Switch
+                        id="collect-payment"
+                        checked={formData.payment_settings.collect_payment}
+                        onCheckedChange={(checked) => setFormData({
+                          ...formData,
+                          payment_settings: {
+                            ...formData.payment_settings,
+                            collect_payment: checked
+                          }
+                        })}
+                      />
+                    </div>
+                    {formData.payment_settings.collect_payment && (
+                      <div className="space-y-2">
+                        <Label htmlFor="registration-fee">Registration Fee Amount</Label>
+                        <Input
+                          id="registration-fee"
+                          type="number"
+                          placeholder="Enter amount (e.g., 500)"
+                          value={formData.payment_settings.registration_fee || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            payment_settings: {
+                              ...formData.payment_settings,
+                              registration_fee: e.target.value ? parseInt(e.target.value) : null
+                            }
+                          })}
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Players will be required to pay this amount during registration
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold mb-3 flex items-center">
+                    <Users className="w-4 h-4 mr-2" />
+                    Registration Limit Settings
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="has-registration-limit">Limit Number of Registrations</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Set a maximum number of players that can register
+                        </p>
+                      </div>
+                      <Switch
+                        id="has-registration-limit"
+                        checked={formData.has_registration_limit}
+                        onCheckedChange={(checked) => setFormData({
+                          ...formData,
+                          has_registration_limit: checked,
+                          registration_limit: checked ? formData.registration_limit : null
+                        })}
+                      />
+                    </div>
+                    {formData.has_registration_limit && (
+                      <div className="space-y-2">
+                        <Label htmlFor="registration-limit">Maximum Registrations</Label>
+                        <Input
+                          id="registration-limit"
+                          type="number"
+                          min="1"
+                          placeholder="Enter maximum number of registrations (e.g., 100)"
+                          value={formData.registration_limit || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            registration_limit: e.target.value ? parseInt(e.target.value) : null
+                          })}
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Registration will close automatically when this limit is reached
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <Button type="submit" className="w-full" disabled={loading} data-testid="submit-event-button">
                   {loading ? (editingEvent ? 'Updating...' : 'Creating...') : (editingEvent ? 'Update Event' : 'Create Event')}
                 </Button>
@@ -341,6 +454,15 @@ const EventManagement = () => {
                       >
                         Registrations
                       </Button>
+                      {event.payment_settings?.collect_payment && (
+                        <Button
+                          size="sm"
+                          className="bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                          onClick={() => window.location.href = `/admin/events/${event.id}/payments`}
+                        >
+                          💰 Payments
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         className="bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30"

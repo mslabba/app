@@ -56,6 +56,10 @@ class EventRules(BaseModel):
     timer_duration: int = 60  # seconds per player
     rtm_cards_per_team: int = 2
 
+class PaymentSettings(BaseModel):
+    collect_payment: bool = False
+    registration_fee: Optional[int] = None  # Amount to collect
+
 class EventCreate(BaseModel):
     name: str
     date: str
@@ -63,6 +67,9 @@ class EventCreate(BaseModel):
     description: Optional[str] = None
     logo_url: Optional[str] = None
     banner_url: Optional[str] = None
+    payment_settings: Optional[PaymentSettings] = PaymentSettings()
+    has_registration_limit: bool = False
+    registration_limit: Optional[int] = None
 
 class Event(BaseModel):
     id: str
@@ -77,6 +84,9 @@ class Event(BaseModel):
     created_by: str
     organizer_name: Optional[str] = None
     organizer_mobile: Optional[str] = None
+    payment_settings: Optional[PaymentSettings] = PaymentSettings()
+    has_registration_limit: bool = False
+    registration_limit: Optional[int] = None
 
 # Category Models
 class CategoryCreate(BaseModel):
@@ -97,6 +107,68 @@ class Category(BaseModel):
     max_players: int
     color: str
     base_price: int  # Base price for this category
+
+# Bank Details Models
+class BankDetailsCreate(BaseModel):
+    bank_name: str
+    account_holder_name: str
+    account_number: str
+    ifsc_code: Optional[str] = None
+    swift_code: Optional[str] = None
+    branch_name: Optional[str] = None
+    upi_id: Optional[str] = None
+
+class BankDetails(BaseModel):
+    id: str
+    user_id: str
+    bank_name: str
+    account_holder_name: str
+    account_number: str
+    ifsc_code: Optional[str] = None
+    swift_code: Optional[str] = None
+    branch_name: Optional[str] = None
+    upi_id: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+# Super Admin Payment Gateway Settings
+class PaymentGatewaySettingsCreate(BaseModel):
+    cashfree_app_id: str
+    cashfree_secret_key: str
+    cashfree_mode: str = "sandbox"  # sandbox or production
+
+class PaymentGatewaySettings(BaseModel):
+    id: str
+    cashfree_app_id: str
+    cashfree_secret_key: str
+    cashfree_mode: str
+    created_at: str
+    updated_at: str
+    updated_by: str  # Super admin who updated
+
+# Payment Models
+class PaymentOrderCreate(BaseModel):
+    event_id: str
+    customer_name: str
+    customer_email: str
+    customer_phone: str
+    amount: float
+
+class PaymentOrderResponse(BaseModel):
+    order_id: str
+    payment_session_id: str
+    order_amount: float
+    order_currency: str
+
+class PaymentVerificationRequest(BaseModel):
+    order_id: str
+    event_id: str
+
+class PaymentVerificationResponse(BaseModel):
+    payment_status: str
+    order_id: str
+    order_amount: float
+    transaction_id: Optional[str] = None
 
 # Team Models
 class TeamCreate(BaseModel):
@@ -142,6 +214,7 @@ class PlayerCreate(BaseModel):
     stats: Optional[PlayerStats] = None
     previous_team: Optional[str] = None
     cricheroes_link: Optional[str] = None
+    contact_number: Optional[str] = None
 
 class Player(BaseModel):
     id: str
@@ -172,7 +245,10 @@ class PublicPlayerRegistration(BaseModel):
     contact_number: Optional[str] = None
     email: Optional[str] = None
     photo_url: Optional[str] = None
+    district: Optional[str] = None
+    identity_proof_url: Optional[str] = None
     stats: Optional[PlayerStats] = None
+    payment_order_id: Optional[str] = None  # For paid registrations
 
 # Approval Request Model
 class ApprovalRequest(BaseModel):

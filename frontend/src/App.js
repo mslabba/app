@@ -30,6 +30,9 @@ import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import TermsOfService from '@/pages/TermsOfService';
 import ContactPage from '@/pages/ContactPage';
 import UserManagement from '@/pages/UserManagement';
+import Settings from '@/pages/Settings';
+import PaymentGatewaySettings from '@/pages/PaymentGatewaySettings';
+import EventPayments from '@/pages/EventPayments';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 // Dashboard redirect component for authenticated users
@@ -206,10 +209,34 @@ function App() {
               }
             />
             <Route
+              path="/admin/settings"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/payment-settings"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <PaymentGatewaySettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/analytics/:eventId"
               element={
                 <ProtectedRoute requireSuperAdmin>
                   <Analytics />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/events/:eventId/payments"
+              element={
+                <ProtectedRoute>
+                  <EventPayments />
                 </ProtectedRoute>
               }
             />

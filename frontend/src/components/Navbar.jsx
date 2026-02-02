@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { logOut } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
-import { LogOut, Home, Users, TrendingUp, DollarSign, Settings } from 'lucide-react';
+import { LogOut, Home, Users, TrendingUp, DollarSign, Settings, Landmark } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Navbar = () => {
@@ -50,6 +50,16 @@ const Navbar = () => {
                   <Settings className="w-4 h-4" />
                   <span>Auctions</span>
                 </Link>
+                <Link to="/admin/settings" className="text-white/80 hover:text-white flex items-center space-x-1">
+                  <Landmark className="w-4 h-4" />
+                  <span>Settings</span>
+                </Link>
+                {isSuperAdmin && (
+                  <Link to="/admin/payment-settings" className="text-white/80 hover:text-white flex items-center space-x-1">
+                    <DollarSign className="w-4 h-4" />
+                    <span>Payment Gateway</span>
+                  </Link>
+                )}
               </div>
             )}
           </div>

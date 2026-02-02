@@ -524,7 +524,10 @@ async def create_auction(event_data: EventCreate, current_user: dict = Depends(r
             'created_at': datetime.now(timezone.utc).isoformat(),
             'created_by': current_user['uid'],
             'organizer_name': organizer_name,
-            'organizer_mobile': organizer_mobile
+            'organizer_mobile': organizer_mobile,
+            'payment_settings': event_data.payment_settings.model_dump() if event_data.payment_settings else {'collect_payment': False, 'registration_fee': None},
+            'has_registration_limit': event_data.has_registration_limit,
+            'registration_limit': event_data.registration_limit
         }
         
         if db:
@@ -594,7 +597,6 @@ async def update_auction(event_id: str, event_data: EventCreate, current_user: d
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only update events you created"
             )
-            raise HTTPException(status_code=503, detail="Database not available")
         
         db.collection('events').document(event_id).update({
             'name': event_data.name,
@@ -602,8 +604,13 @@ async def update_auction(event_id: str, event_data: EventCreate, current_user: d
             'rules': event_data.rules.model_dump(),
             'description': event_data.description,
             'logo_url': event_data.logo_url,
-            'banner_url': event_data.banner_url
+            'banner_url': event_data.banner_url,
+            'payment_settings': event_data.payment_settings.model_dump() if event_data.payment_settings else {'collect_payment': False, 'registration_fee': None},
+            'has_registration_limit': event_data.has_registration_limit,
+            'registration_limit': event_data.registration_limit
         })
+        
+        return {"message": "Auction updated successfully"}
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -1321,6 +1328,52 @@ async def get_public_auction_state(team_id: str, token: str):
 
 # ============= PLAYER ROUTES =============
 
+@api_router.get("/auctions/{event_id}/registration-count")
+async def get_registration_count(event_id: str):
+    """Get the total registration count for an auction (public endpoint)
+    Includes: pending registrations + players (which includes approved registrations + backend-added)
+    """
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Check if event exists
+        event_doc = db.collection('events').document(event_id).get()
+        if not event_doc.exists:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        event_data = event_doc.to_dict()
+        
+        # Count PENDING registrations only (approved ones are already in players collection)
+        registrations = db.collection('player_registrations').where('event_id', '==', event_id).where('status', '==', 'pending_approval').stream()
+        pending_count = len(list(registrations))
+        
+        # Count all players (includes approved registrations + backend-added players)
+        # Players are linked through categories, so first get all category IDs for this event
+        categories = db.collection('categories').where('event_id', '==', event_id).stream()
+        category_ids = [cat.to_dict()['id'] for cat in categories]
+        
+        # Count players in all categories for this event
+        player_count = 0
+        for category_id in category_ids:
+            players = db.collection('players').where('category_id', '==', category_id).stream()
+            player_count += len(list(players))
+        
+        total_count = pending_count + player_count
+        
+        return {
+            "count": total_count,
+            "pending_registrations": pending_count,
+            "player_count": player_count,
+            "has_limit": event_data.get('has_registration_limit', False),
+            "limit": event_data.get('registration_limit'),
+            "slots_remaining": (event_data.get('registration_limit', 0) - total_count) if event_data.get('has_registration_limit') else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @api_router.post("/auctions/{event_id}/register-player")
 async def register_player_public(event_id: str, player_data: PublicPlayerRegistration):
     """Public endpoint for players to register for an auction"""
@@ -1333,6 +1386,55 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
         if not event_doc.exists:
             raise HTTPException(status_code=404, detail="Event not found")
         
+        event_data = event_doc.to_dict()
+        payment_settings = event_data.get('payment_settings', {})
+        
+        # Check registration limit
+        if event_data.get('has_registration_limit') and event_data.get('registration_limit'):
+            registration_limit = event_data.get('registration_limit')
+            
+            # Count PENDING registrations only (approved ones are already in players collection)
+            registrations = db.collection('player_registrations').where('event_id', '==', event_id).where('status', '==', 'pending_approval').stream()
+            pending_count = len(list(registrations))
+            
+            # Count players added through backend (linked through categories)
+            categories = db.collection('categories').where('event_id', '==', event_id).stream()
+            category_ids = [cat.to_dict()['id'] for cat in categories]
+            
+            player_count = 0
+            for category_id in category_ids:
+                players = db.collection('players').where('category_id', '==', category_id).stream()
+                player_count += len(list(players))
+            
+            total_count = pending_count + player_count
+            
+            if total_count >= registration_limit:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Registration limit reached. Maximum {registration_limit} registrations allowed."
+                )
+        
+        # Check if payment is required
+        if payment_settings.get('collect_payment'):
+            if not player_data.payment_order_id:
+                raise HTTPException(status_code=400, detail="Payment is required for registration")
+            
+            # Verify payment was successful
+            payment_doc = db.collection('payment_orders').document(player_data.payment_order_id).get()
+            if not payment_doc.exists:
+                raise HTTPException(status_code=400, detail="Invalid payment order")
+            
+            payment_data = payment_doc.to_dict()
+            if payment_data.get('status') not in ['PAID', 'SUCCESS']:
+                raise HTTPException(status_code=400, detail="Payment not completed")
+            
+            if payment_data.get('event_id') != event_id:
+                raise HTTPException(status_code=400, detail="Payment order mismatch")
+            
+            # Check if payment was already used
+            if payment_data.get('registration_completed'):
+                raise HTTPException(status_code=400, detail="Payment already used for registration")
+        
         # Create player registration document
         registration_id = str(uuid.uuid4())
         registration_doc = {
@@ -1340,17 +1442,28 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
             'event_id': event_id,
             'status': 'pending_approval',
             'registered_at': datetime.now(timezone.utc).isoformat(),
-            **player_data.model_dump()
+            'payment_order_id': player_data.payment_order_id,
+            **player_data.model_dump(exclude={'payment_order_id'})
         }
         
         # Store in a separate collection for pending registrations
         db.collection('player_registrations').document(registration_id).set(registration_doc)
         
+        # Mark payment as used if payment was made
+        if player_data.payment_order_id:
+            db.collection('payment_orders').document(player_data.payment_order_id).update({
+                'registration_completed': True,
+                'registration_id': registration_id
+            })
+        
         return {
             "message": "Registration submitted successfully! The organizer will review and approve your registration.",
             "registration_id": registration_id
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Registration error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.get("/auctions/{event_id}/registrations")
@@ -1411,6 +1524,8 @@ async def approve_player_registration(registration_id: str, approval_data: Appro
             'previous_team': reg_data.get('previous_team'),
             'cricheroes_link': reg_data.get('cricheroes_link'),
             'contact_number': reg_data.get('contact_number'),
+            'district': reg_data.get('district'),
+            'identity_proof_url': reg_data.get('identity_proof_url'),
             'stats': reg_data.get('stats'),
             'status': PlayerStatus.AVAILABLE.value,
             'photo_url': reg_data.get('photo_url'),
@@ -1822,7 +1937,9 @@ async def update_player(player_id: str, player_data: PlayerCreate, current_user:
             'position': player_data.position,
             'specialty': player_data.specialty,
             'stats': player_data.stats.model_dump() if player_data.stats else None,
-            'previous_team': player_data.previous_team
+            'previous_team': player_data.previous_team,
+            'cricheroes_link': player_data.cricheroes_link,
+            'contact_number': player_data.contact_number
         }
         
         db.collection('players').document(player_id).update(updated_data)
@@ -3096,6 +3213,399 @@ async def health():
         "status": "healthy",
         "firebase": "connected" if db else "disconnected"
     }
+
+# ============= BANK DETAILS ROUTES =============
+
+@api_router.post("/settings/bank-details", response_model=BankDetails)
+async def create_bank_details(bank_data: BankDetailsCreate, current_user: dict = Depends(require_event_organizer)):
+    """Create or update bank details for the current user"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Check if bank details already exist
+        existing = db.collection('bank_details').where('user_id', '==', current_user['uid']).limit(1).stream()
+        existing_doc = None
+        for doc in existing:
+            existing_doc = doc
+            break
+        
+        current_time = datetime.now(timezone.utc).isoformat()
+        
+        if existing_doc:
+            # Update existing bank details
+            bank_id = existing_doc.id
+            bank_doc = {
+                'bank_name': bank_data.bank_name,
+                'account_holder_name': bank_data.account_holder_name,
+                'account_number': bank_data.account_number,
+                'ifsc_code': bank_data.ifsc_code,
+                'swift_code': bank_data.swift_code,
+                'branch_name': bank_data.branch_name,
+                'upi_id': bank_data.upi_id,
+                'updated_at': current_time
+            }
+            db.collection('bank_details').document(bank_id).update(bank_doc)
+            
+            # Get the full document
+            updated_doc = db.collection('bank_details').document(bank_id).get()
+            return BankDetails(**updated_doc.to_dict())
+        else:
+            # Create new bank details
+            bank_id = str(uuid.uuid4())
+            bank_doc = {
+                'id': bank_id,
+                'user_id': current_user['uid'],
+                'bank_name': bank_data.bank_name,
+                'account_holder_name': bank_data.account_holder_name,
+                'account_number': bank_data.account_number,
+                'ifsc_code': bank_data.ifsc_code,
+                'swift_code': bank_data.swift_code,
+                'branch_name': bank_data.branch_name,
+                'upi_id': bank_data.upi_id,
+                'created_at': current_time,
+                'updated_at': current_time
+            }
+            db.collection('bank_details').document(bank_id).set(bank_doc)
+            return BankDetails(**bank_doc)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/settings/bank-details", response_model=Optional[BankDetails])
+async def get_bank_details(current_user: dict = Depends(require_event_organizer)):
+    """Get bank details for the current user"""
+    try:
+        if not db:
+            return None
+        
+        bank_docs = db.collection('bank_details').where('user_id', '==', current_user['uid']).limit(1).stream()
+        
+        for doc in bank_docs:
+            bank_data = doc.to_dict()
+            return BankDetails(**bank_data)
+        
+        return None
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ============= SUPER ADMIN PAYMENT GATEWAY SETTINGS =============
+
+@api_router.post("/settings/payment-gateway", response_model=PaymentGatewaySettings)
+async def create_payment_gateway_settings(settings_data: PaymentGatewaySettingsCreate, current_user: dict = Depends(require_super_admin)):
+    """Create or update payment gateway settings - Super Admin only"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Check if settings already exist (only one record)
+        existing = db.collection('payment_gateway_settings').limit(1).stream()
+        existing_doc = None
+        for doc in existing:
+            existing_doc = doc
+            break
+        
+        current_time = datetime.now(timezone.utc).isoformat()
+        
+        if existing_doc:
+            # Update existing settings
+            settings_id = existing_doc.id
+            settings_doc = {
+                'cashfree_app_id': settings_data.cashfree_app_id,
+                'cashfree_secret_key': settings_data.cashfree_secret_key,
+                'cashfree_mode': settings_data.cashfree_mode,
+                'updated_at': current_time,
+                'updated_by': current_user['uid']
+            }
+            db.collection('payment_gateway_settings').document(settings_id).update(settings_doc)
+            
+            # Get the full document
+            updated_doc = db.collection('payment_gateway_settings').document(settings_id).get()
+            return PaymentGatewaySettings(**updated_doc.to_dict())
+        else:
+            # Create new settings
+            settings_id = 'payment_gateway_config'  # Fixed ID since there's only one
+            settings_doc = {
+                'id': settings_id,
+                'cashfree_app_id': settings_data.cashfree_app_id,
+                'cashfree_secret_key': settings_data.cashfree_secret_key,
+                'cashfree_mode': settings_data.cashfree_mode,
+                'created_at': current_time,
+                'updated_at': current_time,
+                'updated_by': current_user['uid']
+            }
+            db.collection('payment_gateway_settings').document(settings_id).set(settings_doc)
+            return PaymentGatewaySettings(**settings_doc)
+    except Exception as e:
+        logger.error(f"Error saving payment gateway settings: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/settings/payment-gateway", response_model=Optional[PaymentGatewaySettings])
+async def get_payment_gateway_settings(current_user: dict = Depends(require_super_admin)):
+    """Get payment gateway settings - Super Admin only"""
+    try:
+        if not db:
+            return None
+        
+        settings_doc = db.collection('payment_gateway_settings').document('payment_gateway_config').get()
+        
+        if settings_doc.exists:
+            return PaymentGatewaySettings(**settings_doc.to_dict())
+        
+        return None
+    except Exception as e:
+        logger.error(f"Error fetching payment gateway settings: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ============= PAYMENT ROUTES (CASHFREE) =============
+
+@api_router.post("/payments/create-order", response_model=PaymentOrderResponse)
+async def create_payment_order(order_data: PaymentOrderCreate):
+    """Create a Cashfree payment order for player registration"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Get event details
+        event_doc = db.collection('events').document(order_data.event_id).get()
+        if not event_doc.exists:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        event_data = event_doc.to_dict()
+        payment_settings = event_data.get('payment_settings', {})
+        
+        if not payment_settings.get('collect_payment'):
+            raise HTTPException(status_code=400, detail="Payment not enabled for this event")
+        
+        registration_fee = payment_settings.get('registration_fee')
+        if not registration_fee:
+            raise HTTPException(status_code=400, detail="Registration fee not set")
+        
+        # Get PowerAuction's Cashfree credentials from super admin settings
+        settings_doc = db.collection('payment_gateway_settings').document('payment_gateway_config').get()
+        
+        if not settings_doc.exists:
+            raise HTTPException(status_code=400, detail="Payment gateway not configured. Contact PowerAuction admin.")
+        
+        settings_data = settings_doc.to_dict()
+        cashfree_app_id = settings_data.get('cashfree_app_id')
+        cashfree_secret_key = settings_data.get('cashfree_secret_key')
+        cashfree_mode = settings_data.get('cashfree_mode', 'sandbox')
+        
+        if not cashfree_app_id or not cashfree_secret_key:
+            raise HTTPException(status_code=400, detail="Payment gateway credentials not configured")
+        
+        # Create unique order ID
+        order_id = f"order_{order_data.event_id[:8]}_{str(uuid.uuid4())[:8]}"
+        
+        # Cashfree API endpoint based on mode
+        cashfree_url = f"https://{'sandbox' if cashfree_mode == 'sandbox' else 'api'}.cashfree.com/pg/orders"
+        
+        # Format phone number for Cashfree (expects 10 digits without +91 or exactly with +91)
+        phone = order_data.customer_phone.strip()
+        # Remove any spaces, dashes, or parentheses
+        phone = ''.join(filter(str.isdigit, phone))
+        # If it's 11 digits starting with 91, remove the 91
+        if len(phone) == 11 and phone.startswith('91'):
+            phone = phone[2:]
+        # If it's more than 10 digits, take last 10
+        elif len(phone) > 10:
+            phone = phone[-10:]
+        # Ensure we have exactly 10 digits
+        if len(phone) != 10:
+            raise HTTPException(status_code=400, detail="Invalid phone number. Please provide a 10-digit Indian mobile number")
+        
+        # Prepare order data for Cashfree
+        cashfree_order_data = {
+            "order_id": order_id,
+            "order_amount": registration_fee,
+            "order_currency": "INR",
+            "customer_details": {
+                "customer_id": order_id,
+                "customer_name": order_data.customer_name,
+                "customer_email": order_data.customer_email,
+                "customer_phone": phone
+            },
+            "order_meta": {
+                "return_url": f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/auctions/{order_data.event_id}/register?payment=success&order_id={order_id}",
+                "notify_url": f"{os.getenv('BACKEND_URL', 'http://localhost:8000')}/api/payments/webhook"
+            }
+        }
+        
+        # Make API call to Cashfree
+        headers = {
+            "accept": "application/json",
+            "x-api-version": "2023-08-01",
+            "content-type": "application/json",
+            "x-client-id": cashfree_app_id,
+            "x-client-secret": cashfree_secret_key
+        }
+        
+        response = requests.post(cashfree_url, json=cashfree_order_data, headers=headers)
+        
+        if response.status_code != 200:
+            logger.error(f"Cashfree API error: {response.text}")
+            raise HTTPException(status_code=400, detail=f"Failed to create payment order: {response.text}")
+        
+        cashfree_response = response.json()
+        
+        # Store payment order in database
+        payment_doc = {
+            'order_id': order_id,
+            'event_id': order_data.event_id,
+            'customer_name': order_data.customer_name,
+            'customer_email': order_data.customer_email,
+            'customer_phone': phone,  # Store formatted phone number
+            'amount': registration_fee,
+            'currency': 'INR',
+            'status': 'PENDING',
+            'payment_session_id': cashfree_response.get('payment_session_id'),
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        db.collection('payment_orders').document(order_id).set(payment_doc)
+        
+        return PaymentOrderResponse(
+            order_id=order_id,
+            payment_session_id=cashfree_response.get('payment_session_id'),
+            order_amount=registration_fee,
+            order_currency='INR'
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating payment order: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/payments/verify", response_model=PaymentVerificationResponse)
+async def verify_payment(verification_data: PaymentVerificationRequest):
+    """Verify payment status with Cashfree"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Get payment order from database
+        payment_doc = db.collection('payment_orders').document(verification_data.order_id).get()
+        if not payment_doc.exists:
+            raise HTTPException(status_code=404, detail="Payment order not found")
+        
+        payment_data = payment_doc.to_dict()
+        
+        # Get PowerAuction's Cashfree credentials from super admin settings
+        settings_doc = db.collection('payment_gateway_settings').document('payment_gateway_config').get()
+        
+        if not settings_doc.exists:
+            raise HTTPException(status_code=400, detail="Payment gateway not configured")
+        
+        settings_data = settings_doc.to_dict()
+        cashfree_app_id = settings_data.get('cashfree_app_id')
+        cashfree_secret_key = settings_data.get('cashfree_secret_key')
+        cashfree_mode = settings_data.get('cashfree_mode', 'sandbox')
+        
+        if not cashfree_app_id or not cashfree_secret_key:
+            raise HTTPException(status_code=400, detail="Payment gateway credentials not configured")
+        
+        # Verify with Cashfree API based on mode
+        cashfree_url = f"https://{'sandbox' if cashfree_mode == 'sandbox' else 'api'}.cashfree.com/pg/orders/{verification_data.order_id}"
+        
+        headers = {
+            "accept": "application/json",
+            "x-api-version": "2023-08-01",
+            "x-client-id": cashfree_app_id,
+            "x-client-secret": cashfree_secret_key
+        }
+        
+        response = requests.get(cashfree_url, headers=headers)
+        
+        if response.status_code != 200:
+            logger.error(f"Cashfree verification error: {response.text}")
+            raise HTTPException(status_code=400, detail="Failed to verify payment")
+        
+        cashfree_response = response.json()
+        order_status = cashfree_response.get('order_status')
+        
+        # Update payment status in database
+        db.collection('payment_orders').document(verification_data.order_id).update({
+            'status': order_status,
+            'verified_at': datetime.now(timezone.utc).isoformat(),
+            'transaction_id': cashfree_response.get('cf_order_id')
+        })
+        
+        return PaymentVerificationResponse(
+            payment_status=order_status,
+            order_id=verification_data.order_id,
+            order_amount=payment_data.get('amount'),
+            transaction_id=cashfree_response.get('cf_order_id')
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error verifying payment: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/auctions/{event_id}/payments")
+async def get_event_payments(event_id: str, current_user: dict = Depends(get_current_user)):
+    """Get all payments for a specific event"""
+    try:
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Check if user has access to this event
+        event_doc = db.collection('events').document(event_id).get()
+        if not event_doc.exists:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        event_data = event_doc.to_dict()
+        
+        # Super admin can see all, organizers can see only their events
+        if current_user.get('role') != 'super_admin' and event_data.get('created_by') != current_user.get('uid'):
+            raise HTTPException(status_code=403, detail="Not authorized to view payments for this event")
+        
+        # Get all payments for this event
+        payments_query = db.collection('payment_orders').where('event_id', '==', event_id).stream()
+        
+        payments = []
+        total_amount = 0
+        successful_payments = 0
+        pending_payments = 0
+        failed_payments = 0
+        
+        for payment_doc in payments_query:
+            payment_data = payment_doc.to_dict()
+            payment_data['id'] = payment_doc.id
+            payments.append(payment_data)
+            
+            # Calculate statistics
+            status = payment_data.get('status', 'PENDING')
+            amount = payment_data.get('amount', 0)
+            
+            if status in ['PAID', 'SUCCESS']:
+                successful_payments += 1
+                total_amount += amount
+            elif status == 'PENDING':
+                pending_payments += 1
+            else:
+                failed_payments += 1
+        
+        # Sort by created_at descending (newest first)
+        payments.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        
+        return {
+            'event_id': event_id,
+            'event_name': event_data.get('name'),
+            'payments': payments,
+            'statistics': {
+                'total_amount': total_amount,
+                'total_payments': len(payments),
+                'successful_payments': successful_payments,
+                'pending_payments': pending_payments,
+                'failed_payments': failed_payments,
+                'registration_fee': event_data.get('payment_settings', {}).get('registration_fee', 0)
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching event payments: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 # Include router in main app
 app.include_router(api_router)

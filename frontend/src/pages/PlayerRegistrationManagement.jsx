@@ -23,13 +23,15 @@ import {
   Download,
   Upload,
   FileSpreadsheet,
-  Trash2
+  Trash2,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import FloatingMenu from '@/components/FloatingMenu';
 import { generateRegistrationsPDF } from '@/utils/pdfGenerator';
 import { convertGoogleDriveUrl } from '@/utils/imageUtils';
+import { exportRegistrationsToExcel, exportAllToExcel } from '@/utils/excelExporter';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -85,6 +87,28 @@ const PlayerRegistrationManagement = () => {
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportExcel = (statusFilter) => {
+    try {
+      toast.info('Generating Excel...');
+      const filename = exportRegistrationsToExcel(registrations, players, categories, event, statusFilter);
+      toast.success(`Excel exported: ${filename}`);
+    } catch (error) {
+      console.error('Failed to export Excel:', error);
+      toast.error(error.message || 'Failed to export Excel');
+    }
+  };
+
+  const handleExportAllExcel = () => {
+    try {
+      toast.info('Generating Excel with all sheets...');
+      const filename = exportAllToExcel(registrations, players, categories, event);
+      toast.success(`Excel exported: ${filename}`);
+    } catch (error) {
+      console.error('Failed to export Excel:', error);
+      toast.error(error.message || 'Failed to export Excel');
     }
   };
 
@@ -389,16 +413,28 @@ const PlayerRegistrationManagement = () => {
             <h1 className="text-4xl font-bold text-white mb-2">Player Registration Management</h1>
             <p className="text-white/80">Manage player registrations and approved players</p>
           </div>
-          <Button
-            size="lg"
-            variant="outline"
-            className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-            onClick={() => handleExportPDF('all')}
-            disabled={registrations.length === 0}
-          >
-            <Download className="w-5 h-5 mr-2" />
-            Export All Registrations
-          </Button>
+          <div className="flex space-x-3">
+            <Button
+              size="lg"
+              variant="outline"
+              className="bg-green-600/80 border-green-500 text-white hover:bg-green-700"
+              onClick={handleExportAllExcel}
+              disabled={registrations.length === 0 && players.length === 0}
+            >
+              <FileSpreadsheet className="w-5 h-5 mr-2" />
+              Export All to Excel
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              onClick={() => handleExportPDF('all')}
+              disabled={registrations.length === 0}
+            >
+              <Download className="w-5 h-5 mr-2" />
+              Export PDF
+            </Button>
+          </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -434,12 +470,22 @@ const PlayerRegistrationManagement = () => {
                     <Button
                       size="sm"
                       variant="outline"
+                      className="bg-green-600/80 border-green-500 text-white hover:bg-green-700"
+                      onClick={() => handleExportExcel('pending_approval')}
+                      disabled={pendingRegistrations.length === 0}
+                    >
+                      <FileSpreadsheet className="w-4 h-4 mr-2" />
+                      Excel
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                       onClick={() => handleExportPDF('pending_approval')}
                       disabled={pendingRegistrations.length === 0}
                     >
                       <Download className="w-4 h-4 mr-2" />
-                      Export PDF
+                      PDF
                     </Button>
                   </div>
                   {selectedRegistrations.length > 0 && (
@@ -528,6 +574,7 @@ const PlayerRegistrationManagement = () => {
                         <div className="text-sm text-gray-700 mb-3">
                           {registration.email && <div>📧 {registration.email}</div>}
                           {registration.contact_number && <div>📱 {registration.contact_number}</div>}
+                          {registration.district && <div>📍 {registration.district}</div>}
                           {registration.previous_team && <div>🏆 {registration.previous_team}</div>}
                         </div>
 
@@ -573,16 +620,28 @@ const PlayerRegistrationManagement = () => {
                     <CheckCircle className="w-5 h-5 mr-2" />
                     Approved Registrations
                   </CardTitle>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-                    onClick={() => handleExportPDF('approved')}
-                    disabled={approvedRegistrations.length === 0}
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Export PDF
-                  </Button>
+                  <div className="flex space-x-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-green-600/80 border-green-500 text-white hover:bg-green-700"
+                      onClick={() => handleExportExcel('approved')}
+                      disabled={approvedRegistrations.length === 0}
+                    >
+                      <FileSpreadsheet className="w-4 h-4 mr-2" />
+                      Excel
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                      onClick={() => handleExportPDF('approved')}
+                      disabled={approvedRegistrations.length === 0}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      PDF
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -614,6 +673,7 @@ const PlayerRegistrationManagement = () => {
                         <div className="text-sm text-white/90 mb-3">
                           {registration.email && <div>📧 {registration.email}</div>}
                           {registration.contact_number && <div>📱 {registration.contact_number}</div>}
+                          {registration.district && <div>📍 {registration.district}</div>}
                           {registration.previous_team && <div>🏆 {registration.previous_team}</div>}
                         </div>
 
@@ -646,10 +706,22 @@ const PlayerRegistrationManagement = () => {
             <Card className="glass border-white/20">
               <CardHeader>
                 <div className="flex justify-between items-center">
-                  <CardTitle className="text-white flex items-center">
-                    <Users className="w-5 h-5 mr-2" />
-                    Active Players
-                  </CardTitle>
+                  <div className="flex items-center space-x-3">
+                    <CardTitle className="text-white flex items-center">
+                      <Users className="w-5 h-5 mr-2" />
+                      Active Players
+                    </CardTitle>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-green-600/80 border-green-500 text-white hover:bg-green-700"
+                      onClick={() => handleExportExcel('players')}
+                      disabled={players.length === 0}
+                    >
+                      <FileSpreadsheet className="w-4 h-4 mr-2" />
+                      Export Excel
+                    </Button>
+                  </div>
                   <Dialog open={isBulkUploadDialogOpen} onOpenChange={setIsBulkUploadDialogOpen}>
                     <DialogTrigger asChild>
                       <Button
@@ -900,9 +972,14 @@ const PlayerRegistrationManagement = () => {
                             </div>
                           )}
                           <h3 className="font-semibold text-gray-800 mb-1">{player.name}</h3>
-                          <p className="text-sm text-gray-600 mb-2">
+                          <p className="text-sm text-gray-600 mb-1">
                             Base Price: ₹{player.base_price?.toLocaleString()}
                           </p>
+                          {player.contact_number && (
+                            <p className="text-sm text-gray-600 mb-2">
+                              📱 {player.contact_number}
+                            </p>
+                          )}
                           <Badge variant="outline" className="text-gray-700 border-gray-300">
                             {categories.find(c => c.id === player.category_id)?.name || 'Unknown'}
                           </Badge>
@@ -931,16 +1008,28 @@ const PlayerRegistrationManagement = () => {
                     <XCircle className="w-5 h-5 mr-2" />
                     Rejected Registrations
                   </CardTitle>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-                    onClick={() => handleExportPDF('rejected')}
-                    disabled={rejectedRegistrations.length === 0}
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Export PDF
-                  </Button>
+                  <div className="flex space-x-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-green-600/80 border-green-500 text-white hover:bg-green-700"
+                      onClick={() => handleExportExcel('rejected')}
+                      disabled={rejectedRegistrations.length === 0}
+                    >
+                      <FileSpreadsheet className="w-4 h-4 mr-2" />
+                      Excel
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                      onClick={() => handleExportPDF('rejected')}
+                      disabled={rejectedRegistrations.length === 0}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      PDF
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1018,6 +1107,7 @@ const PlayerRegistrationManagement = () => {
                     <div className="mt-2 space-y-1">
                       {viewingRegistration.email && <p>📧 {viewingRegistration.email}</p>}
                       {viewingRegistration.contact_number && <p>📱 {viewingRegistration.contact_number}</p>}
+                      {viewingRegistration.district && <p>📍 {viewingRegistration.district}</p>}
                     </div>
                   </div>
                   <div>
@@ -1028,6 +1118,72 @@ const PlayerRegistrationManagement = () => {
                     </div>
                   </div>
                 </div>
+
+                {viewingRegistration.identity_proof_url && (
+                  <div>
+                    <Label className="font-semibold">Identity Proof</Label>
+                    {viewingRegistration.identity_proof_url.toLowerCase().includes('.pdf') ||
+                      viewingRegistration.identity_proof_url.includes('firebasestorage') && viewingRegistration.identity_proof_url.includes('%2F') ? (
+                      <div className="mt-2 space-y-3">
+                        {/* Embedded PDF Viewer - Firebase URLs work directly */}
+                        <div className="border rounded-lg overflow-hidden bg-gray-100">
+                          {viewingRegistration.identity_proof_url.includes('firebasestorage') ? (
+                            <iframe
+                              src={viewingRegistration.identity_proof_url}
+                              className="w-full h-80"
+                              title="Identity Proof PDF"
+                              frameBorder="0"
+                            />
+                          ) : (
+                            <iframe
+                              src={`https://docs.google.com/gview?url=${encodeURIComponent(viewingRegistration.identity_proof_url)}&embedded=true`}
+                              className="w-full h-80"
+                              title="Identity Proof PDF"
+                              frameBorder="0"
+                            />
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(viewingRegistration.identity_proof_url, '_blank')}
+                          >
+                            🔗 Open in New Tab
+                          </Button>
+                          <a
+                            href={viewingRegistration.identity_proof_url}
+                            download
+                          >
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                            >
+                              📥 Download PDF
+                            </Button>
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-1">
+                        <a
+                          href={convertGoogleDriveUrl(viewingRegistration.identity_proof_url)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
+                          <img
+                            src={convertGoogleDriveUrl(viewingRegistration.identity_proof_url)}
+                            alt="Identity Proof"
+                            className="w-48 h-auto border rounded-lg hover:opacity-80 transition-opacity"
+                          />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {viewingRegistration.cricheroes_link && (
                   <div>
