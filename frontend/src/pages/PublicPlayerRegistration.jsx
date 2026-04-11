@@ -187,16 +187,6 @@ const PublicPlayerRegistration = () => {
         setPaymentLoading(false);
         return;
       }
-      if (!formData.district.trim()) {
-        toast.error('Please enter your district');
-        setPaymentLoading(false);
-        return;
-      }
-      if (!formData.identity_proof_url.trim()) {
-        toast.error('Please upload your identity proof');
-        setPaymentLoading(false);
-        return;
-      }
 
       // Save form data to sessionStorage before redirecting to payment
       sessionStorage.setItem(`registration_form_${eventId}`, JSON.stringify(formData));
@@ -323,14 +313,6 @@ const PublicPlayerRegistration = () => {
     }
     if (!formData.photo_url.trim()) {
       toast.error('Please upload your photo');
-      return;
-    }
-    if (!formData.district.trim()) {
-      toast.error('Please enter your district');
-      return;
-    }
-    if (!formData.identity_proof_url.trim()) {
-      toast.error('Please upload your identity proof');
       return;
     }
 
@@ -587,13 +569,12 @@ const PublicPlayerRegistration = () => {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="district" className="text-gray-700">District *</Label>
+                      <Label htmlFor="district" className="text-gray-700">District</Label>
                       <Input
                         id="district"
                         value={formData.district}
                         onChange={(e) => handleChange('district', e.target.value)}
                         placeholder="Enter your district"
-                        required
                         className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
                       />
                     </div>
@@ -664,7 +645,7 @@ const PublicPlayerRegistration = () => {
 
                 {/* Identity Proof Upload */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">Identity Proof *</h3>
+                  <h3 className="text-lg font-semibold text-gray-800">Identity Proof</h3>
                   <DocumentUpload
                     label="Upload Identity Proof (Aadhaar, Passport, Driver's License, etc.)"
                     value={formData.identity_proof_url}
@@ -672,7 +653,6 @@ const PublicPlayerRegistration = () => {
                     placeholder="Upload your identity proof (image or PDF) or enter URL"
                     accept="image/*,application/pdf"
                     maxSize={10 * 1024 * 1024}
-                    required
                   />
                 </div>
 
@@ -729,7 +709,7 @@ const PublicPlayerRegistration = () => {
                 </div>
 
                 <p className="text-sm text-gray-500 text-center">
-                  * Required fields. Your registration will be reviewed by the organizer.
+                  * Required fields. District and Identity Proof are optional. Your registration will be reviewed by the organizer.
                   {event?.payment_settings?.collect_payment && (
                     <><br />You will be redirected to secure payment gateway to complete registration fee payment.</>
                   )}
