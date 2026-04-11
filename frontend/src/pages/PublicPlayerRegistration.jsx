@@ -260,27 +260,28 @@ const PublicPlayerRegistration = () => {
 
       // Complete registration with payment order ID
       const registrationData = {
-        name: dataToUse.name.trim(),
-        age: dataToUse.age ? parseInt(dataToUse.age) : null,
-        position: dataToUse.position.trim() || null,
-        specialty: dataToUse.specialty.trim() || null,
-        previous_team: dataToUse.previous_team.trim() || null,
-        cricheroes_link: dataToUse.cricheroes_link.trim() || null,
-        contact_number: dataToUse.contact_number.trim() || null,
-        email: dataToUse.email.trim() || null,
-        photo_url: dataToUse.photo_url.trim() || null,
-        district: dataToUse.district.trim() || null,
-        identity_proof_url: dataToUse.identity_proof_url.trim() || null,
+        name: (dataToUse.name || '').trim(),
+        age: (dataToUse.age && !isNaN(parseInt(dataToUse.age))) ? parseInt(dataToUse.age) : null,
+        position: (dataToUse.position || '').trim() || null,
+        specialty: (dataToUse.specialty || '').trim() || null,
+        previous_team: (dataToUse.previous_team || '').trim() || null,
+        cricheroes_link: (dataToUse.cricheroes_link || '').trim() || null,
+        contact_number: (dataToUse.contact_number || '').trim() || null,
+        email: (dataToUse.email || '').trim() || null,
+        photo_url: (dataToUse.photo_url || '').trim() || null,
+        district: (dataToUse.district || '').trim() || null,
+        identity_proof_url: (dataToUse.identity_proof_url || '').trim() || null,
         stats: {
-          matches: dataToUse.stats.matches ? parseInt(dataToUse.stats.matches) : null,
-          runs: dataToUse.stats.runs ? parseInt(dataToUse.stats.runs) : null,
-          wickets: dataToUse.stats.wickets ? parseInt(dataToUse.stats.wickets) : null,
-          goals: dataToUse.stats.goals ? parseInt(dataToUse.stats.goals) : null,
-          assists: dataToUse.stats.assists ? parseInt(dataToUse.stats.assists) : null,
+          matches: (dataToUse.stats?.matches && !isNaN(parseInt(dataToUse.stats.matches))) ? parseInt(dataToUse.stats.matches) : null,
+          runs: (dataToUse.stats?.runs && !isNaN(parseInt(dataToUse.stats.runs))) ? parseInt(dataToUse.stats.runs) : null,
+          wickets: (dataToUse.stats?.wickets && !isNaN(parseInt(dataToUse.stats.wickets))) ? parseInt(dataToUse.stats.wickets) : null,
+          goals: (dataToUse.stats?.goals && !isNaN(parseInt(dataToUse.stats.goals))) ? parseInt(dataToUse.stats.goals) : null,
+          assists: (dataToUse.stats?.assists && !isNaN(parseInt(dataToUse.stats.assists))) ? parseInt(dataToUse.stats.assists) : null,
         },
         payment_order_id: orderId
       };
 
+      console.log('Sending registration request:', registrationData);
       await axios.post(`${API}/auctions/${eventId}/register-player`, registrationData);
 
       // Clear saved form data
@@ -326,26 +327,27 @@ const PublicPlayerRegistration = () => {
         setLoading(true);
 
         const registrationData = {
-          name: formData.name.trim(),
-          age: formData.age ? parseInt(formData.age) : null,
-          position: formData.position.trim() || null,
-          specialty: formData.specialty.trim() || null,
-          previous_team: formData.previous_team.trim() || null,
-          cricheroes_link: formData.cricheroes_link.trim() || null,
-          contact_number: formData.contact_number.trim() || null,
-          email: formData.email.trim() || null,
-          photo_url: formData.photo_url.trim() || null,
-          district: formData.district.trim() || null,
-          identity_proof_url: formData.identity_proof_url.trim() || null,
+          name: (formData.name || '').trim(),
+          age: (formData.age && !isNaN(parseInt(formData.age))) ? parseInt(formData.age) : null,
+          position: (formData.position || '').trim() || null,
+          specialty: (formData.specialty || '').trim() || null,
+          previous_team: (formData.previous_team || '').trim() || null,
+          cricheroes_link: (formData.cricheroes_link || '').trim() || null,
+          contact_number: (formData.contact_number || '').trim() || null,
+          email: (formData.email || '').trim() || null,
+          photo_url: (formData.photo_url || '').trim() || null,
+          district: (formData.district || '').trim() || null,
+          identity_proof_url: (formData.identity_proof_url || '').trim() || null,
           stats: {
-            matches: formData.stats.matches ? parseInt(formData.stats.matches) : null,
-            runs: formData.stats.runs ? parseInt(formData.stats.runs) : null,
-            wickets: formData.stats.wickets ? parseInt(formData.stats.wickets) : null,
-            goals: formData.stats.goals ? parseInt(formData.stats.goals) : null,
-            assists: formData.stats.assists ? parseInt(formData.stats.assists) : null,
+            matches: (formData.stats?.matches && !isNaN(parseInt(formData.stats.matches))) ? parseInt(formData.stats.matches) : null,
+            runs: (formData.stats?.runs && !isNaN(parseInt(formData.stats.runs))) ? parseInt(formData.stats.runs) : null,
+            wickets: (formData.stats?.wickets && !isNaN(parseInt(formData.stats.wickets))) ? parseInt(formData.stats.wickets) : null,
+            goals: (formData.stats?.goals && !isNaN(parseInt(formData.stats.goals))) ? parseInt(formData.stats.goals) : null,
+            assists: (formData.stats?.assists && !isNaN(parseInt(formData.stats.assists))) ? parseInt(formData.stats.assists) : null,
           }
         };
 
+        console.log('Sending non-payment registration request:', registrationData);
         await axios.post(`${API}/auctions/${eventId}/register-player`, registrationData);
 
         toast.success('Registration submitted successfully!');
