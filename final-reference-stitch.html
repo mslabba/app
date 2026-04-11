@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+
+<html class="" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>KINETIC STADIUM | PowerAuction Redesign</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800;900&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            scroll-behavior: smooth;
+        }
+
+        h1,
+        h2,
+        h3,
+        .headline-font {
+            font-family: 'Exo 2', sans-serif;
+        }
+
+        .glass-panel {
+            backdrop-filter: blur(12px);
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .signature-gradient {
+            background: linear-gradient(135deg, #D62020 0%, #FF5B4E 100%);
+        }
+
+        .tonal-glass {
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(8px);
+        }
+    </style>
+    <script
+        id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { error: "#b41340", "tertiary-fixed": "#fcfcfd", "surface-container-highest": "#dfdcdc", "on-secondary": "#ffefef", "surface-variant": "#dfdcdc", "on-error": "#ffefef", "on-surface-variant": "#5c5b5b", tertiary: "#5a5c5d", background: "#ffffff", "on-secondary-fixed": "#6a0b25", "on-secondary-container": "#852137", "on-primary": "#ffffff", "on-secondary-fixed-variant": "#912b40", "on-tertiary-fixed": "#4d4f50", "tertiary-container": "#fcfcfd", "secondary-container": "#ffc2c8", "secondary-fixed": "#ffc2c8", "primary-fixed": "#D62020", "on-background": "#2f2e2e", "surface-bright": "#ffffff", "surface-container-lowest": "#ffffff", "primary-fixed-dim": "#a4000c", "on-tertiary": "#f2f2f3", "on-surface": "#1e1e1e", "surface-dim": "#d6d4d3", "on-primary-fixed-variant": "#600004", "secondary-fixed-dim": "#ffaeb7", "surface-tint": "#D62020", outline: "#787676", "surface-container-low": "#f9f9f9", "inverse-primary": "#ff5449", primary: "#D62020", "outline-variant": "#afacac", secondary: "#9f364a", "on-primary-fixed": "#ffffff", "on-tertiary-fixed-variant": "#6a6b6d", "on-primary-container": "#4f0002", surface: "#ffffff", "tertiary-fixed-dim": "#eeeeef", "inverse-on-surface": "#9e9c9c", "primary-container": "#D62020", "inverse-surface": "#0e0e0e", "on-tertiary-container": "#5f6162", "surface-container": "#f2f2f2", "on-error-container": "#510017", "surface-container-high": "#ebebeb", "error-container": "#f74b6d", "secondary-dim": "#902a3f", "primary-dim": "#a4000c", "tertiary-dim": "#4e5051", "error-dim": "#a70138" }, fontFamily: { headline: ["Inter"], body: ["Inter"], label: ["Inter"], display: "Inter" }, borderRadius: { DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem" } } } };</script>
+</head>
+
+<body class="bg-background text-on-surface antialiased overflow-x-hidden">
+    <!-- Top Navigation Bar -->
+    <header
+        class="fixed top-0 w-full flex justify-between items-center px-8 py-4 bg-white/90 backdrop-blur-xl z-50 shadow-md">
+        <div class="text-2xl font-black tracking-tighter text-[#D62020] uppercase headline-font">KINETIC STADIUM</div>
+        <nav class="hidden md:flex items-center space-x-8">
+            <a class="text-on-surface-variant font-medium hover:text-[#D62020] transition-colors duration-300"
+                href="#features">Features</a>
+            <a class="text-on-surface-variant font-medium hover:text-[#D62020] transition-colors duration-300"
+                href="#how-it-works">How it Works</a>
+            <a class="text-on-surface-variant font-medium hover:text-[#D62020] transition-colors duration-300"
+                href="#use-cases">Use Cases</a>
+            <a class="text-on-surface-variant font-medium hover:text-[#D62020] transition-colors duration-300"
+                href="#pricing">Pricing</a>
+        </nav>
+        <div class="flex items-center space-x-6">
+            <button class="text-on-surface-variant font-medium hover:text-[#D62020] transition-all">Login</button>
+            <button
+                class="bg-[#D62020] text-white px-6 py-2.5 rounded-lg font-bold shadow-lg shadow-[#D62020]/20 active:scale-95 transition-all">Create
+                Auction</button>
+        </div>
+    </header>
+    <main class="pt-24">
+        <!-- Hero Section -->
+        <section class="relative px-8 pt-16 pb-32 overflow-hidden bg-white">
+            <div class="max-w-7xl mx-auto flex flex-col items-center text-center relative z-10">
+                <span
+                    class="inline-block py-1 px-3 mb-6 rounded-full bg-secondary-container/30 text-secondary font-bold text-xs tracking-widest uppercase">The
+                    Next Gen Auction Engine</span>
+                <h1
+                    class="text-5xl md:text-8xl font-black tracking-tight mb-8 leading-[0.9] headline-font text-on-surface">
+                    Run Your Entire <br />
+                    <span class="text-[#D62020]">Player Auction</span> Digitally
+                </h1>
+                <p class="max-w-2xl text-xl text-on-surface-variant font-light mb-12">
+                    From registration to final bid — everything in one platform. Professional grade sports auction
+                    management for organizations of any size.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4 mb-20">
+                    <button
+                        class="bg-[#D62020] text-white px-10 py-4 rounded-xl font-extrabold text-lg shadow-2xl shadow-primary-container/40 active:scale-95 transition-all">Create
+                        Your Auction</button>
+                    <button
+                        class="bg-surface-container-highest text-primary px-10 py-4 rounded-xl font-bold text-lg active:scale-95 transition-all">View
+                        Demo</button>
+                </div>
+                <!-- Hero Visual (Mock Dashboard) -->
+                <div class="relative w-full max-w-5xl group">
+                    <div
+                        class="absolute -inset-4 bg-[#D62020]/10 rounded-[2rem] opacity-20 blur-3xl group-hover:opacity-30 transition-opacity">
+                    </div>
+                    <div
+                        class="relative bg-surface-container-low rounded-2xl p-4 shadow-2xl border border-outline-variant/20 overflow-hidden">
+                        <div class="flex items-center gap-2 mb-4 px-2">
+                            <div class="w-3 h-3 rounded-full bg-red-500/50"></div>
+                            <div class="w-3 h-3 rounded-full bg-yellow-500/50"></div>
+                            <div class="w-3 h-3 rounded-full bg-green-500/50"></div>
+                            <div class="ml-4 h-6 w-1/3 bg-surface-container-highest rounded-full"></div>
+                        </div>
+                        <div class="grid grid-cols-12 gap-4">
+                            <div
+                                class="col-span-8 bg-surface-container-highest rounded-xl p-6 h-96 flex flex-col justify-end relative overflow-hidden">
+                                <img class="absolute inset-0 w-full h-full object-cover opacity-60"
+                                    data-alt="Dynamic player action photo on a professional card"
+                                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBST-S4qNxRl8xkEci49V8AQKQ5tgo9arH66hJhmVxQAIgfjf9HwS31wVKz4NQO119N_WB5W4kM-9q-JDnzRPtmdKXJKLgKo_fnZbr9oXr-fL0uus0DOfhhV8K4w7VqFpoFegCE4eMI6dVfyA9pT21fnZVjZiDxSPJ_a9rBBUeoNH9q1Z5gb-arvyTIMnyTXCBqPShOB1D0c_34Va3bBs4vHYIVjLS7NElONKHaueFKS1fuska74vYYH7kJKOBRBPWfBPpi64PCzhr" />
+                                <div class="absolute inset-0 bg-gradient-to-t from-white/90 to-transparent"></div>
+                                <div class="relative z-10 text-left">
+                                    <div class="text-primary font-bold text-sm tracking-widest mb-1">ALL-ROUNDER</div>
+                                    <h3 class="text-4xl font-black headline-font text-on-surface">MARCUS JORDAN</h3>
+                                    <div class="flex gap-4 mt-2">
+                                        <div class="bg-white/80 px-3 py-1 rounded text-xs font-bold text-on-surface">
+                                            BASE: $50K</div>
+                                        <div class="bg-primary/20 text-primary px-3 py-1 rounded text-xs font-bold">
+                                            CURRENT: $425K</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-span-4 flex flex-col gap-4">
+                                <div class="bg-secondary-container/10 border border-secondary/20 rounded-xl p-4 flex-1">
+                                    <div class="text-[10px] font-bold text-secondary mb-2 uppercase">Recent Bids</div>
+                                    <div class="space-y-2">
+                                        <div
+                                            class="flex justify-between text-xs py-1 border-b border-outline-variant/10 text-on-surface">
+                                            <span>Alpha Hawks</span><span class="font-bold">$425K</span></div>
+                                        <div
+                                            class="flex justify-between text-xs py-1 border-b border-outline-variant/10 text-on-surface">
+                                            <span>Night Riders</span><span class="font-bold">$410K</span></div>
+                                        <div
+                                            class="flex justify-between text-xs py-1 border-b border-outline-variant/10 text-on-surface">
+                                            <span>Apex Legends</span><span class="font-bold">$380K</span></div>
+                                    </div>
+                                </div>
+                                <div
+                                    class="bg-white rounded-xl p-4 flex flex-col items-center justify-center border border-outline-variant/10">
+                                    <div class="text-4xl font-black text-primary headline-font">00:14</div>
+                                    <div
+                                        class="text-[10px] text-on-surface-variant uppercase font-bold tracking-widest">
+                                        Time Remaining</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- Problem vs Solution -->
+        <section class="py-24 px-8 bg-surface-container-low">
+            <div class="max-w-7xl mx-auto">
+                <div class="grid md:grid-cols-2 gap-16 items-center">
+                    <div class="space-y-12">
+                        <div
+                            class="inline-flex items-center gap-2 text-error font-bold tracking-tighter headline-font text-2xl">
+                            <span class="material-symbols-outlined">warning</span>
+                            THE CHAOS
+                        </div>
+                        <h2 class="text-4xl font-extrabold headline-font leading-tight text-on-surface">Ditch the
+                            outdated <br />manual tracking.</h2>
+                        <ul class="space-y-6">
+                            <li class="flex items-start gap-4">
+                                <div class="mt-1 p-1 bg-error/10 rounded"><span
+                                        class="material-symbols-outlined text-error text-lg">close</span></div>
+                                <div>
+                                    <h4 class="font-bold text-on-surface">Fake payment screenshots</h4>
+                                    <p class="text-sm text-on-surface-variant">Manual verification of entry fees takes
+                                        hours and breeds errors.</p>
+                                </div>
+                            </li>
+                            <li class="flex items-start gap-4">
+                                <div class="mt-1 p-1 bg-error/10 rounded"><span
+                                        class="material-symbols-outlined text-error text-lg">close</span></div>
+                                <div>
+                                    <h4 class="font-bold text-on-surface">Static Player Cards</h4>
+                                    <p class="text-sm text-on-surface-variant">Messy Photoshop files or physical cards
+                                        that can't be updated live.</p>
+                                </div>
+                            </li>
+                            <li class="flex items-start gap-4">
+                                <div class="mt-1 p-1 bg-error/10 rounded"><span
+                                        class="material-symbols-outlined text-error text-lg">close</span></div>
+                                <div>
+                                    <h4 class="font-bold text-on-surface">Excel Tracking Chaos</h4>
+                                    <p class="text-sm text-on-surface-variant">Budget calculations failing during live
+                                        bidding causes massive delays.</p>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                    <div
+                        class="bg-white rounded-3xl p-12 border border-outline-variant/10 shadow-sm relative overflow-hidden group">
+                        <div class="absolute -top-24 -right-24 w-64 h-64 bg-primary/10 blur-[100px]"></div>
+                        <div class="relative z-10 space-y-12">
+                            <div
+                                class="inline-flex items-center gap-2 text-primary font-bold tracking-tighter headline-font text-2xl">
+                                <span class="material-symbols-outlined">check_circle</span>
+                                THE SOLUTION
+                            </div>
+                            <h2 class="text-4xl font-extrabold headline-font leading-tight text-on-surface">
+                                Precision-built <br />for high stakes.</h2>
+                            <div class="space-y-6">
+                                <div
+                                    class="p-6 bg-surface-container-high rounded-2xl flex items-center gap-6 group-hover:translate-x-2 transition-transform">
+                                    <span class="material-symbols-outlined text-primary text-4xl">payments</span>
+                                    <div>
+                                        <div class="text-lg font-bold text-on-surface">Automated Registration</div>
+                                        <p class="text-sm text-on-surface-variant">Integrated payment gateways with
+                                            instant player verification.</p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="p-6 bg-surface-container-high rounded-2xl flex items-center gap-6 group-hover:translate-x-2 transition-transform delay-75">
+                                    <span class="material-symbols-outlined text-primary text-4xl">dynamic_form</span>
+                                    <div>
+                                        <div class="text-lg font-bold text-on-surface">Live Dynamic Cards</div>
+                                        <p class="text-sm text-on-surface-variant">Real-time stats updating on player
+                                            profiles as they sell.</p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="p-6 bg-surface-container-high rounded-2xl flex items-center gap-6 group-hover:translate-x-2 transition-transform delay-150">
+                                    <span class="material-symbols-outlined text-primary text-4xl">calculate</span>
+                                    <div>
+                                        <div class="text-lg font-bold text-on-surface">Smart Purse Tracking</div>
+                                        <p class="text-sm text-on-surface-variant">Auto-locking bids when a team exceeds
+                                            their remaining budget.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- How it Works -->
+        <section class="py-32 px-8 bg-white" id="how-it-works">
+            <div class="max-w-7xl mx-auto text-center mb-24">
+                <h2 class="text-5xl font-black headline-font mb-6 text-on-surface">Execution Path</h2>
+                <p class="text-on-surface-variant text-lg">A zero-friction journey from event setup to data export.</p>
+            </div>
+            <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-y-16 gap-x-8">
+                <!-- Step 1 -->
+                <div class="relative flex flex-col items-center text-center">
+                    <div
+                        class="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center mb-6 shadow-xl border border-outline-variant/10 text-primary">
+                        <span class="material-symbols-outlined text-3xl">event_available</span>
+                    </div>
+                    <div class="absolute -z-10 top-8 left-1/2 w-full h-[2px] bg-outline-variant/20 hidden md:block">
+                    </div>
+                    <h4 class="font-bold text-lg mb-2 text-on-surface">1. Create Event</h4>
+                    <p class="text-sm text-on-surface-variant px-4">Define rules, base prices, and team slots in
+                        minutes.</p>
+                </div>
+                <!-- Step 2 -->
+                <div class="relative flex flex-col items-center text-center">
+                    <div
+                        class="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center mb-6 shadow-xl border border-outline-variant/10 text-primary">
+                        <span class="material-symbols-outlined text-3xl">groups</span>
+                    </div>
+                    <div class="absolute -z-10 top-8 left-1/2 w-full h-[2px] bg-outline-variant/20 hidden md:block">
+                    </div>
+                    <h4 class="font-bold text-lg mb-2 text-on-surface">2. Add Teams</h4>
+                    <p class="text-sm text-on-surface-variant px-4">Set up franchise owners with secure login access.
+                    </p>
+                </div>
+                <!-- Step 3 -->
+                <div class="relative flex flex-col items-center text-center">
+                    <div
+                        class="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center mb-6 shadow-xl border border-outline-variant/10 text-primary">
+                        <span class="material-symbols-outlined text-3xl">share</span>
+                    </div>
+                    <div class="absolute -z-10 top-8 left-1/2 w-full h-[2px] bg-outline-variant/20 hidden md:block">
+                    </div>
+                    <h4 class="font-bold text-lg mb-2 text-on-surface">3. Share Link</h4>
+                    <p class="text-sm text-on-surface-variant px-4">Generate unique registration portals for players.
+                    </p>
+                </div>
+                <!-- Step 4 -->
+                <div class="relative flex flex-col items-center text-center">
+                    <div
+                        class="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center mb-6 shadow-xl border border-outline-variant/10 text-primary">
+                        <span class="material-symbols-outlined text-3xl">person_add</span>
+                    </div>
+                    <h4 class="font-bold text-lg mb-2 text-on-surface">4. Players Register</h4>
+                    <p class="text-sm text-on-surface-variant px-4">Automatic data collection and image uploads.</p>
+                </div>
+                <!-- Row 2 -->
+                <div class="relative flex flex-col items-center text-center">
+                    <div
+                        class="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center mb-6 shadow-xl border border-outline-variant/10 text-primary">
+                        <span class="material-symbols-outlined text-3xl">category</span>
+                    </div>
+                    <div class="absolute -z-10 top-8 left-1/2 w-full h-[2px] bg-outline-variant/20 hidden md:block">
+                    </div>
+                    <h4 class="font-bold text-lg mb-2 text-on-surface">5. Categorize</h4>
+                    <p class="text-sm text-on-surface-variant px-4">Group players by skill or tier for strategic flow.
+                    </p>
+                </div>
+                <div class="relative flex flex-col items-center text-center">
+                    <div
+                        class="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center mb-6 shadow-xl border border-outline-variant/10 text-primary">
+                        <span class="material-symbols-outlined text-3xl">play_circle</span>
+                    </div>
+                    <div class="absolute -z-10 top-8 left-1/2 w-full h-[2px] bg-outline-variant/20 hidden md:block">
+                    </div>
+                    <h4 class="font-bold text-lg mb-2 text-on-surface">6. Start Live</h4>
+                    <p class="text-sm text-on-surface-variant px-4">Go live on big screens with zero latency.</p>
+                </div>
+                <div class="relative flex flex-col items-center text-center">
+                    <div
+                        class="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center mb-6 shadow-xl border border-outline-variant/10 text-primary">
+                        <span class="material-symbols-outlined text-3xl"> gavel</span>
+                    </div>
+                    <div class="absolute -z-10 top-8 left-1/2 w-full h-[2px] bg-outline-variant/20 hidden md:block">
+                    </div>
+                    <h4 class="font-bold text-lg mb-2 text-on-surface">7. Real-Time Bidding</h4>
+                    <p class="text-sm text-on-surface-variant px-4">Instant bid updates across all connected screens.
+                    </p>
+                </div>
+                <div class="relative flex flex-col items-center text-center">
+                    <div
+                        class="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center mb-6 shadow-xl border border-outline-variant/10 text-primary">
+                        <span class="material-symbols-outlined text-3xl">cloud_download</span>
+                    </div>
+                    <h4 class="font-bold text-lg mb-2 text-on-surface">8. Export Results</h4>
+                    <p class="text-sm text-on-surface-variant px-4">Download final rosters and financial reports.</p>
+                </div>
+            </div>
+        </section>
+        <!-- Core Features Bento -->
+        <section class="py-24 px-8 bg-white" id="features">
+            <div class="max-w-7xl mx-auto">
+                <div class="mb-16">
+                    <h2 class="text-4xl font-extrabold headline-font mb-4 text-on-surface">Command Center Features</h2>
+                    <p class="text-on-surface-variant">Everything you need to run a professional league.</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Feature Card 1 -->
+                    <div
+                        class="md:col-span-2 bg-surface-container rounded-3xl p-8 border border-outline-variant/10 hover:border-primary/20 transition-all group overflow-hidden relative">
+                        <div class="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <span class="material-symbols-outlined text-9xl">stadium</span>
+                        </div>
+                        <div class="max-w-md relative z-10">
+                            <h3 class="text-2xl font-bold mb-4 text-on-surface">Fullscreen Live Auction</h3>
+                            <p class="text-on-surface-variant mb-6 text-sm">A television-broadcast quality interface
+                                designed for projectors. Smooth transitions, dynamic timers, and high-impact selling
+                                animations.</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span
+                                    class="px-3 py-1 bg-surface-container-highest rounded-full text-[10px] font-bold text-on-surface">4K
+                                    READY</span>
+                                <span
+                                    class="px-3 py-1 bg-surface-container-highest rounded-full text-[10px] font-bold text-on-surface">AD
+                                    CUSTOMIZABLE</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Feature Card 2 -->
+                    <div
+                        class="bg-surface-container rounded-3xl p-8 border border-outline-variant/10 hover:border-primary/20 transition-all flex flex-col justify-between">
+                        <span class="material-symbols-outlined text-primary text-5xl mb-6">credit_score</span>
+                        <div>
+                            <h3 class="text-xl font-bold mb-2 text-on-surface">Automated Payments</h3>
+                            <p class="text-on-surface-variant text-sm">Secure Stripe &amp; PayPal integration for entry
+                                fees with automated invoice generation.</p>
+                        </div>
+                    </div>
+                    <!-- Feature Card 3 -->
+                    <div
+                        class="bg-surface-container rounded-3xl p-8 border border-outline-variant/10 hover:border-primary/20 transition-all flex flex-col justify-between">
+                        <span class="material-symbols-outlined text-primary text-5xl mb-6">chat</span>
+                        <div>
+                            <h3 class="text-xl font-bold mb-2 text-on-surface">WhatsApp Automation</h3>
+                            <p class="text-on-surface-variant text-sm">Instant sold/unsold alerts sent to players and
+                                team owners automatically via WhatsApp.</p>
+                        </div>
+                    </div>
+                    <!-- Feature Card 4 -->
+                    <div
+                        class="md:col-span-2 bg-surface-container rounded-3xl p-8 border border-outline-variant/10 hover:border-primary/20 transition-all grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <span
+                                class="material-symbols-outlined text-primary text-5xl mb-6">dashboard_customize</span>
+                            <h3 class="text-xl font-bold mb-2 text-on-surface">Team Dashboard</h3>
+                            <p class="text-on-surface-variant text-sm">Live purse status, player category count, and
+                                squad composition breakdown for team owners.</p>
+                        </div>
+                        <div class="bg-surface-container-highest rounded-2xl p-4 flex flex-col gap-3">
+                            <div class="h-3 w-3/4 bg-primary/20 rounded-full"></div>
+                            <div class="h-3 w-1/2 bg-outline-variant/20 rounded-full"></div>
+                            <div class="mt-4 grid grid-cols-3 gap-2">
+                                <div class="h-12 bg-white rounded-lg"></div>
+                                <div class="h-12 bg-white rounded-lg"></div>
+                                <div class="h-12 bg-white rounded-lg"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- Live Auction Highlight -->
+        <section class="py-24 px-8 relative bg-white">
+            <div
+                class="max-w-7xl mx-auto bg-[#1a1a1a] rounded-[3rem] p-12 overflow-hidden relative shadow-2xl border border-outline-variant/10">
+                <div class="absolute inset-0 signature-gradient opacity-10"></div>
+                <div class="relative z-10 grid md:grid-cols-12 gap-12">
+                    <div class="md:col-span-7 flex flex-col justify-center">
+                        <div
+                            class="inline-block bg-[#D62020] text-white px-4 py-1 rounded text-xs font-black tracking-widest mb-6 uppercase">
+                            Live Preview</div>
+                        <h2 class="text-6xl font-black headline-font leading-none mb-8 text-white">Unmatched
+                            <br />Energy.</h2>
+                        <p class="text-white/70 text-xl mb-12">Experience the UI that professional organizers use for
+                            televised local leagues. High-contrast typography and fluid animations keep the adrenaline
+                            pumping.</p>
+                        <div class="space-y-6">
+                            <div class="flex items-center gap-4">
+                                <div
+                                    class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-[#D62020]">
+                                    <span class="material-symbols-outlined">timer</span></div>
+                                <span class="font-bold text-white">Dynamic Countdown Timer</span>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <div
+                                    class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-[#D62020]">
+                                    <span class="material-symbols-outlined">analytics</span></div>
+                                <span class="font-bold text-white">Instant Squad Stat Updates</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="md:col-span-5 relative group">
+                        <!-- Floating Player Card -->
+                        <div
+                            class="bg-white rounded-2xl p-6 shadow-2xl border border-[#D62020]/20 transform rotate-3 hover:rotate-0 transition-transform duration-500">
+                            <img class="w-full aspect-square object-cover rounded-xl mb-6 grayscale hover:grayscale-0 transition-all"
+                                data-alt="High quality athletic player profile for auction"
+                                src="https://lh3.googleusercontent.com/aida-public/AB6AXuCMEtZ7Besi6rAoF3RZT-GKHcIInzrC_UGLoDyJbQP373Hh16gLxjxB6wSB43SmynY8hmTaey2iLkQAiOdph5SCxgWoBWYp2mwV2oFoOLP2UVO0Vlik5C72qbgUun6mUh9uLqfq3-ZFf2m3OB9kD6bvuJBYAiPMRdcyJ6t0LQWdvydSWRzu-k14_fhNdJYlyM56uMGWqgN1LBTVsamIwjNIEIUhySLs2O9BMulq6UMvvJ46_H5eWAFv5Fek3LivM3TVXUcbC9yQP5c_" />
+                            <div class="space-y-4">
+                                <div class="flex justify-between items-end">
+                                    <div>
+                                        <div class="text-[10px] text-[#D62020] font-bold uppercase tracking-widest">
+                                            Category A</div>
+                                        <h4 class="text-3xl font-black headline-font uppercase text-on-surface">Alex
+                                            Rivera</h4>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-[10px] text-on-surface-variant uppercase font-bold">Base Price
+                                        </div>
+                                        <div class="text-xl font-black text-on-surface">$75,000</div>
+                                    </div>
+                                </div>
+                                <div class="h-[1px] bg-outline-variant/20 w-full"></div>
+                                <div
+                                    class="flex justify-between items-center bg-[#D62020] text-white p-4 rounded-lg font-black italic text-2xl">
+                                    <span>CURRENT BID</span>
+                                    <span>$280K</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- Use Cases -->
+        <section class="py-24 px-8 bg-white" id="use-cases">
+            <div class="max-w-7xl mx-auto">
+                <div class="text-center mb-16">
+                    <h2 class="text-5xl font-black headline-font mb-4 text-on-surface">Built For Every Arena</h2>
+                    <p class="text-on-surface-variant">Powering auctions from community clubs to massive festivals.</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div
+                        class="bg-surface-container-low p-8 rounded-3xl border border-outline-variant/10 group hover:bg-surface-container transition-all">
+                        <span class="material-symbols-outlined text-4xl mb-6 text-primary">sports_cricket</span>
+                        <h4 class="text-xl font-bold mb-3 text-on-surface">Cricket Leagues</h4>
+                        <p class="text-sm text-on-surface-variant">Custom purse logic and squad limits perfect for
+                            IPL-style local tournaments.</p>
+                    </div>
+                    <div
+                        class="bg-surface-container-low p-8 rounded-3xl border border-outline-variant/10 group hover:bg-surface-container transition-all">
+                        <span class="material-symbols-outlined text-4xl mb-6 text-primary">sports_soccer</span>
+                        <h4 class="text-xl font-bold mb-3 text-on-surface">Football Tourneys</h4>
+                        <p class="text-sm text-on-surface-variant">Manage player positions and transfer windows with
+                            ease.</p>
+                    </div>
+                    <div
+                        class="bg-surface-container-low p-8 rounded-3xl border border-outline-variant/10 group hover:bg-surface-container transition-all">
+                        <span class="material-symbols-outlined text-4xl mb-6 text-primary">school</span>
+                        <h4 class="text-xl font-bold mb-3 text-on-surface">College Fests</h4>
+                        <p class="text-sm text-on-surface-variant">Low cost, high impact solutions for student-run
+                            sports events.</p>
+                    </div>
+                    <div
+                        class="bg-surface-container-low p-8 rounded-3xl border border-outline-variant/10 group hover:bg-surface-container transition-all">
+                        <span class="material-symbols-outlined text-4xl mb-6 text-primary">corporate_fare</span>
+                        <h4 class="text-xl font-bold mb-3 text-on-surface">Corporate Cups</h4>
+                        <p class="text-sm text-on-surface-variant">Team-building events made professional with automated
+                            stat tracking.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- Social Proof -->
+        <section class="py-24 px-8 bg-white">
+            <div class="max-w-7xl mx-auto flex flex-col items-center">
+                <p class="text-[10px] font-black tracking-[0.3em] text-on-surface-variant mb-12 uppercase">Trusted by
+                    500+ Tournament Organizers</p>
+                <div class="flex flex-wrap justify-center gap-12 md:gap-24 opacity-40 grayscale group">
+                    <span
+                        class="text-2xl font-black headline-font tracking-tighter hover:grayscale-0 hover:opacity-100 transition-all cursor-default text-on-surface">GLOBAL
+                        LEAGUE</span>
+                    <span
+                        class="text-2xl font-black headline-font tracking-tighter hover:grayscale-0 hover:opacity-100 transition-all cursor-default text-on-surface">VETERAN
+                        T20</span>
+                    <span
+                        class="text-2xl font-black headline-font tracking-tighter hover:grayscale-0 hover:opacity-100 transition-all cursor-default text-on-surface">CYBER
+                        ARENA</span>
+                    <span
+                        class="text-2xl font-black headline-font tracking-tighter hover:grayscale-0 hover:opacity-100 transition-all cursor-default text-on-surface">METRO
+                        SPORTS</span>
+                </div>
+            </div>
+        </section>
+        <!-- Final CTA -->
+        <section class="py-32 px-8 relative overflow-hidden bg-white">
+            <div class="absolute inset-0 bg-[#D62020]/5 opacity-10"></div>
+            <div class="max-w-5xl mx-auto text-center relative z-10">
+                <div
+                    class="inline-block bg-[#D62020] text-white px-6 py-2 rounded-full text-sm font-black tracking-widest mb-8 uppercase animate-bounce shadow-xl shadow-primary/40">
+                    Free for the next 3 months!
+                </div>
+                <h2 class="text-5xl md:text-7xl font-black headline-font mb-8 text-on-surface">Ready to Kick Off?</h2>
+                <p class="text-on-surface-variant text-xl mb-12 max-w-2xl mx-auto">Join the world's leading sports
+                    organizers and experience the future of player auctions today.</p>
+                <div class="flex flex-col sm:flex-row justify-center gap-6">
+                    <button
+                        class="bg-[#D62020] text-white px-12 py-5 rounded-2xl font-black text-xl shadow-2xl shadow-primary/30 hover:scale-105 active:scale-95 transition-all">Start
+                        Your First Auction Today</button>
+                    <button
+                        class="bg-surface-container-highest text-primary px-12 py-5 rounded-2xl font-bold text-xl hover:bg-surface-bright transition-all">Book
+                        a Demo</button>
+                </div>
+            </div>
+        </section>
+    </main>
+    <!-- Footer -->
+    <footer
+        class="w-full py-12 px-8 flex flex-col md:flex-row justify-between items-center bg-white border-t border-outline-variant/10">
+        <div class="mb-8 md:mb-0">
+            <div class="text-xl font-bold text-[#D62020] headline-font uppercase mb-2">KINETIC STADIUM</div>
+            <p class="text-on-surface-variant text-xs font-medium">© 2024 KINETIC STADIUM. ALL RIGHTS RESERVED.</p>
+        </div>
+        <div class="flex flex-wrap justify-center gap-8 mb-8 md:mb-0">
+            <a class="text-on-surface-variant hover:text-[#D62020] text-sm font-semibold transition-all" href="#">Terms
+                of Service</a>
+            <a class="text-on-surface-variant hover:text-[#D62020] text-sm font-semibold transition-all"
+                href="#">Privacy Policy</a>
+            <a class="text-on-surface-variant hover:text-[#D62020] text-sm font-semibold transition-all"
+                href="#">Auction Rules</a>
+            <a class="text-on-surface-variant hover:text-[#D62020] text-sm font-semibold transition-all"
+                href="#">Contact Support</a>
+        </div>
+        <div class="flex gap-4">
+            <div
+                class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface opacity-80 hover:opacity-100 cursor-pointer">
+                <span class="material-symbols-outlined text-lg">language</span>
+            </div>
+            <div
+                class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface opacity-80 hover:opacity-100 cursor-pointer">
+                <span class="material-symbols-outlined text-lg">public</span>
+            </div>
+        </div>
+    </footer>
+</body>
+
+</html>
