@@ -658,9 +658,15 @@ const AuctionControl = () => {
         setTimer(60);
 
         // Get available players (not sold, not unsold, not current)
-        const availableForNext = players.filter(p =>
+        let availableForNext = players.filter(p =>
           p.status === 'available' || p.status === 'AVAILABLE'
         );
+
+        // Filter by category if selected
+        if (selectedCategory && selectedCategory !== 'all') {
+          console.log(`Filtering for category: ${selectedCategory}`);
+          availableForNext = availableForNext.filter(p => p.category_id === selectedCategory);
+        }
 
         if (availableForNext.length === 0) {
           toast.error('No available players left for auction!');
@@ -1378,6 +1384,24 @@ const AuctionControl = () => {
             <div className="h-full bg-black/20 backdrop-blur-xl rounded-2xl border border-white/10 p-4 flex items-center justify-center">
               {/* Control Panel - Quick Actions */}
               <div className="flex justify-center gap-6">
+                {/* Category Selection for Random Picking */}
+                <div className="flex flex-col gap-1 w-64">
+                  <span className="text-[10px] text-white/50 uppercase tracking-widest font-bold ml-1">Category Filter</span>
+                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger className="bg-white/10 border-white/30 text-white h-12 rounded-xl text-xs font-bold">
+                      <SelectValue placeholder="All Categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <button
                   onClick={startTimer}
                   disabled={timerActive || loading}
@@ -1535,17 +1559,50 @@ const AuctionControl = () => {
                   </div>
                 </div>
 
+                {/* Category Filter */}
+                <div className="space-y-4 mb-6 pb-6 border-b border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-gray-700 font-bold uppercase tracking-wider text-xs">Filter by Category</Label>
+                    {selectedCategory !== 'all' && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setSelectedCategory('all')}
+                        className="h-6 text-xs text-blue-600 hover:text-blue-700 p-0"
+                      >
+                        Clear Filter
+                      </Button>
+                    )}
+                  </div>
+                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger className="w-full bg-blue-50/50 border-blue-100 focus:ring-blue-500">
+                      <SelectValue placeholder="All Categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
+                            {cat.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {/* Player Selection */}
                 {availablePlayers.length > 0 && (
                   <div className="space-y-4">
-                    <Label className="text-gray-700 font-semibold">Select Player for Bidding</Label>
+                    <Label className="text-gray-700 font-semibold">Select Player for Bidding ({filteredPlayers.length} filtered)</Label>
                     <div className="flex space-x-4">
                       <Select value={selectedPlayer} onValueChange={setSelectedPlayer}>
                         <SelectTrigger className="flex-1">
                           <SelectValue placeholder="Select a player for bidding" />
                         </SelectTrigger>
                         <SelectContent>
-                          {availablePlayers.map((player) => (
+                          {filteredPlayers.map((player) => (
                             <SelectItem key={player.id} value={player.id}>
                               {player.name} - ₹{player.base_price?.toLocaleString()}
                             </SelectItem>
@@ -1786,18 +1843,10 @@ const AuctionControl = () => {
                   <div className="space-y-2 max-h-[600px] overflow-y-auto">
                     {soldPlayers.map((player) => (
                       <div key={player.id} className="relative flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg overflow-hidden">
-                        {/* Sold Stamp with Enhanced Animation */}
+                        {/* Static Sold Badge for Performance */}
                         <div className="absolute top-2 right-2 z-10">
-                          <div className="relative">
-                            {/* Main SOLD stamp */}
-                            <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1 rounded-full text-xs font-bold transform rotate-12 shadow-lg animate-bounce border-2 border-white">
-                              ✓ SOLD
-                            </div>
-                            {/* Pulsing background effect */}
-                            <div className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-30"></div>
-                            {/* Sparkle effect */}
-                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                            <div className="absolute -bottom-1 -left-1 w-1.5 h-1.5 bg-yellow-300 rounded-full animate-pulse delay-150"></div>
+                          <div className="bg-green-600 text-white px-3 py-1 rounded-full text-xs font-bold border-2 border-white shadow-sm">
+                            ✓ SOLD
                           </div>
                         </div>
 
