@@ -741,6 +741,39 @@ async def update_category(category_id: str, category_data: CategoryCreate, curre
         
         db.collection('categories').document(category_id).update(updated_data)
         
+        # If base_price changed, update all players in this category
+        new_base_price = updated_data.get('base_price')
+        old_base_price = existing_category.get('base_price')
+        
+        if new_base_price is not None and new_base_price != old_base_price:
+            logger.info(f"Base price changed for category {category_id} from {old_base_price} to {new_base_price}. Updating players...")
+            try:
+                players_ref = db.collection('players').where('category_id', '==', category_id).stream()
+                
+                batch = db.batch()
+                count = 0
+                total_updated = 0
+                
+                for player in players_ref:
+                    batch.update(player.reference, {'base_price': new_base_price})
+                    count += 1
+                    total_updated += 1
+                    
+                    # Firestore batch limit is 500
+                    if count >= 400:
+                        batch.commit()
+                        batch = db.batch()
+                        count = 0
+                
+                if count > 0:
+                    batch.commit()
+                
+                logger.info(f"Successfully updated base_price for {total_updated} players in category {category_id}")
+            except Exception as player_update_error:
+                logger.error(f"Failed to update players for category {category_id}: {str(player_update_error)}")
+                # We don't raise here to avoid failing the category update itself, 
+                # but in production you might want more robust error handling
+        
         # Get updated category
         updated_doc = db.collection('categories').document(category_id).get()
         return Category(**updated_doc.to_dict())
