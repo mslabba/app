@@ -215,6 +215,7 @@ class PlayerCreate(BaseModel):
     previous_team: Optional[str] = None
     cricheroes_link: Optional[str] = None
     contact_number: Optional[str] = None
+    is_priority: bool = False
 
 class Player(BaseModel):
     id: str
@@ -233,6 +234,7 @@ class Player(BaseModel):
     previous_team: Optional[str] = None
     cricheroes_link: Optional[str] = None
     contact_number: Optional[str] = None
+    is_priority: bool = False
 
 # Public Player Registration Model
 class PublicPlayerRegistration(BaseModel):

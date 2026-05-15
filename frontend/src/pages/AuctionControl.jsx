@@ -31,6 +31,7 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/AuthContext';
 import FloatingMenu from '@/components/FloatingMenu';
+import PlayerSpinner from '@/components/PlayerSpinner';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -58,6 +59,14 @@ const AuctionControl = () => {
   const [showFinalizeBidModal, setShowFinalizeBidModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [finalBidAmount, setFinalBidAmount] = useState('');
+  
+  // Wheel state
+  const [enableWheel, setEnableWheel] = useState(() => {
+    const saved = localStorage.getItem('powerauction_enable_wheel');
+    return saved ? JSON.parse(saved) : true; // Default to true
+  });
+  const [wheelWinnerId, setWheelWinnerId] = useState(null);
+  const [availableForWheel, setAvailableForWheel] = useState([]);
   const [selectedTeamForSale, setSelectedTeamForSale] = useState('');
   const [showSoldStamp, setShowSoldStamp] = useState(false);
   const [soldStampData, setSoldStampData] = useState({ teamName: '', price: '' });
@@ -674,30 +683,51 @@ const AuctionControl = () => {
           return;
         }
 
-        // Randomly select next player
-        const randomIndex = Math.floor(Math.random() * availableForNext.length);
-        const nextPlayer = availableForNext[randomIndex];
+        // Priority logic: Check if there are any priority players in the available pool
+        const priorityPlayers = availableForNext.filter(p => p.is_priority);
+        const poolToPickFrom = priorityPlayers.length > 0 ? priorityPlayers : availableForNext;
 
-        // Set the randomly selected player as current
-        await axios.post(`${API}/auction/next-player/${eventId}?player_id=${nextPlayer.id}`, {}, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        // Randomly select next player from the determined pool
+        const randomIndex = Math.floor(Math.random() * poolToPickFrom.length);
+        const nextPlayer = poolToPickFrom[randomIndex];
 
-        // Update UI states
-        setSelectedPlayer('');
-        setTimerActive(false); // Don't auto-start timer
-
-        // Refresh data
-        fetchAuctionState();
-        fetchPlayers();
-
-        toast.success(`${nextPlayer.name} randomly selected - Click "Start Auction" to begin`);
+        // If wheel is enabled and in fullscreen, show the wheel
+        if (enableWheel && isFullscreen) {
+          setAvailableForWheel(availableForNext);
+          setWheelWinnerId(nextPlayer.id);
+          // The actual API call and state refresh will happen in onComplete of the PlayerSpinner
+        } else {
+          // Proceed immediately
+          await executeNextPlayer(nextPlayer);
+        }
       } catch (error) {
-        console.error('Failed to set next player:', error);
-        toast.error('Failed to set next player');
+        console.error('Failed to prepare next player:', error);
+        toast.error('Failed to prepare next player');
       } finally {
         setLoading(false);
       }
+    }
+  };
+
+  const executeNextPlayer = async (player) => {
+    try {
+      setLoading(true);
+      await axios.post(`${API}/auction/next-player/${eventId}?player_id=${player.id}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setSelectedPlayer('');
+      setTimerActive(false);
+      fetchAuctionState();
+      fetchPlayers();
+
+      toast.success(`${player.name} randomly selected - Click "Start Auction" to begin`);
+    } catch (error) {
+      console.error('Failed to set next player:', error);
+      toast.error('Failed to set next player');
+    } finally {
+      setLoading(false);
+      setWheelWinnerId(null);
     }
   };
 
@@ -853,6 +883,20 @@ const AuctionControl = () => {
   if (isFullscreen) {
     return (
       <div className="fixed inset-0 z-50 bg-gradient-to-br from-[#0a0e27] via-[#1a1f3a] to-[#2a1f3a] overflow-hidden">
+        {enableWheel && isFullscreen && wheelWinnerId && (
+          <PlayerSpinner 
+            players={availableForWheel} 
+            winnerId={wheelWinnerId} 
+            onComplete={() => {
+              const winner = players.find(p => p.id === wheelWinnerId);
+              if (winner) {
+                executeNextPlayer(winner);
+              } else {
+                setWheelWinnerId(null);
+              }
+            }} 
+          />
+        )}
         {/* Dynamic Animated Background */}
         <div className="fixed inset-0 opacity-30">
           <div className="absolute inset-0" style={{
@@ -1400,6 +1444,25 @@ const AuctionControl = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                {/* Spinning Wheel Toggle */}
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] text-white/50 uppercase tracking-widest font-bold ml-1">Wheel</span>
+                  <button
+                    onClick={() => {
+                      const newValue = !enableWheel;
+                      setEnableWheel(newValue);
+                      localStorage.setItem('powerauction_enable_wheel', JSON.stringify(newValue));
+                    }}
+                    className={`h-12 px-4 rounded-xl text-xs font-bold transition-all border-2 flex items-center justify-center ${
+                      enableWheel 
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-400' 
+                        : 'bg-white/5 border-white/10 text-white/50'
+                    }`}
+                  >
+                    {enableWheel ? '🎡 ON' : '⏸ OFF'}
+                  </button>
                 </div>
 
                 <button

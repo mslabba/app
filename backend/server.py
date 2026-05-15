@@ -1644,7 +1644,10 @@ async def create_player(player_data: PlayerCreate, current_user: dict = Depends(
             'status': PlayerStatus.AVAILABLE.value,
             'sold_to_team_id': None,
             'sold_price': None,
-            'previous_team': player_data.previous_team
+            'previous_team': player_data.previous_team,
+            'cricheroes_link': player_data.cricheroes_link,
+            'contact_number': player_data.contact_number,
+            'is_priority': player_data.is_priority
         }
         
         if db:
@@ -1972,7 +1975,8 @@ async def update_player(player_id: str, player_data: PlayerCreate, current_user:
             'stats': player_data.stats.model_dump() if player_data.stats else None,
             'previous_team': player_data.previous_team,
             'cricheroes_link': player_data.cricheroes_link,
-            'contact_number': player_data.contact_number
+            'contact_number': player_data.contact_number,
+            'is_priority': player_data.is_priority
         }
         
         db.collection('players').document(player_id).update(updated_data)

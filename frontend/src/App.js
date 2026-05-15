@@ -15,6 +15,7 @@ import EventManagement from '@/pages/EventManagement';
 import CategoryManagement from '@/pages/CategoryManagement';
 import TeamManagement from '@/pages/TeamManagement';
 import PlayerManagement from '@/pages/PlayerManagement';
+import PriorityPlayers from '@/pages/PriorityPlayers';
 import SoldPlayersManagement from '@/pages/SoldPlayersManagement';
 import AuctionControl from '@/pages/AuctionControl';
 import SponsorManagement from '@/pages/SponsorManagement';
@@ -165,6 +166,14 @@ function App() {
               element={
                 <ProtectedRoute requireSuperAdmin>
                   <PlayerManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/priority-players/:eventId"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <PriorityPlayers />
                 </ProtectedRoute>
               }
             />
