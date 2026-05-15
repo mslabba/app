@@ -584,15 +584,6 @@ const PlayerManagement = () => {
               <Download className="w-4 h-4 mr-2" />
               Export PDF {filteredPlayers.length < players.length && `(${filteredPlayers.length})`}
             </Button>
-            
-            <Button
-              onClick={() => window.location.href = `/admin/priority-players/${eventId}`}
-              className="bg-amber-500 text-white hover:bg-amber-600"
-            >
-              <User className="w-4 h-4 mr-2" />
-              Priority List
-            </Button>
-
             <Dialog open={isDialogOpen} onOpenChange={(open) => {
               console.log('Player Dialog state changing to:', open);
               setIsDialogOpen(open);
