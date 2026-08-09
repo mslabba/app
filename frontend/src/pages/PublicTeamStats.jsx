@@ -38,8 +38,6 @@ const PublicTeamStats = () => {
 
   // Auto-refresh every 5 seconds for real-time updates
   useEffect(() => {
-    console.log('PublicTeamStats useEffect:', { teamId, token, API: process.env.REACT_APP_BACKEND_URL });
-
     if (!teamId) {
       setError('Team ID is missing from the URL.');
       setLoading(false);
@@ -67,15 +65,11 @@ const PublicTeamStats = () => {
 
   const fetchTeamData = async () => {
     try {
-      console.log('Fetching team data for:', { teamId, token, API });
-
       const [teamResponse, playersResponse, auctionResponse] = await Promise.all([
         axios.get(`${API}/public/team/${teamId}/stats?token=${token}`),
         axios.get(`${API}/public/team/${teamId}/players?token=${token}`),
         axios.get(`${API}/public/team/${teamId}/auction-state?token=${token}`)
       ]);
-
-      console.log('Successful API responses:', { teamResponse: teamResponse.data, playersResponse: playersResponse.data });
 
       setTeam(teamResponse.data.team);
       setEvent(teamResponse.data.event);
@@ -95,20 +89,9 @@ const PublicTeamStats = () => {
         const safeBidResponse = await axios.get(safeBidUrl);
         setMaxSafeBid(safeBidResponse.data);
       } catch (safeBidError) {
-        console.error('Failed to fetch safe bid data:', safeBidError);
-        // Don't set error state for safe bid failure, just log it
+        // Safe bid is optional for public view
       }
     } catch (error) {
-      console.error('Failed to fetch team data:', error);
-      console.error('Error details:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        teamId,
-        token,
-        API
-      });
-
       let errorMessage = 'Failed to load team statistics. Please check your link.';
 
       if (error.response?.status === 403) {
@@ -193,109 +176,35 @@ const PublicTeamStats = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading team statistics...</p>
+      <div className="app-bg flex min-h-screen items-center justify-center px-4">
+        <div className="text-center" role="status" aria-live="polite">
+          <div className="mx-auto mb-4 h-14 w-14 animate-spin rounded-full border-4 border-white/20 border-t-red-400" />
+          <p className="text-white/80">Loading team statistics…</p>
         </div>
       </div>
     );
   }
 
-  const testPublicEndpoints = async () => {
-    try {
-      console.log('Testing public endpoints...');
-
-      // Test basic public endpoint
-      const testResponse = await axios.get(`${API}/public/test`);
-      console.log('Test endpoint response:', testResponse.data);
-
-      // Test list teams endpoint
-      const teamsResponse = await axios.get(`${API}/public/debug/teams`);
-      console.log('Available teams:', teamsResponse.data);
-
-      // Test debug endpoint
-      const debugResponse = await axios.get(`${API}/public/debug/team/${teamId}?token=${token}`);
-      console.log('Debug endpoint response:', debugResponse.data);
-
-      // Show results in alert for easy viewing
-      alert(`Debug Results:
-        
-Team Exists: ${debugResponse.data.team_exists}
-Token Valid: ${debugResponse.data.token_valid}
-Team Name: ${debugResponse.data.team_name || 'N/A'}
-${debugResponse.data.demo_token_info}
-
-Available Teams: ${teamsResponse.data.teams?.length || 0}
-Check console for full details.`);
-
-      toast.success('Debug information displayed - check console for full details');
-    } catch (error) {
-      console.error('Test failed:', error);
-      alert(`Test failed: ${error.response?.data?.detail || error.message}`);
-      toast.error('Test failed - check console');
-    }
-  }; if (error) {
+  if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-pink-100">
-        <div className="text-center max-w-md mx-auto p-6">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h1 className="text-2xl font-bold text-red-600 mb-2">Access Denied</h1>
-          <p className="text-gray-600 mb-6">{error}</p>
-
-          <div className="space-y-3">
-            <button
-              onClick={testPublicEndpoints}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              🔍 Debug Connection
-            </button>
-
-            <button
-              onClick={() => {
-                // Generate a proper demo token
-                const demoString = `${teamId}-${Date.now()}`;
-                const validDemoToken = btoa(demoString);
-                const newUrl = `${window.location.origin}/public/team/${teamId}/stats?token=${validDemoToken}`;
-
-                console.log('Generated valid demo token:', {
-                  demoString,
-                  validDemoToken,
-                  newUrl
-                });
-
-                // Redirect to the new URL with valid demo token
-                window.location.href = newUrl;
-              }}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              🔧 Generate Valid Demo Token
-            </button>
-
-            <div className="text-left bg-gray-100 p-4 rounded-lg text-sm space-y-1">
-              <div><strong>Team ID:</strong> {teamId}</div>
-              <div><strong>Token:</strong> {token?.substring(0, 20)}...</div>
-              <div><strong>API URL:</strong> {API}</div>
-              <div><strong>Full URL:</strong> {window.location.href}</div>
-
-              {/* Try to decode the token */}
-              {(() => {
-                try {
-                  const decoded = atob(token);
-                  return <div><strong>Decoded Token:</strong> {decoded}</div>;
-                } catch (e) {
-                  return <div><strong>Token Type:</strong> Not a demo token</div>;
-                }
-              })()}
-            </div>
-
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors ml-2"
-            >
-              🔄 Retry
-            </button>
+      <div className="app-bg flex min-h-screen items-center justify-center px-4">
+        <div className="glass max-w-md rounded-2xl border border-white/15 p-8 text-center">
+          <div className="mb-3 text-4xl" aria-hidden>
+            ⚠️
           </div>
+          <h1 className="mb-2 text-2xl font-bold text-white">Unable to load stats</h1>
+          <p className="mb-6 text-sm text-white/70">{error}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              setError(null);
+              fetchTeamData();
+            }}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+          >
+            Try again
+          </button>
         </div>
       </div>
     );
@@ -305,55 +214,53 @@ Check console for full details.`);
   const squadCompletionPercentage = team ? Math.round((players.length / team.max_squad_size) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+    <div className="app-bg min-h-screen">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-6">
-              {/* Team Logo */}
+      <header className="border-b border-white/10 bg-black/30 backdrop-blur-xl">
+        <div className="mx-auto max-w-7xl px-4 py-5 sm:py-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-4">
               {team?.logo_url ? (
                 <img
                   src={team.logo_url}
-                  alt={team?.name}
-                  className="w-16 h-16 rounded-full object-cover border-4 border-white shadow-lg"
+                  alt=""
+                  className="h-14 w-14 rounded-full border-2 border-white/20 object-cover shadow-lg sm:h-16 sm:w-16"
                 />
               ) : (
                 <div
-                  className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-2xl border-4 border-white shadow-lg"
-                  style={{ backgroundColor: team?.color || '#3B82F6' }}
+                  className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-white/20 text-2xl font-bold text-white shadow-lg sm:h-16 sm:w-16"
+                  style={{ backgroundColor: team?.color || '#e11d2e' }}
+                  aria-hidden
                 >
                   {team?.name?.charAt(0)}
                 </div>
               )}
 
-              {/* Team Info */}
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">{team?.name}</h1>
-                <p className="text-gray-600">{event?.name} - Live Statistics</p>
-                <div className="flex items-center space-x-2 mt-2">
-                  <div className="flex items-center space-x-1 text-sm text-gray-500">
-                    <Clock className="w-4 h-4" />
-                    <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
-                  </div>
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                  <span className="text-sm text-green-600 font-medium">Live</span>
+              <div className="min-w-0">
+                <h1 className="truncate text-2xl font-bold text-white sm:text-3xl">{team?.name}</h1>
+                <p className="truncate text-sm text-white/65">{event?.name} · Live statistics</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/50">
+                  <Clock className="h-3.5 w-3.5" aria-hidden />
+                  <span>Updated {lastUpdated.toLocaleTimeString()}</span>
+                  <span className="inline-flex items-center gap-1 font-medium text-emerald-300">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" aria-hidden />
+                    Live
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Share Button */}
-            <div className="flex items-center space-x-2 text-sm text-gray-500">
-              <Eye className="w-4 h-4" />
-              <span>Public View</span>
+            <div className="flex items-center gap-2 text-xs font-medium text-white/55">
+              <Eye className="h-4 w-4" aria-hidden />
+              Public view
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <main id="main-content" className="mx-auto max-w-7xl px-4 py-6 sm:py-8">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
           {/* Left Column - Key Stats */}
           <div className="space-y-6">
             {/* Budget Overview */}
@@ -682,7 +589,7 @@ Check console for full details.`);
             </Card>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };
