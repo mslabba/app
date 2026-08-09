@@ -291,6 +291,21 @@ class BankDetails(Base):
     raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
 
+class PaymentGatewaySettings(Base):
+    """Singleton-style Cashfree credentials (one row with fixed id)."""
+
+    __tablename__ = "payment_gateway_settings"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default="payment_gateway_config")
+    cashfree_app_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    cashfree_secret_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    cashfree_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="sandbox")
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    updated_by: Mapped[Optional[str]] = mapped_column(String(128))
+    raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+
 class MigrationRun(Base):
     __tablename__ = "migration_runs"
 

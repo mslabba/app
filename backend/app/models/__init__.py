@@ -8,6 +8,7 @@ from app.models.entities import (
     Event,
     MigrationQuarantine,
     MigrationRun,
+    PaymentGatewaySettings,
     PaymentOrder,
     Player,
     PlayerRegistration,
@@ -30,6 +31,7 @@ __all__ = [
     "PublicTeamToken",
     "PaymentOrder",
     "BankDetails",
+    "PaymentGatewaySettings",
     "MigrationRun",
     "MigrationQuarantine",
 ]

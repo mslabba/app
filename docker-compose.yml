@@ -1,0 +1,25 @@
+# Local development only — not used by Railway production.
+# Postgres for PowerAuction migration / DATA_BACKEND=postgres testing.
+#
+# Host port 5434 avoids common conflicts (5432/5433 often used by other local DBs).
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    container_name: powerauction-postgres
+    restart: unless-stopped
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: powerauction
+      POSTGRES_PASSWORD: powerauction
+      POSTGRES_DB: powerauction
+    volumes:
+      - powerauction_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U powerauction -d powerauction"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  powerauction_pg_data:

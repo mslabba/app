@@ -32,15 +32,50 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Dual backend: firestore (default/production) | postgres (local Docker / staging)
+try:
+    from app.core.config import get_settings as _get_settings
+    from app.data import pg_repo as _pg
+    _USE_POSTGRES = _get_settings().use_postgres
+except Exception as _cfg_err:
+    logger.warning(f"Postgres config unavailable, using Firestore only: {_cfg_err}")
+    _USE_POSTGRES = False
+    _pg = None
+
+logger.info(f"DATA_BACKEND={'postgres' if _USE_POSTGRES else 'firestore'}")
+
 # Cloudinary configuration (using unsigned uploads, no API secret needed)
 CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', 'drok5rkeb')
 CLOUDINARY_UPLOAD_PRESET = os.getenv('CLOUDINARY_UPLOAD_PRESET', 'auction_uploads')
 logger.info(f"Cloudinary configured for unsigned uploads: {CLOUDINARY_CLOUD_NAME}")
 
+
+def _store_user(uid: str) -> Optional[dict]:
+    if _USE_POSTGRES and _pg:
+        return _pg.get_user(uid)
+    if db:
+        doc = db.collection('users').document(uid).get()
+        if doc.exists:
+            return doc.to_dict()
+    return None
+
+
 # Helper function to check event ownership
 async def check_event_ownership(event_id: str, current_user: dict) -> bool:
     """Check if the current user owns the event"""
     try:
+        # Super admins can access all events (check store role first)
+        user_data = _store_user(current_user['uid'])
+        user_role = (user_data or {}).get('role') or current_user.get('role', '')
+        if user_role == 'super_admin':
+            return True
+
+        if _USE_POSTGRES and _pg:
+            event_data = _pg.get_event(event_id)
+            if not event_data:
+                raise HTTPException(status_code=404, detail="Event not found")
+            return event_data.get('created_by', '') == current_user['uid']
+
         if not db:
             return False
         
@@ -50,13 +85,6 @@ async def check_event_ownership(event_id: str, current_user: dict) -> bool:
         
         event_data = event_doc.to_dict()
         created_by = event_data.get('created_by', '')
-        
-        # Super admins can access all events
-        user_role = current_user.get('role', '')
-        if user_role == 'super_admin':
-            return True
-            
-        # Check if user created this event
         return created_by == current_user['uid']
     except HTTPException:
         raise
@@ -183,7 +211,9 @@ async def register(user_data: UserCreate):
             'created_at': datetime.now(timezone.utc).isoformat()
         }
         
-        if db:
+        if _USE_POSTGRES and _pg:
+            _pg.upsert_user(user_doc)
+        elif db:
             db.collection('users').document(user.uid).set(user_doc)
         
         # Generate custom token
@@ -284,11 +314,16 @@ async def set_user_role(uid: str, role: UserRole, current_user: dict = Depends(r
         # Update custom claims
         firebase_auth.set_custom_user_claims(uid, {'role': role.value})
         
-        # Update Firestore
-        if db:
+        if _USE_POSTGRES and _pg:
+            if not _pg.get_user(uid):
+                raise HTTPException(status_code=404, detail="User not found")
+            _pg.update_user(uid, {'role': role.value})
+        elif db:
             db.collection('users').document(uid).update({'role': role.value})
         
         return {"message": "Role updated successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -296,6 +331,46 @@ async def set_user_role(uid: str, role: UserRole, current_user: dict = Depends(r
 async def get_me(current_user: dict = Depends(get_current_user)):
     """Get current user info"""
     try:
+        if _USE_POSTGRES and _pg:
+            user_data = _pg.get_user(current_user['uid'])
+            if user_data:
+                try:
+                    firebase_auth.set_custom_user_claims(
+                        current_user['uid'],
+                        {'role': user_data.get('role', 'event_organizer')},
+                    )
+                except Exception as claim_error:
+                    print(f"Error setting custom claims: {claim_error}")
+                return UserResponse(
+                    uid=user_data.get('uid', current_user['uid']),
+                    email=user_data.get('email', current_user.get('email', '')),
+                    role=UserRole(user_data.get('role', 'event_organizer')),
+                    display_name=user_data.get('display_name')
+                    or current_user.get('name', current_user.get('email', '').split('@')[0]),
+                    mobile_number=user_data.get('mobile_number'),
+                    team_id=user_data.get('team_id'),
+                )
+            # Auto-create profile in Postgres for first login (local/staging)
+            user_data = {
+                'uid': current_user['uid'],
+                'email': current_user.get('email', ''),
+                'role': 'event_organizer',
+                'display_name': current_user.get(
+                    'name', current_user.get('email', '').split('@')[0]
+                ),
+                'mobile_number': None,
+                'team_id': None,
+            }
+            _pg.upsert_user(user_data)
+            return UserResponse(
+                uid=user_data['uid'],
+                email=user_data['email'],
+                role=UserRole(user_data['role']),
+                display_name=user_data['display_name'],
+                mobile_number=None,
+                team_id=None,
+            )
+
         if db:
             user_doc = db.collection('users').document(current_user['uid']).get()
             if user_doc.exists:
@@ -339,6 +414,22 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 async def promote_to_admin(current_user: dict = Depends(get_current_user)):
     """Temporary endpoint to promote current user to super admin"""
     try:
+        if _USE_POSTGRES and _pg:
+            if not _pg.get_user(current_user['uid']):
+                _pg.upsert_user({
+                    'uid': current_user['uid'],
+                    'email': current_user.get('email') or f"{current_user['uid']}@unknown.local",
+                    'role': 'super_admin',
+                    'display_name': current_user.get('name'),
+                })
+            else:
+                _pg.update_user(current_user['uid'], {'role': 'super_admin'})
+            try:
+                firebase_auth.set_custom_user_claims(current_user['uid'], {'role': 'super_admin'})
+            except Exception as claim_error:
+                logger.warning(f"Could not set Firebase claims: {claim_error}")
+            return {"message": "User promoted to super admin successfully"}
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -349,6 +440,8 @@ async def promote_to_admin(current_user: dict = Depends(get_current_user)):
         print(f"Promoted user {current_user['uid']} to super_admin")
         
         return {"message": "User promoted to super admin successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error promoting user: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
@@ -357,6 +450,13 @@ async def promote_to_admin(current_user: dict = Depends(get_current_user)):
 async def get_all_users(current_user: dict = Depends(require_super_admin)):
     """Get all registered users (Super Admin only)"""
     try:
+        if _USE_POSTGRES and _pg:
+            users = _pg.list_users(order_desc=True)
+            for u in users:
+                u['id'] = u.get('uid') or u.get('id')
+            logger.info(f"Retrieved {len(users)} users (postgres)")
+            return users
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -379,15 +479,6 @@ async def get_all_users(current_user: dict = Depends(require_super_admin)):
 async def update_user(user_id: str, user_data: dict, current_user: dict = Depends(require_super_admin)):
     """Update user details (Super Admin only)"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
-        
-        user_ref = db.collection('users').document(user_id)
-        user_doc = user_ref.get()
-        
-        if not user_doc.exists:
-            raise HTTPException(status_code=404, detail="User not found")
-        
         # Update allowed fields
         update_data = {}
         if 'display_name' in user_data:
@@ -396,11 +487,27 @@ async def update_user(user_id: str, user_data: dict, current_user: dict = Depend
             update_data['mobile_number'] = user_data['mobile_number']
         if 'role' in user_data:
             update_data['role'] = user_data['role']
-            # Update Firebase Auth custom claims
             try:
                 firebase_auth.set_custom_user_claims(user_id, {'role': user_data['role']})
             except Exception as claim_error:
                 logger.error(f"Error setting custom claims: {claim_error}")
+
+        if _USE_POSTGRES and _pg:
+            if not _pg.get_user(user_id):
+                raise HTTPException(status_code=404, detail="User not found")
+            if update_data:
+                _pg.update_user(user_id, update_data)
+                logger.info(f"Updated user {user_id} (postgres)")
+            return {"message": "User updated successfully", "updated_fields": list(update_data.keys())}
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        user_ref = db.collection('users').document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            raise HTTPException(status_code=404, detail="User not found")
         
         if update_data:
             user_ref.update(update_data)
@@ -417,12 +524,24 @@ async def update_user(user_id: str, user_data: dict, current_user: dict = Depend
 async def delete_user(user_id: str, current_user: dict = Depends(require_super_admin)):
     """Delete user (Super Admin only)"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
-        
         # Prevent deleting yourself
         if user_id == current_user['uid']:
             raise HTTPException(status_code=400, detail="Cannot delete your own account")
+
+        if _USE_POSTGRES and _pg:
+            try:
+                _pg.delete_user(user_id)
+            except ValueError:
+                raise HTTPException(status_code=404, detail="User not found")
+            try:
+                firebase_auth.delete_user(user_id)
+                logger.info(f"Deleted user {user_id} from Firebase Auth")
+            except Exception as auth_error:
+                logger.warning(f"Could not delete user from Firebase Auth: {auth_error}")
+            return {"message": "User deleted successfully"}
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
         
         # Delete from Firestore
         user_ref = db.collection('users').document(user_id)
@@ -452,7 +571,7 @@ async def delete_user(user_id: str, current_user: dict = Depends(require_super_a
 async def create_user_by_admin(user_data: UserCreate, current_user: dict = Depends(require_super_admin)):
     """Create a new user (Super Admin only)"""
     try:
-        if not db:
+        if not _USE_POSTGRES and not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
         # Create user in Firebase Auth
@@ -474,7 +593,7 @@ async def create_user_by_admin(user_data: UserCreate, current_user: dict = Depen
         except Exception as claim_error:
             logger.error(f"Error setting custom claims: {claim_error}")
         
-        # Create user document in Firestore
+        # Create user document in active backend
         user_doc = {
             'uid': firebase_user.uid,
             'email': user_data.email,
@@ -484,8 +603,11 @@ async def create_user_by_admin(user_data: UserCreate, current_user: dict = Depen
             'team_id': user_data.team_id,
             'created_at': datetime.now(timezone.utc).isoformat()
         }
-        
-        db.collection('users').document(firebase_user.uid).set(user_doc)
+
+        if _USE_POSTGRES and _pg:
+            _pg.upsert_user(user_doc)
+        else:
+            db.collection('users').document(firebase_user.uid).set(user_doc)
         
         logger.info(f"Created new user: {firebase_user.uid} with role: {user_data.role.value}")
         return {"message": "User created successfully", "uid": firebase_user.uid}
@@ -501,16 +623,13 @@ async def create_user_by_admin(user_data: UserCreate, current_user: dict = Depen
 async def create_auction(event_data: EventCreate, current_user: dict = Depends(require_event_organizer)):
     """Create a new auction"""
     try:
-        # Get organizer details from Firestore
         organizer_name = None
         organizer_mobile = None
-        if db:
-            user_doc = db.collection('users').document(current_user['uid']).get()
-            if user_doc.exists:
-                user_data = user_doc.to_dict()
-                organizer_name = user_data.get('display_name')
-                organizer_mobile = user_data.get('mobile_number')
-        
+        user_data = _store_user(current_user['uid'])
+        if user_data:
+            organizer_name = user_data.get('display_name')
+            organizer_mobile = user_data.get('mobile_number')
+
         event_id = str(uuid.uuid4())
         event_doc = {
             'id': event_id,
@@ -529,10 +648,16 @@ async def create_auction(event_data: EventCreate, current_user: dict = Depends(r
             'has_registration_limit': event_data.has_registration_limit,
             'registration_limit': event_data.registration_limit
         }
-        
+
+        if _USE_POSTGRES and _pg:
+            created = _pg.create_event(event_doc)
+            created = dict(created)
+            created['rules'] = EventRules(**(created.get('rules') or {}))
+            return Event(**created)
+
         if db:
             db.collection('events').document(event_id).set(event_doc)
-        
+
         return Event(**event_doc)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -541,6 +666,16 @@ async def create_auction(event_data: EventCreate, current_user: dict = Depends(r
 async def get_auctions(current_user: dict = Depends(get_current_user)):
     """Get auctions - all auctions for super admin, only owned auctions for auction organizers"""
     try:
+        if _USE_POSTGRES and _pg:
+            user = _pg.get_user(current_user['uid'])
+            user_role = (user or {}).get('role', 'viewer')
+            events = _pg.list_events_for_user(current_user['uid'], user_role)
+            result = []
+            for event_data in events:
+                rules = event_data.get('rules') or {}
+                result.append(Event(**{**event_data, 'rules': EventRules(**rules)}))
+            return result
+
         if not db:
             return []
         
@@ -569,6 +704,14 @@ async def get_auctions(current_user: dict = Depends(get_current_user)):
 async def get_auction(event_id: str):
     """Get auction by ID"""
     try:
+        if _USE_POSTGRES and _pg:
+            event_data = _pg.get_event(event_id)
+            if not event_data:
+                raise HTTPException(status_code=404, detail="Event not found")
+            event_data = dict(event_data)
+            event_data['rules'] = EventRules(**(event_data.get('rules') or {}))
+            return Event(**event_data)
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -588,17 +731,13 @@ async def get_auction(event_id: str):
 async def update_auction(event_id: str, event_data: EventCreate, current_user: dict = Depends(require_event_organizer)):
     """Update auction - only auction owner can update"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
-        
-        # Check if user owns this event (unless super admin)
         if not await check_event_ownership(event_id, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only update events you created"
             )
-        
-        db.collection('events').document(event_id).update({
+
+        fields = {
             'name': event_data.name,
             'date': event_data.date,
             'rules': event_data.rules.model_dump(),
@@ -608,10 +747,20 @@ async def update_auction(event_id: str, event_data: EventCreate, current_user: d
             'payment_settings': event_data.payment_settings.model_dump() if event_data.payment_settings else {'collect_payment': False, 'registration_fee': None},
             'has_registration_limit': event_data.has_registration_limit,
             'registration_limit': event_data.registration_limit
-        })
-        
+        }
+
+        if _USE_POSTGRES and _pg:
+            _pg.update_event(event_id, fields)
+            return {"message": "Auction updated successfully"}
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+
+        db.collection('events').document(event_id).update(fields)
         return {"message": "Auction updated successfully"}
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -633,7 +782,10 @@ async def create_category(category_data: CategoryCreate, current_user: dict = De
             'id': category_id,
             **category_data.model_dump()
         }
-        
+
+        if _USE_POSTGRES and _pg:
+            return Category(**_pg.create_category(category_doc))
+
         if db:
             db.collection('categories').document(category_id).set(category_doc)
         
@@ -645,6 +797,19 @@ async def create_category(category_data: CategoryCreate, current_user: dict = De
 async def get_event_categories(event_id: str):
     """Get categories for an event"""
     try:
+        if _USE_POSTGRES and _pg:
+            result = []
+            for cat_data in _pg.list_categories(event_id):
+                if 'base_price' not in cat_data or cat_data['base_price'] is None:
+                    cat_data['base_price'] = cat_data.get('base_price_min', 50000)
+                cat_data.pop('base_price_min', None)
+                cat_data.pop('base_price_max', None)
+                try:
+                    result.append(Category(**cat_data))
+                except Exception as model_error:
+                    logger.error(f"Failed to create Category from data: {cat_data}, error: {model_error}")
+            return result
+
         if not db:
             return []
         
@@ -677,40 +842,32 @@ async def get_event_categories(event_id: str):
 @api_router.get("/auctions/{event_id}/categories", response_model=List[Category])
 async def get_categories_for_auction(event_id: str):
     """Get categories for an auction (alternative endpoint)"""
-    try:
-        if not db:
-            return []
-        
-        categories = db.collection('categories').where('event_id', '==', event_id).stream()
-        
-        result = []
-        for cat in categories:
-            cat_data = cat.to_dict()
-            
-            # Handle transition from old model to new model
-            if 'base_price' not in cat_data:
-                # If base_price doesn't exist, use base_price_min as fallback
-                cat_data['base_price'] = cat_data.get('base_price_min', 50000)
-            
-            # Remove old fields that are no longer in the model
-            cat_data.pop('base_price_min', None)
-            cat_data.pop('base_price_max', None)
-            
-            try:
-                result.append(Category(**cat_data))
-            except Exception as model_error:
-                logger.error(f"Failed to create Category from data: {cat_data}, error: {model_error}")
-                continue
-                
-        return result
-    except Exception as e:
-        logger.error(f"Error fetching categories for event {event_id}: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+    return await get_event_categories(event_id)
 
 @api_router.put("/categories/{category_id}", response_model=Category)
 async def update_category(category_id: str, category_data: CategoryCreate, current_user: dict = Depends(require_event_organizer)):
     """Update a category - only event owner can update"""
     try:
+        if _USE_POSTGRES and _pg:
+            existing_category = _pg.get_category(category_id)
+            if not existing_category:
+                raise HTTPException(status_code=404, detail="Category not found")
+            if not await check_event_ownership(existing_category['event_id'], current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only update categories for events you created"
+                )
+            updated_data = {
+                'name': category_data.name,
+                'description': category_data.description,
+                'min_players': category_data.min_players,
+                'max_players': category_data.max_players,
+                'color': category_data.color,
+                'base_price': category_data.base_price,
+                'event_id': category_data.event_id
+            }
+            return Category(**_pg.update_category(category_id, updated_data))
+
         if not db:
             raise HTTPException(status_code=500, detail="Database not available")
         
@@ -777,6 +934,8 @@ async def update_category(category_id: str, category_data: CategoryCreate, curre
         # Get updated category
         updated_doc = db.collection('categories').document(category_id).get()
         return Category(**updated_doc.to_dict())
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -784,6 +943,18 @@ async def update_category(category_id: str, category_data: CategoryCreate, curre
 async def delete_category(category_id: str, current_user: dict = Depends(require_event_organizer)):
     """Delete a category - only event owner can delete"""
     try:
+        if _USE_POSTGRES and _pg:
+            category_data = _pg.get_category(category_id)
+            if not category_data:
+                raise HTTPException(status_code=404, detail="Category not found")
+            if not await check_event_ownership(category_data['event_id'], current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only delete categories for events you created"
+                )
+            _pg.delete_category(category_id)
+            return {"message": "Category deleted successfully"}
+
         if not db:
             raise HTTPException(status_code=500, detail="Database not available")
         
@@ -827,7 +998,29 @@ async def create_team(team_data: TeamCreate, current_user: dict = Depends(requir
             )
         team_id = str(uuid.uuid4())
         admin_uid = None
-        
+
+        if _USE_POSTGRES and _pg:
+            if team_data.admin_email:
+                user = _pg.get_user_by_email(team_data.admin_email)
+                if not user:
+                    raise HTTPException(status_code=404, detail=f"User with email {team_data.admin_email} not found")
+                admin_uid = user.get('uid') or user.get('id')
+            team_doc = {
+                'id': team_id,
+                'name': team_data.name,
+                'event_id': team_data.event_id,
+                'budget': team_data.budget,
+                'spent': 0,
+                'remaining': team_data.budget,
+                'max_squad_size': team_data.max_squad_size,
+                'logo_url': team_data.logo_url,
+                'color': team_data.color,
+                'admin_uid': admin_uid,
+                'admin_email': team_data.admin_email,
+                'players_count': 0
+            }
+            return Team(**_pg.create_team(team_doc))
+
         # If admin_email is provided, find the user and get their UID
         if team_data.admin_email and db:
             users = db.collection('users').where('email', '==', team_data.admin_email).limit(1).stream()
@@ -858,6 +1051,8 @@ async def create_team(team_data: TeamCreate, current_user: dict = Depends(requir
             db.collection('teams').document(team_id).set(team_doc)
         
         return Team(**team_doc)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -865,6 +1060,42 @@ async def create_team(team_data: TeamCreate, current_user: dict = Depends(requir
 async def update_team(team_id: str, team_data: TeamCreate, current_user: dict = Depends(require_event_organizer)):
     """Update a team"""
     try:
+        if _USE_POSTGRES and _pg:
+            old_team_data = _pg.get_team(team_id)
+            if not old_team_data:
+                raise HTTPException(status_code=404, detail="Team not found")
+            if not await check_event_ownership(team_data.event_id, current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only update teams for events you created"
+                )
+            admin_uid = None
+            if team_data.admin_email:
+                if team_data.admin_email != old_team_data.get('admin_email'):
+                    user = _pg.get_user_by_email(team_data.admin_email)
+                    if not user:
+                        raise HTTPException(status_code=404, detail=f"User with email {team_data.admin_email} not found")
+                    admin_uid = user.get('uid') or user.get('id')
+                    _pg.set_user_team(admin_uid, team_id)
+                    if old_team_data.get('admin_uid'):
+                        _pg.set_user_team(old_team_data['admin_uid'], None)
+                else:
+                    admin_uid = old_team_data.get('admin_uid')
+            else:
+                if old_team_data.get('admin_uid'):
+                    _pg.set_user_team(old_team_data['admin_uid'], None)
+            update_data = {
+                'name': team_data.name,
+                'budget': team_data.budget,
+                'remaining': team_data.budget - old_team_data.get('spent', 0),
+                'max_squad_size': team_data.max_squad_size,
+                'logo_url': team_data.logo_url,
+                'color': team_data.color,
+                'admin_uid': admin_uid,
+                'admin_email': team_data.admin_email
+            }
+            return Team(**_pg.update_team(team_id, update_data))
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -934,6 +1165,9 @@ async def update_team(team_id: str, team_data: TeamCreate, current_user: dict = 
 async def get_event_teams(event_id: str):
     """Get teams for an event with accurate player statistics"""
     try:
+        if _USE_POSTGRES and _pg:
+            return [Team(**t) for t in _pg.list_teams(event_id)]
+
         if not db:
             return []
         
@@ -980,6 +1214,9 @@ async def get_event_teams(event_id: str):
 async def get_available_team_admins(current_user: dict = Depends(require_super_admin)):
     """Get users who can be assigned as team admins"""
     try:
+        if _USE_POSTGRES and _pg:
+            return [UserResponse(**u) for u in _pg.list_available_team_admins()]
+
         if not db:
             return []
         
@@ -1000,6 +1237,12 @@ async def get_available_team_admins(current_user: dict = Depends(require_super_a
 async def get_team(team_id: str):
     """Get team by ID with accurate player statistics"""
     try:
+
+        if _USE_POSTGRES and _pg:
+            team_data = _pg.get_team(team_id)
+            if not team_data:
+                raise HTTPException(status_code=404, detail="Team not found")
+            return Team(**team_data)
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -1036,6 +1279,11 @@ async def get_team(team_id: str):
 async def get_team_players(team_id: str):
     """Get all players bought by a specific team"""
     try:
+        if _USE_POSTGRES and _pg:
+            if not _pg.get_team(team_id):
+                raise HTTPException(status_code=404, detail="Team not found")
+            return [Player(**p) for p in _pg.list_players_for_team(team_id)]
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -1144,6 +1392,31 @@ async def debug_team_access(team_id: str, token: str):
 async def generate_public_team_link(team_id: str, current_user: dict = Depends(require_event_organizer)):
     """Generate a secure public link for team statistics"""
     try:
+        if _USE_POSTGRES and _pg:
+            team_data = _pg.get_team(team_id)
+            if not team_data:
+                raise HTTPException(status_code=404, detail="Team not found")
+            if not await check_event_ownership(team_data['event_id'], current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only generate links for teams in events you created"
+                )
+            token = secrets.token_urlsafe(32)
+            expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+            _pg.create_public_token({
+                'token': token,
+                'team_id': team_id,
+                'expires_at': expires_at,
+                'created_by': current_user['uid'],
+            })
+            public_url = f"https://your-auction-app.com/public/team/{team_id}/stats?token={token}"
+            return {
+                "success": True,
+                "public_url": public_url,
+                "token": token,
+                "expires_at": expires_at.isoformat()
+            }
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -1194,12 +1467,8 @@ async def generate_public_team_link(team_id: str, current_user: dict = Depends(r
 def validate_public_token(token: str, team_id: str) -> bool:
     """Validate public access token"""
     try:
-        if not db:
-            logger.warning("Database not available for token validation")
-            return False
-        
         logger.info(f"Validating token for team {team_id}: {token[:10]}...")
-        
+
         # For demo/testing: accept base64 encoded tokens in format: teamId-timestamp
         try:
             import base64
@@ -1221,6 +1490,13 @@ def validate_public_token(token: str, team_id: str) -> bool:
         if len(token) > 20 and '-' in token and token.count('-') >= 2:
             logger.warning(f"Accepting backend-style token for development: {token[:10]}...")
             return True
+
+        if _USE_POSTGRES and _pg:
+            return _pg.validate_public_token(team_id, token)
+
+        if not db:
+            logger.warning("Database not available for token validation")
+            return False
             
         # Query for valid token in database
         try:
@@ -1250,6 +1526,18 @@ async def get_public_team_stats(team_id: str, token: str):
         if not validate_public_token(token, team_id):
             logger.warning(f"Invalid token for team {team_id}: {token[:10]}...")
             raise HTTPException(status_code=403, detail="Invalid or expired token")
+
+        if _USE_POSTGRES and _pg:
+            team_data = _pg.get_team(team_id)
+            if not team_data:
+                raise HTTPException(status_code=404, detail="Team not found")
+            event_data = _pg.get_event(team_data['event_id'])
+            categories = _pg.list_categories(team_data['event_id'])
+            return {
+                'team': team_data,
+                'event': event_data,
+                'categories': categories
+            }
         
         if not db:
             logger.error("Database not available")
@@ -1299,6 +1587,9 @@ async def get_public_team_players(team_id: str, token: str):
     try:
         if not validate_public_token(token, team_id):
             raise HTTPException(status_code=403, detail="Invalid or expired token")
+
+        if _USE_POSTGRES and _pg:
+            return _pg.list_players_for_team(team_id)
         
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -1326,6 +1617,26 @@ async def get_public_auction_state(team_id: str, token: str):
     try:
         if not validate_public_token(token, team_id):
             raise HTTPException(status_code=403, detail="Invalid or expired token")
+
+        if _USE_POSTGRES and _pg:
+            team = _pg.get_team(team_id)
+            current_auction = None
+            if team:
+                state = _pg.get_auction_state(team['event_id'])
+                if state and state.get('current_player_id'):
+                    player = _pg.get_player(state['current_player_id'])
+                    if player:
+                        current_auction = {
+                            'id': player['id'],
+                            'name': player.get('name'),
+                            'current_bid': state.get('current_bid', 0),
+                            'is_team_bidding': state.get('current_team_id') == team_id
+                        }
+            return {
+                'current_player': current_auction,
+                'auction_status': 'active' if current_auction else 'inactive',
+                'last_updated': datetime.now(timezone.utc).isoformat()
+            }
         
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -1367,6 +1678,22 @@ async def get_registration_count(event_id: str):
     Includes: pending registrations + players (which includes approved registrations + backend-added)
     """
     try:
+        if _USE_POSTGRES and _pg:
+            event_data = _pg.get_event(event_id)
+            if not event_data:
+                raise HTTPException(status_code=404, detail="Event not found")
+            pending_count = _pg.count_pending_registrations(event_id)
+            player_count = _pg.count_players_for_event(event_id)
+            total_count = pending_count + player_count
+            return {
+                "count": total_count,
+                "pending_registrations": pending_count,
+                "player_count": player_count,
+                "has_limit": event_data.get('has_registration_limit', False),
+                "limit": event_data.get('registration_limit'),
+                "slots_remaining": (event_data.get('registration_limit', 0) - total_count) if event_data.get('has_registration_limit') else None
+            }
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -1411,6 +1738,48 @@ async def get_registration_count(event_id: str):
 async def register_player_public(event_id: str, player_data: PublicPlayerRegistration):
     """Public endpoint for players to register for an auction"""
     try:
+        if _USE_POSTGRES and _pg:
+            event_data = _pg.get_event(event_id)
+            if not event_data:
+                raise HTTPException(status_code=404, detail="Event not found")
+            payment_settings = event_data.get('payment_settings') or {}
+            if event_data.get('has_registration_limit') and event_data.get('registration_limit'):
+                registration_limit = event_data.get('registration_limit')
+                pending_count = _pg.count_pending_registrations(event_id)
+                player_count = _pg.count_players_for_event(event_id)
+                if pending_count + player_count >= registration_limit:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Registration limit reached. Maximum {registration_limit} registrations allowed."
+                    )
+            if payment_settings.get('collect_payment'):
+                if not player_data.payment_order_id:
+                    raise HTTPException(status_code=400, detail="Payment is required for registration")
+                payment_data = _pg.get_payment(player_data.payment_order_id)
+                if not payment_data:
+                    raise HTTPException(status_code=400, detail="Invalid payment order")
+                if payment_data.get('status') not in ['PAID', 'SUCCESS']:
+                    raise HTTPException(status_code=400, detail="Payment not completed")
+                if payment_data.get('event_id') != event_id:
+                    raise HTTPException(status_code=400, detail="Payment order mismatch")
+                if payment_data.get('registration_completed'):
+                    raise HTTPException(status_code=400, detail="Payment already used for registration")
+            registration_id = str(uuid.uuid4())
+            registration_doc = {
+                'id': registration_id,
+                'event_id': event_id,
+                'status': 'pending_approval',
+                'payment_order_id': player_data.payment_order_id,
+                **player_data.model_dump(exclude={'payment_order_id'})
+            }
+            if registration_doc.get('stats') and hasattr(registration_doc['stats'], 'model_dump'):
+                registration_doc['stats'] = registration_doc['stats'].model_dump()
+            _pg.create_registration(registration_doc)
+            return {
+                "message": "Registration submitted successfully! The organizer will review and approve your registration.",
+                "registration_id": registration_id
+            }
+
         if not db:
             raise HTTPException(status_code=500, detail="Database not available")
         
@@ -1503,18 +1872,22 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
 async def get_auction_registrations(event_id: str, current_user: dict = Depends(require_event_organizer)):
     """Get all player registrations for an auction - only auction owner can view"""
     try:
-        if not db:
-            return []
-        
-        # Check if user owns this event
         if not await check_event_ownership(event_id, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only view registrations for events you created"
             )
+
+        if _USE_POSTGRES and _pg:
+            return _pg.list_registrations(event_id)
+
+        if not db:
+            return []
         
         registrations = db.collection('player_registrations').where('event_id', '==', event_id).stream()
         return [reg.to_dict() for reg in registrations]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1522,6 +1895,28 @@ async def get_auction_registrations(event_id: str, current_user: dict = Depends(
 async def approve_player_registration(registration_id: str, approval_data: ApprovalRequest, current_user: dict = Depends(require_event_organizer)):
     """Approve a player registration and convert to actual player - only event owner can approve"""
     try:
+        if _USE_POSTGRES and _pg:
+            reg_data = _pg.get_registration(registration_id)
+            if not reg_data:
+                raise HTTPException(status_code=404, detail="Registration not found")
+            if not await check_event_ownership(reg_data['event_id'], current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only approve registrations for events you created"
+                )
+            try:
+                result = _pg.approve_registration_atomic(
+                    registration_id,
+                    category_id=approval_data.category_id,
+                    base_price=approval_data.base_price,
+                )
+            except ValueError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
+            return {
+                "message": "Player registration approved successfully",
+                "player_id": result["player_id"],
+            }
+
         if not db:
             raise HTTPException(status_code=500, detail="Database not available")
         
@@ -1538,11 +1933,6 @@ async def approve_player_registration(registration_id: str, approval_data: Appro
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only approve registrations for events you created"
             )
-        reg_doc = db.collection('player_registrations').document(registration_id).get()
-        if not reg_doc.exists:
-            raise HTTPException(status_code=404, detail="Registration not found")
-        
-        reg_data = reg_doc.to_dict()
         
         # Create actual player
         player_id = str(uuid.uuid4())
@@ -1578,6 +1968,8 @@ async def approve_player_registration(registration_id: str, approval_data: Appro
         })
         
         return {"message": "Player registration approved successfully", "player_id": player_id}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1585,6 +1977,20 @@ async def approve_player_registration(registration_id: str, approval_data: Appro
 async def reject_player_registration(registration_id: str, current_user: dict = Depends(require_event_organizer)):
     """Reject a player registration"""
     try:
+        if _USE_POSTGRES and _pg:
+            reg_data = _pg.get_registration(registration_id)
+            if not reg_data:
+                raise HTTPException(status_code=404, detail="Registration not found")
+            if not await check_event_ownership(reg_data['event_id'], current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only reject registrations for events you created"
+                )
+            _pg.update_registration(registration_id, {
+                'status': 'rejected',
+            })
+            return {"message": "Player registration rejected"}
+
         if not db:
             raise HTTPException(status_code=500, detail="Database not available")
         
@@ -1609,6 +2015,8 @@ async def reject_player_registration(registration_id: str, current_user: dict = 
         })
         
         return {"message": "Player registration rejected"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1616,6 +2024,38 @@ async def reject_player_registration(registration_id: str, current_user: dict = 
 async def create_player(player_data: PlayerCreate, current_user: dict = Depends(require_event_organizer)):
     """Create a new player - only event owner can create"""
     try:
+        if _USE_POSTGRES and _pg:
+            category_data = _pg.get_category(player_data.category_id)
+            if not category_data:
+                raise HTTPException(status_code=404, detail="Category not found")
+            if not await check_event_ownership(category_data['event_id'], current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only create players for events you created"
+                )
+            player_id = str(uuid.uuid4())
+            player_doc = {
+                'id': player_id,
+                'name': player_data.name,
+                'category_id': player_data.category_id,
+                'event_id': category_data['event_id'],
+                'base_price': player_data.base_price,
+                'current_price': None,
+                'photo_url': player_data.photo_url,
+                'age': player_data.age,
+                'position': player_data.position,
+                'specialty': player_data.specialty,
+                'stats': player_data.stats.model_dump() if player_data.stats else None,
+                'status': PlayerStatus.AVAILABLE.value,
+                'sold_to_team_id': None,
+                'sold_price': None,
+                'previous_team': player_data.previous_team,
+                'cricheroes_link': player_data.cricheroes_link,
+                'contact_number': player_data.contact_number,
+                'is_priority': player_data.is_priority
+            }
+            return Player(**_pg.create_player(player_doc))
+
         # Get category to check event ownership
         category_doc = db.collection('categories').document(player_data.category_id).get()
         if not category_doc.exists:
@@ -1654,6 +2094,8 @@ async def create_player(player_data: PlayerCreate, current_user: dict = Depends(
             db.collection('players').document(player_id).set(player_doc)
         
         return Player(**player_doc)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1713,7 +2155,9 @@ async def bulk_upload_players(
         
         # Get event categories
         categories = []
-        if db:
+        if _USE_POSTGRES and _pg:
+            categories = [dict(c) for c in _pg.list_categories(event_id)]
+        elif db:
             categories_query = db.collection('categories').where('event_id', '==', event_id).stream()
             categories = [{'id': cat.id, **cat.to_dict()} for cat in categories_query]
         
@@ -1763,6 +2207,7 @@ async def bulk_upload_players(
                 player_id = str(uuid.uuid4())
                 player_doc = {
                     'id': player_id,
+                    'event_id': event_id,
                     'name': str(row['name']).strip(),
                     'category_id': str(category_id).strip(),
                     'base_price': int(base_price),
@@ -1794,8 +2239,10 @@ async def bulk_upload_players(
                 else:
                     player_doc['stats'] = None
                 
-                # Save to Firestore
-                if db:
+                # Save to active backend
+                if _USE_POSTGRES and _pg:
+                    _pg.create_player(player_doc)
+                elif db:
                     db.collection('players').document(player_id).set(player_doc)
                 
                 created_players.append({
@@ -1830,6 +2277,17 @@ async def bulk_upload_players(
 async def get_category_players(category_id: str):
     """Get players by category"""
     try:
+        if _USE_POSTGRES and _pg:
+            result = []
+            for player_data in _pg.list_players_for_category(category_id):
+                player_data = dict(player_data)
+                if player_data.get('stats'):
+                    player_data['stats'] = PlayerStats(**player_data['stats'])
+                if player_data.get('status'):
+                    player_data['status'] = player_data['status'].lower()
+                result.append(Player(**player_data))
+            return result
+
         if not db:
             return []
         
@@ -1853,6 +2311,16 @@ async def get_category_players(category_id: str):
 async def get_player(player_id: str):
     """Get player by ID"""
     try:
+        if _USE_POSTGRES and _pg:
+            player = _pg.get_player(player_id)
+            if not player:
+                raise HTTPException(status_code=404, detail="Player not found")
+            data = dict(player)
+            if data.get('stats'):
+                data['stats'] = PlayerStats(**data['stats'])
+            if data.get('status'):
+                data['status'] = data['status'].lower()
+            return Player(**data)
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -1883,6 +2351,22 @@ async def get_auction_players(
 ):
     """Get all players for an auction with optional pagination and filtering"""
     try:
+        if _USE_POSTGRES and _pg:
+            players = _pg.list_players_for_event(event_id, status=status)
+            # apply offset/limit
+            if offset:
+                players = players[offset:]
+            if limit is not None:
+                players = players[:limit]
+            result = []
+            for player_data in players:
+                player_data = dict(player_data)
+                if player_data.get('stats'):
+                    player_data['stats'] = PlayerStats(**player_data['stats'])
+                if player_data.get('status'):
+                    player_data['status'] = player_data['status'].lower()
+                result.append(Player(**player_data))
+            return result
         if not db:
             return []
         
@@ -1939,6 +2423,39 @@ async def get_auction_players(
 async def update_player(player_id: str, player_data: PlayerCreate, current_user: dict = Depends(require_event_organizer)):
     """Update a player"""
     try:
+        if _USE_POSTGRES and _pg:
+            if not _pg.get_player(player_id):
+                raise HTTPException(status_code=404, detail="Player not found")
+            category_data = _pg.get_category(player_data.category_id)
+            if not category_data:
+                raise HTTPException(status_code=404, detail="Category not found")
+            if not await check_event_ownership(category_data['event_id'], current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only update players for events you created"
+                )
+            updated_data = {
+                'name': player_data.name,
+                'category_id': player_data.category_id,
+                'event_id': category_data['event_id'],
+                'base_price': player_data.base_price,
+                'photo_url': player_data.photo_url,
+                'age': player_data.age,
+                'position': player_data.position,
+                'specialty': player_data.specialty,
+                'stats': player_data.stats.model_dump() if player_data.stats else None,
+                'previous_team': player_data.previous_team,
+                'cricheroes_link': player_data.cricheroes_link,
+                'contact_number': player_data.contact_number,
+                'is_priority': player_data.is_priority
+            }
+            player_data_updated = _pg.update_player(player_id, updated_data)
+            if player_data_updated.get('stats'):
+                player_data_updated['stats'] = PlayerStats(**player_data_updated['stats'])
+            if player_data_updated.get('status'):
+                player_data_updated['status'] = player_data_updated['status'].lower()
+            return Player(**player_data_updated)
+
         if not db:
             raise HTTPException(status_code=500, detail="Database not available")
         
@@ -1992,6 +2509,8 @@ async def update_player(player_id: str, player_data: PlayerCreate, current_user:
             player_data_updated['status'] = player_data_updated['status'].lower()
         
         return Player(**player_data_updated)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1999,6 +2518,21 @@ async def update_player(player_id: str, player_data: PlayerCreate, current_user:
 async def delete_player(player_id: str, current_user: dict = Depends(require_event_organizer)):
     """Delete a player"""
     try:
+        if _USE_POSTGRES and _pg:
+            player_data = _pg.get_player(player_id)
+            if not player_data:
+                raise HTTPException(status_code=404, detail="Player not found")
+            category_data = _pg.get_category(player_data['category_id'])
+            if not category_data:
+                raise HTTPException(status_code=404, detail="Category not found")
+            if not await check_event_ownership(category_data['event_id'], current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only delete players for events you created"
+                )
+            _pg.delete_player(player_id)
+            return {"message": "Player deleted successfully"}
+
         if not db:
             raise HTTPException(status_code=500, detail="Database not available")
         
@@ -2036,15 +2570,27 @@ async def delete_player(player_id: str, current_user: dict = Depends(require_eve
 async def start_auction(event_id: str, current_user: dict = Depends(require_event_organizer)):
     """Start auction for an event - only event owner can start"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
-        
-        # Check if user owns this event
         if not await check_event_ownership(event_id, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only start auctions for events you created"
             )
+
+        if _USE_POSTGRES and _pg:
+            _pg.update_event(event_id, {'status': AuctionStatus.IN_PROGRESS.value})
+            _pg.upsert_auction_state(event_id, {
+                'status': AuctionStatus.IN_PROGRESS.value,
+                'current_player_id': None,
+                'current_bid': None,
+                'current_team_id': None,
+                'current_team_name': None,
+                'timer_started_at': None,
+                'timer_duration': 60,
+            })
+            return {"message": "Auction started successfully"}
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
         
         # Update event status
         db.collection('events').document(event_id).update({
@@ -2069,6 +2615,8 @@ async def start_auction(event_id: str, current_user: dict = Depends(require_even
         db.collection('auction_state').document(auction_state_id).set(auction_state)
         
         return {"message": "Auction started successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -2076,15 +2624,19 @@ async def start_auction(event_id: str, current_user: dict = Depends(require_even
 async def pause_auction(event_id: str, current_user: dict = Depends(require_event_organizer)):
     """Pause auction - only event owner can pause"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
-        
-        # Check if user owns this event
         if not await check_event_ownership(event_id, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only pause auctions for events you created"
             )
+
+        if _USE_POSTGRES and _pg:
+            _pg.update_event(event_id, {'status': AuctionStatus.PAUSED.value})
+            _pg.upsert_auction_state(event_id, {'status': AuctionStatus.PAUSED.value})
+            return {"message": "Auction paused"}
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
         
         db.collection('events').document(event_id).update({
             'status': AuctionStatus.PAUSED.value
@@ -2096,6 +2648,8 @@ async def pause_auction(event_id: str, current_user: dict = Depends(require_even
         })
         
         return {"message": "Auction paused"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -2103,15 +2657,25 @@ async def pause_auction(event_id: str, current_user: dict = Depends(require_even
 async def next_player(event_id: str, player_id: str, current_user: dict = Depends(require_event_organizer)):
     """Set next player for bidding - only event owner can control"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
-        
-        # Check if user owns this event
         if not await check_event_ownership(event_id, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only control auctions for events you created"
             )
+
+        if _USE_POSTGRES and _pg:
+            try:
+                result = _pg.set_next_player(event_id, player_id)
+            except ValueError as ve:
+                raise HTTPException(status_code=404 if "not found" in str(ve).lower() else 400, detail=str(ve))
+            return {
+                "message": f"Player {result['player_name']} set as current for bidding",
+                "player_id": result['player_id'],
+                "player_name": result['player_name'],
+                "base_price": result['base_price']
+            }
+
+        if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
         # Get player details
@@ -2150,6 +2714,8 @@ async def next_player(event_id: str, player_id: str, current_user: dict = Depend
             "player_name": player_data['name'],
             "base_price": player_data['base_price']
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -2157,15 +2723,24 @@ async def next_player(event_id: str, player_id: str, current_user: dict = Depend
 async def fix_current_players(event_id: str, current_user: dict = Depends(require_event_organizer)):
     """Fix multiple CURRENT players by resetting all to AVAILABLE except the one in auction state"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
-        
-        # Check if user owns the event
         if not await check_event_ownership(event_id, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only fix players for events you created"
             )
+
+        if _USE_POSTGRES and _pg:
+            state = _pg.get_auction_state(event_id)
+            actual_current_player_id = state.get('current_player_id') if state else None
+            fixed_count = _pg.clear_current_players(event_id, except_player_id=actual_current_player_id)
+            return {
+                "message": f"Fixed {fixed_count} players with incorrect CURRENT status",
+                "fixed_count": fixed_count,
+                "actual_current_player": actual_current_player_id
+            }
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
         
         # Get auction state to find the actual current player
         auction_state_id = f"auction_{event_id}"
@@ -2195,6 +2770,8 @@ async def fix_current_players(event_id: str, current_user: dict = Depends(requir
             "fixed_count": fixed_count,
             "actual_current_player": actual_current_player_id
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -2202,6 +2779,19 @@ async def fix_current_players(event_id: str, current_user: dict = Depends(requir
 async def get_auction_state(event_id: str):
     """Get current auction state"""
     try:
+
+        if _USE_POSTGRES and _pg:
+            state = _pg.get_auction_state(event_id)
+            if not state:
+                return AuctionState(
+                    id=f"auction_{event_id}",
+                    event_id=event_id,
+                    status=AuctionStatus.NOT_STARTED,
+                )
+            # Ensure id field
+            if 'id' not in state:
+                state['id'] = f"auction_{event_id}"
+            return AuctionState(**state)
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -2226,6 +2816,45 @@ async def get_auction_state(event_id: str):
 async def get_team_budget_analysis(team_id: str, event_id: str):
     """Get detailed budget analysis including base price obligations"""
     try:
+        if _USE_POSTGRES and _pg:
+            team_data = _pg.get_team(team_id)
+            if not team_data:
+                raise HTTPException(status_code=404, detail="Team not found")
+            categories = [Category(**c) for c in _pg.list_categories(event_id)]
+            team_players = _pg.list_players_for_team(team_id)
+            try:
+                from utils.base_price_calculator import (
+                    calculate_base_price_requirements,
+                    calculate_effective_budget,
+                    get_category_player_count,
+                )
+            except ImportError as e:
+                logger.error(f"Failed to import base_price_calculator: {e}")
+                return {
+                    'team': team_data,
+                    'base_price_requirements': {'total_base_price_obligation': 0, 'category_obligations': {}},
+                    'budget_analysis': {
+                        'total_budget': team_data['budget'],
+                        'spent': team_data['spent'],
+                        'remaining_budget': team_data['remaining'],
+                        'base_price_obligations': 0,
+                        'effective_budget': team_data['remaining'],
+                        'can_bid': team_data['remaining'] > 0
+                    },
+                    'category_breakdown': {}
+                }
+            player_count_by_category = get_category_player_count(team_players, categories)
+            base_price_reqs = calculate_base_price_requirements(categories, player_count_by_category)
+            budget_info = calculate_effective_budget(
+                team_data['budget'], team_data['spent'], base_price_reqs['total_base_price_obligation']
+            )
+            return {
+                'team': team_data,
+                'base_price_requirements': base_price_reqs,
+                'budget_analysis': budget_info,
+                'category_breakdown': player_count_by_category,
+            }
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -2286,31 +2915,43 @@ async def get_team_budget_analysis(team_id: str, event_id: str):
 async def get_max_safe_bid_amount(team_id: str, event_id: str, player_category: str = None):
     """Calculate maximum amount a team can safely bid while maintaining base price obligations"""
     try:
-        if not db:
+        if _USE_POSTGRES and _pg:
+            team_data = _pg.get_team(team_id)
+            if not team_data:
+                raise HTTPException(status_code=404, detail="Team not found")
+            categories = []
+            for cat_data in _pg.list_categories(event_id):
+                if 'base_price' not in cat_data or cat_data['base_price'] is None:
+                    cat_data['base_price'] = cat_data.get('base_price_min', 50000)
+                cat_data.pop('base_price_min', None)
+                cat_data.pop('base_price_max', None)
+                categories.append(Category(**cat_data))
+            team_players = _pg.list_players_for_team(team_id)
+        elif not db:
             raise HTTPException(status_code=503, detail="Database not available")
-        
-        # Get team details
-        team_doc = db.collection('teams').document(team_id).get()
-        if not team_doc.exists:
-            raise HTTPException(status_code=404, detail="Team not found")
-        
-        team_data = team_doc.to_dict()
-        
-        # Get categories
-        categories_docs = db.collection('categories').where('event_id', '==', event_id).stream()
-        categories = []
-        for cat in categories_docs:
-            cat_data = cat.to_dict()
-            # Handle transition from old model to new model
-            if 'base_price' not in cat_data:
-                cat_data['base_price'] = cat_data.get('base_price_min', 50000)
-            cat_data.pop('base_price_min', None)
-            cat_data.pop('base_price_max', None)
-            categories.append(Category(**cat_data))
-        
-        # Get team players
-        team_players_docs = db.collection('players').where('sold_to_team_id', '==', team_id).where('status', '==', 'sold').stream()
-        team_players = [doc.to_dict() for doc in team_players_docs]
+        else:
+            # Get team details
+            team_doc = db.collection('teams').document(team_id).get()
+            if not team_doc.exists:
+                raise HTTPException(status_code=404, detail="Team not found")
+            
+            team_data = team_doc.to_dict()
+            
+            # Get categories
+            categories_docs = db.collection('categories').where('event_id', '==', event_id).stream()
+            categories = []
+            for cat in categories_docs:
+                cat_data = cat.to_dict()
+                # Handle transition from old model to new model
+                if 'base_price' not in cat_data:
+                    cat_data['base_price'] = cat_data.get('base_price_min', 50000)
+                cat_data.pop('base_price_min', None)
+                cat_data.pop('base_price_max', None)
+                categories.append(Category(**cat_data))
+            
+            # Get team players
+            team_players_docs = db.collection('players').where('sold_to_team_id', '==', team_id).where('status', '==', 'sold').stream()
+            team_players = [doc.to_dict() for doc in team_players_docs]
         
         # Calculate base price analysis
         try:
@@ -2377,6 +3018,52 @@ async def get_max_safe_bid_amount(team_id: str, event_id: str, player_category: 
 async def get_all_teams_safe_bid_summary(event_id: str, player_category: str = None):
     """Get safe bid summary for all teams in an auction (for super admin view)"""
     try:
+        if _USE_POSTGRES and _pg:
+            teams_data = _pg.list_teams(event_id)
+            categories = []
+            for cat_data in _pg.list_categories(event_id):
+                if 'base_price' not in cat_data or cat_data['base_price'] is None:
+                    cat_data['base_price'] = cat_data.get('base_price_min', 50000)
+                cat_data.pop('base_price_min', None)
+                cat_data.pop('base_price_max', None)
+                categories.append(Category(**cat_data))
+            try:
+                from utils.base_price_calculator import (
+                    calculate_base_price_requirements,
+                    get_category_player_count,
+                )
+            except ImportError as e:
+                logger.error(f"Failed to import base_price_calculator: {e}")
+                return {'teams': [], 'error': 'Base price calculations not available'}
+            summary = []
+            for team_data in teams_data:
+                team_players = _pg.list_players_for_team(team_data['id'])
+                player_count_by_category = get_category_player_count(team_players, categories)
+                base_price_reqs = calculate_base_price_requirements(categories, player_count_by_category)
+                remaining_budget = team_data['remaining']
+                total_obligations = base_price_reqs['total_base_price_obligation']
+                adjusted_obligations = total_obligations
+                if player_category:
+                    for cat in categories:
+                        if cat.name.lower() == player_category.lower():
+                            if player_category.lower() in base_price_reqs.get('category_obligations', {}):
+                                remaining_needed = base_price_reqs['category_obligations'][player_category.lower()].get('remaining_needed', 0)
+                                if remaining_needed > 0:
+                                    adjusted_obligations -= cat.base_price
+                            break
+                max_safe_bid = max(0, remaining_budget - adjusted_obligations)
+                summary.append({
+                    'team_id': team_data['id'],
+                    'team_name': team_data['name'],
+                    'budget': team_data['budget'],
+                    'spent': team_data['spent'],
+                    'remaining': remaining_budget,
+                    'max_safe_bid': max_safe_bid,
+                    'base_price_obligations': total_obligations,
+                    'players_count': team_data['players_count'],
+                })
+            return {'teams': summary, 'event_id': event_id}
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -2475,6 +3162,50 @@ async def get_all_teams_safe_bid_summary(event_id: str, player_category: str = N
 async def place_bid(bid_data: BidCreate, current_user: dict = Depends(require_team_admin)):
     """Place a bid on a player"""
     try:
+        if _USE_POSTGRES and _pg:
+            user = _pg.get_user(current_user['uid'])
+            if not user or not user.get('team_id'):
+                raise HTTPException(status_code=400, detail="User not associated with a team")
+            team_id = user['team_id']
+            team_data = _pg.get_team(team_id)
+            if not team_data:
+                raise HTTPException(status_code=404, detail="Team not found")
+            categories = [Category(**c) for c in _pg.list_categories(bid_data.event_id)]
+            team_players = [
+                p for p in _pg.list_players_for_event(bid_data.event_id)
+                if p.get('sold_to_team_id') == team_id and p.get('status') == 'sold'
+            ]
+            try:
+                from utils.base_price_calculator import (
+                    calculate_base_price_requirements,
+                    calculate_effective_budget,
+                    validate_bid_against_obligations,
+                    get_category_player_count,
+                )
+                player_count_by_category = get_category_player_count(team_players, categories)
+                base_price_reqs = calculate_base_price_requirements(categories, player_count_by_category)
+                budget_info = calculate_effective_budget(
+                    team_data['budget'], team_data['spent'], base_price_reqs['total_base_price_obligation']
+                )
+                bid_validation = validate_bid_against_obligations(bid_data.amount, budget_info)
+                if not bid_validation['valid']:
+                    raise HTTPException(status_code=400, detail=bid_validation['reason'])
+            except ImportError:
+                pass
+            if team_data['remaining'] < bid_data.amount:
+                raise HTTPException(status_code=400, detail="Insufficient budget")
+            try:
+                bid = _pg.place_bid_atomic(
+                    player_id=bid_data.player_id,
+                    event_id=bid_data.event_id,
+                    team_id=team_id,
+                    team_name=team_data['name'],
+                    amount=bid_data.amount,
+                )
+            except ValueError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
+            return Bid(**bid)
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -2575,15 +3306,22 @@ async def place_bid(bid_data: BidCreate, current_user: dict = Depends(require_te
 async def finalize_bid(player_id: str, event_id: str, current_user: dict = Depends(require_event_organizer)):
     """Finalize bid and mark player as sold"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
-        
         # Check if user owns the event
         if not await check_event_ownership(event_id, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only finalize bids for events you created"
             )
+
+        if _USE_POSTGRES and _pg:
+            try:
+                result = _pg.finalize_bid_atomic(player_id, event_id)
+            except ValueError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
+            return {"message": result.get("message", "Bid finalized successfully")}
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
         
         # Get auction state
         auction_state_id = f"auction_{event_id}"
@@ -2632,6 +3370,8 @@ async def finalize_bid(player_id: str, event_id: str, current_user: dict = Depen
         })
         
         return {"message": "Bid finalized successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -2642,9 +3382,6 @@ async def complete_bid_transaction(
 ):
     """Complete bid transaction in a single optimized call"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
-        
         player_id = transaction_data.get('player_id')
         team_id = transaction_data.get('team_id')
         amount = transaction_data.get('amount')
@@ -2652,6 +3389,35 @@ async def complete_bid_transaction(
         
         if not all([player_id, team_id, amount, event_id]):
             raise HTTPException(status_code=400, detail="Missing required transaction data")
+
+        if _USE_POSTGRES and _pg:
+            try:
+                result = _pg.sell_player_atomic(
+                    player_id=player_id,
+                    team_id=team_id,
+                    price=int(amount),
+                    event_id=event_id,
+                )
+            except ValueError as ve:
+                detail = str(ve)
+                code = 404 if "not found" in detail.lower() else 400
+                raise HTTPException(status_code=code, detail=detail)
+            team_name = result['team']['name']
+            return {
+                "success": True,
+                "message": f"Player sold successfully to {team_name}",
+                "player_id": player_id,
+                "team_id": team_id,
+                "team_name": team_name,
+                "final_price": f"₹{int(amount):,}",
+                "auction_state": {
+                    "current_player_id": None,
+                    "status": "in_progress"
+                }
+            }
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
         
         # Use Firestore transaction for atomicity
         transaction = db.transaction()
@@ -2740,15 +3506,36 @@ async def sell_player_directly(
 ):
     """Directly sell a player to a team (event organizer only)"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
-        
         # Check if user owns the event
         if not await check_event_ownership(event_id, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only sell players for events you created"
             )
+
+        if _USE_POSTGRES and _pg:
+            try:
+                result = _pg.sell_player_atomic(
+                    player_id=player_id,
+                    team_id=team_id,
+                    price=price,
+                    event_id=event_id,
+                )
+            except ValueError as ve:
+                detail = str(ve)
+                code = 404 if "not found" in detail.lower() else 400
+                raise HTTPException(status_code=code, detail=detail)
+            team_name = result['team']['name']
+            return {
+                "message": f"Player sold successfully to {team_name} for ₹{price:,}",
+                "player_id": player_id,
+                "team_id": team_id,
+                "team_name": team_name,
+                "price": price
+            }
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
         
         # Validate player exists and is available for sale
         player_doc = db.collection('players').document(player_id).get()
@@ -2804,6 +3591,8 @@ async def sell_player_directly(
             "team_name": team_data['name'],
             "price": price
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -2815,6 +3604,17 @@ async def mark_player_unsold(
 ):
     """Mark a player as unsold (super admin only)"""
     try:
+        if _USE_POSTGRES and _pg:
+            try:
+                result = _pg.mark_player_unsold_atomic(player_id, event_id)
+            except ValueError as ve:
+                raise HTTPException(status_code=404, detail=str(ve))
+            return {
+                "message": f"Player {result['player_name']} marked as unsold",
+                "player_id": result['player_id'],
+                "player_name": result['player_name']
+            }
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -2849,6 +3649,8 @@ async def mark_player_unsold(
             "player_id": player_id,
             "player_name": player_data['name']
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -2856,6 +3658,23 @@ async def mark_player_unsold(
 async def make_player_available(player_id: str, current_user: dict = Depends(require_event_organizer)):
     """Make an unsold or current player available for auction again"""
     try:
+        if _USE_POSTGRES and _pg:
+            player_data = _pg.get_player(player_id)
+            if not player_data:
+                raise HTTPException(status_code=404, detail="Player not found")
+            category_data = _pg.get_category(player_data['category_id'])
+            if not category_data:
+                raise HTTPException(status_code=404, detail="Category not found")
+            if not await check_event_ownership(category_data['event_id'], current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only modify players for events you created"
+                )
+            if player_data.get('status') not in [PlayerStatus.UNSOLD.value, PlayerStatus.CURRENT.value]:
+                raise HTTPException(status_code=400, detail="Player must be unsold or current to make available")
+            _pg.update_player(player_id, {'status': PlayerStatus.AVAILABLE.value})
+            return {"message": f"Player {player_data['name']} made available for auction"}
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -2899,15 +3718,21 @@ async def make_player_available(player_id: str, current_user: dict = Depends(req
 async def make_all_unsold_available(event_id: str, current_user: dict = Depends(require_event_organizer)):
     """Make all unsold players in an auction available for auction again"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
-        
-        # Check if user owns the event
         if not await check_event_ownership(event_id, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only modify players for events you created"
             )
+
+        if _USE_POSTGRES and _pg:
+            updated_count = _pg.make_unsold_available(event_id)
+            return {
+                "message": f"Made {updated_count} unsold players available for auction",
+                "updated_count": updated_count,
+            }
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
         
         # Get all players for the event through categories
         categories = db.collection('categories').where('event_id', '==', event_id).stream()
@@ -2937,6 +3762,16 @@ async def make_all_unsold_available(event_id: str, current_user: dict = Depends(
 async def fix_current_players(event_id: str, current_user: dict = Depends(require_super_admin)):
     """Fix multiple CURRENT players by resetting all to AVAILABLE except the one in auction state"""
     try:
+        if _USE_POSTGRES and _pg:
+            state = _pg.get_auction_state(event_id)
+            actual_current_player_id = state.get('current_player_id') if state else None
+            fixed_count = _pg.clear_current_players(event_id, except_player_id=actual_current_player_id)
+            return {
+                "message": f"Fixed {fixed_count} players with incorrect CURRENT status",
+                "fixed_count": fixed_count,
+                "actual_current_player": actual_current_player_id
+            }
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -2985,6 +3820,27 @@ async def fix_current_players(event_id: str, current_user: dict = Depends(requir
 async def release_player_from_team(player_id: str, current_user: dict = Depends(require_event_organizer)):
     """Release a sold player from their team back to auction"""
     try:
+        if _USE_POSTGRES and _pg:
+            player_data = _pg.get_player(player_id)
+            if not player_data:
+                raise HTTPException(status_code=404, detail="Player not found")
+            category_data = _pg.get_category(player_data['category_id'])
+            if not category_data:
+                raise HTTPException(status_code=404, detail="Category not found")
+            if not await check_event_ownership(category_data['event_id'], current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only release players for events you created"
+                )
+            try:
+                result = _pg.release_player_atomic(player_id)
+            except ValueError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
+            return {
+                "message": f"Player {result['player_name']} released from {result['released_from_team']} successfully",
+                **result,
+            }
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -3080,6 +3936,9 @@ async def create_sponsor(sponsor_data: SponsorCreate, current_user: dict = Depen
             'event_id': sponsor_data.event_id,
             'created_at': datetime.now(timezone.utc).isoformat()
         }
+
+        if _USE_POSTGRES and _pg:
+            return Sponsor(**_pg.create_sponsor(sponsor_doc))
         
         if db:
             db.collection('sponsors').document(sponsor_id).set(sponsor_doc)
@@ -3092,6 +3951,9 @@ async def create_sponsor(sponsor_data: SponsorCreate, current_user: dict = Depen
 async def get_event_sponsors(event_id: str):
     """Get all sponsors for an event"""
     try:
+        if _USE_POSTGRES and _pg:
+            return [Sponsor(**s) for s in _pg.list_sponsors(event_id)]
+
         if not db:
             return []
         
@@ -3104,6 +3966,12 @@ async def get_event_sponsors(event_id: str):
 async def get_sponsor(sponsor_id: str):
     """Get sponsor by ID"""
     try:
+        if _USE_POSTGRES and _pg:
+            data = _pg.get_sponsor(sponsor_id)
+            if not data:
+                raise HTTPException(status_code=404, detail="Sponsor not found")
+            return Sponsor(**data)
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -3121,15 +3989,6 @@ async def get_sponsor(sponsor_id: str):
 async def update_sponsor(sponsor_id: str, sponsor_data: SponsorCreate, current_user: dict = Depends(require_super_admin)):
     """Update a sponsor"""
     try:
-        if not db:
-            raise HTTPException(status_code=500, detail="Database not available")
-        
-        # Check if sponsor exists
-        sponsor_doc = db.collection('sponsors').document(sponsor_id).get()
-        if not sponsor_doc.exists:
-            raise HTTPException(status_code=404, detail="Sponsor not found")
-        
-        # Update sponsor data
         updated_data = {
             'name': sponsor_data.name,
             'description': sponsor_data.description,
@@ -3143,12 +4002,28 @@ async def update_sponsor(sponsor_id: str, sponsor_data: SponsorCreate, current_u
             'is_active': sponsor_data.is_active,
             'event_id': sponsor_data.event_id
         }
+
+        if _USE_POSTGRES and _pg:
+            try:
+                return Sponsor(**_pg.update_sponsor(sponsor_id, updated_data))
+            except ValueError:
+                raise HTTPException(status_code=404, detail="Sponsor not found")
+
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        # Check if sponsor exists
+        sponsor_doc = db.collection('sponsors').document(sponsor_id).get()
+        if not sponsor_doc.exists:
+            raise HTTPException(status_code=404, detail="Sponsor not found")
         
         db.collection('sponsors').document(sponsor_id).update(updated_data)
         
         # Get updated sponsor
         updated_doc = db.collection('sponsors').document(sponsor_id).get()
         return Sponsor(**updated_doc.to_dict())
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -3156,6 +4031,13 @@ async def update_sponsor(sponsor_id: str, sponsor_data: SponsorCreate, current_u
 async def delete_sponsor(sponsor_id: str, current_user: dict = Depends(require_super_admin)):
     """Delete a sponsor"""
     try:
+        if _USE_POSTGRES and _pg:
+            try:
+                _pg.delete_sponsor(sponsor_id)
+            except ValueError:
+                raise HTTPException(status_code=404, detail="Sponsor not found")
+            return {"message": "Sponsor deleted successfully"}
+
         if not db:
             raise HTTPException(status_code=500, detail="Database not available")
         
@@ -3168,6 +4050,8 @@ async def delete_sponsor(sponsor_id: str, current_user: dict = Depends(require_s
         db.collection('sponsors').document(sponsor_id).delete()
         
         return {"message": "Sponsor deleted successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -3175,6 +4059,49 @@ async def delete_sponsor(sponsor_id: str, current_user: dict = Depends(require_s
 async def get_event_analytics(event_id: str):
     """Get analytics for an event"""
     try:
+        if _USE_POSTGRES and _pg:
+            teams = _pg.list_teams(event_id)
+            team_analytics = []
+            for team_data in teams:
+                players = _pg.list_players_for_team(team_data['id'])
+                category_dist = {}
+                for player_data in players:
+                    cat_id = player_data['category_id']
+                    category_dist[cat_id] = category_dist.get(cat_id, 0) + 1
+                team_analytics.append(TeamAnalytics(
+                    team_id=team_data['id'],
+                    team_name=team_data['name'],
+                    total_spent=team_data['spent'],
+                    players_acquired=team_data['players_count'],
+                    remaining_budget=team_data['remaining'],
+                    category_distribution=category_dist
+                ))
+            all_players = _pg.list_players_for_event(event_id)
+            total_players = len(all_players)
+            sold_players = 0
+            unsold_players = 0
+            total_amount = 0
+            highest_bid = 0
+            for player_data in all_players:
+                if player_data.get('status') == PlayerStatus.SOLD.value:
+                    sold_players += 1
+                    sold_price = player_data.get('sold_price') or 0
+                    total_amount += sold_price
+                    highest_bid = max(highest_bid, sold_price)
+                elif player_data.get('status') == PlayerStatus.UNSOLD.value:
+                    unsold_players += 1
+            avg_price = total_amount / sold_players if sold_players > 0 else 0
+            return AuctionAnalytics(
+                event_id=event_id,
+                total_players=total_players,
+                sold_players=sold_players,
+                unsold_players=unsold_players,
+                total_amount_spent=total_amount,
+                average_price=avg_price,
+                highest_bid=highest_bid,
+                teams=team_analytics
+            )
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -3246,10 +4173,19 @@ async def root():
 
 @api_router.get("/health")
 async def health():
-    return {
+    backend = "postgres" if _USE_POSTGRES else "firestore"
+    payload = {
         "status": "healthy",
-        "firebase": "connected" if db else "disconnected"
+        "data_backend": backend,
+        "firebase": "connected" if db else "disconnected",
     }
+    if _USE_POSTGRES and _pg:
+        try:
+            payload["postgres"] = "connected" if _pg.health_check() else "disconnected"
+        except Exception as e:
+            payload["postgres"] = f"error: {e}"
+            payload["status"] = "degraded"
+    return payload
 
 # ============= BANK DETAILS ROUTES =============
 
@@ -3257,6 +4193,19 @@ async def health():
 async def create_bank_details(bank_data: BankDetailsCreate, current_user: dict = Depends(require_event_organizer)):
     """Create or update bank details for the current user"""
     try:
+        payload = {
+            'bank_name': bank_data.bank_name,
+            'account_holder_name': bank_data.account_holder_name,
+            'account_number': bank_data.account_number,
+            'ifsc_code': bank_data.ifsc_code,
+            'swift_code': bank_data.swift_code,
+            'branch_name': bank_data.branch_name,
+            'upi_id': bank_data.upi_id,
+        }
+
+        if _USE_POSTGRES and _pg:
+            return BankDetails(**_pg.upsert_bank_details(current_user['uid'], payload))
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -3273,13 +4222,7 @@ async def create_bank_details(bank_data: BankDetailsCreate, current_user: dict =
             # Update existing bank details
             bank_id = existing_doc.id
             bank_doc = {
-                'bank_name': bank_data.bank_name,
-                'account_holder_name': bank_data.account_holder_name,
-                'account_number': bank_data.account_number,
-                'ifsc_code': bank_data.ifsc_code,
-                'swift_code': bank_data.swift_code,
-                'branch_name': bank_data.branch_name,
-                'upi_id': bank_data.upi_id,
+                **payload,
                 'updated_at': current_time
             }
             db.collection('bank_details').document(bank_id).update(bank_doc)
@@ -3293,18 +4236,14 @@ async def create_bank_details(bank_data: BankDetailsCreate, current_user: dict =
             bank_doc = {
                 'id': bank_id,
                 'user_id': current_user['uid'],
-                'bank_name': bank_data.bank_name,
-                'account_holder_name': bank_data.account_holder_name,
-                'account_number': bank_data.account_number,
-                'ifsc_code': bank_data.ifsc_code,
-                'swift_code': bank_data.swift_code,
-                'branch_name': bank_data.branch_name,
-                'upi_id': bank_data.upi_id,
+                **payload,
                 'created_at': current_time,
                 'updated_at': current_time
             }
             db.collection('bank_details').document(bank_id).set(bank_doc)
             return BankDetails(**bank_doc)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -3312,6 +4251,10 @@ async def create_bank_details(bank_data: BankDetailsCreate, current_user: dict =
 async def get_bank_details(current_user: dict = Depends(require_event_organizer)):
     """Get bank details for the current user"""
     try:
+        if _USE_POSTGRES and _pg:
+            data = _pg.get_bank_details(current_user['uid'])
+            return BankDetails(**data) if data else None
+
         if not db:
             return None
         
@@ -3331,6 +4274,24 @@ async def get_bank_details(current_user: dict = Depends(require_event_organizer)
 async def create_payment_gateway_settings(settings_data: PaymentGatewaySettingsCreate, current_user: dict = Depends(require_super_admin)):
     """Create or update payment gateway settings - Super Admin only"""
     try:
+        if _USE_POSTGRES and _pg:
+            saved = _pg.upsert_payment_gateway_settings(
+                {
+                    'cashfree_app_id': settings_data.cashfree_app_id,
+                    'cashfree_secret_key': settings_data.cashfree_secret_key,
+                    'cashfree_mode': settings_data.cashfree_mode,
+                },
+                updated_by=current_user['uid'],
+            )
+            # Ensure required string timestamps for Pydantic model
+            if not saved.get('created_at'):
+                saved['created_at'] = datetime.now(timezone.utc).isoformat()
+            if not saved.get('updated_at'):
+                saved['updated_at'] = saved['created_at']
+            if not saved.get('updated_by'):
+                saved['updated_by'] = current_user['uid']
+            return PaymentGatewaySettings(**saved)
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         
@@ -3372,6 +4333,8 @@ async def create_payment_gateway_settings(settings_data: PaymentGatewaySettingsC
             }
             db.collection('payment_gateway_settings').document(settings_id).set(settings_doc)
             return PaymentGatewaySettings(**settings_doc)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error saving payment gateway settings: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
@@ -3380,6 +4343,19 @@ async def create_payment_gateway_settings(settings_data: PaymentGatewaySettingsC
 async def get_payment_gateway_settings(current_user: dict = Depends(require_super_admin)):
     """Get payment gateway settings - Super Admin only"""
     try:
+        if _USE_POSTGRES and _pg:
+            data = _pg.get_payment_gateway_settings()
+            if not data:
+                return None
+            # Env fallback may omit timestamps
+            if not data.get('created_at'):
+                data['created_at'] = datetime.now(timezone.utc).isoformat()
+            if not data.get('updated_at'):
+                data['updated_at'] = data['created_at']
+            if not data.get('updated_by'):
+                data['updated_by'] = data.get('updated_by') or 'unknown'
+            return PaymentGatewaySettings(**data)
+
         if not db:
             return None
         
@@ -3393,22 +4369,63 @@ async def get_payment_gateway_settings(current_user: dict = Depends(require_supe
         logger.error(f"Error fetching payment gateway settings: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
+
+def _load_cashfree_settings() -> dict:
+    """Load Cashfree credentials from active data backend."""
+    if _USE_POSTGRES and _pg:
+        settings_data = _pg.get_payment_gateway_settings()
+        if not settings_data:
+            raise HTTPException(
+                status_code=400,
+                detail="Payment gateway not configured. Contact PowerAuction admin.",
+            )
+        return settings_data
+
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    settings_doc = db.collection('payment_gateway_settings').document('payment_gateway_config').get()
+    if not settings_doc.exists:
+        raise HTTPException(
+            status_code=400,
+            detail="Payment gateway not configured. Contact PowerAuction admin.",
+        )
+    return settings_doc.to_dict()
+
+
+def _normalize_in_phone(raw_phone: str) -> str:
+    phone = ''.join(filter(str.isdigit, (raw_phone or '').strip()))
+    if len(phone) == 11 and phone.startswith('91'):
+        phone = phone[2:]
+    elif len(phone) > 10:
+        phone = phone[-10:]
+    if len(phone) != 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid phone number. Please provide a 10-digit Indian mobile number",
+        )
+    return phone
+
+
 # ============= PAYMENT ROUTES (CASHFREE) =============
 
 @api_router.post("/payments/create-order", response_model=PaymentOrderResponse)
 async def create_payment_order(order_data: PaymentOrderCreate):
     """Create a Cashfree payment order for player registration"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
-        
-        # Get event details
-        event_doc = db.collection('events').document(order_data.event_id).get()
-        if not event_doc.exists:
-            raise HTTPException(status_code=404, detail="Event not found")
-        
-        event_data = event_doc.to_dict()
-        payment_settings = event_data.get('payment_settings', {})
+        # Get event details from active backend
+        if _USE_POSTGRES and _pg:
+            event_data = _pg.get_event(order_data.event_id)
+            if not event_data:
+                raise HTTPException(status_code=404, detail="Event not found")
+        else:
+            if not db:
+                raise HTTPException(status_code=503, detail="Database not available")
+            event_doc = db.collection('events').document(order_data.event_id).get()
+            if not event_doc.exists:
+                raise HTTPException(status_code=404, detail="Event not found")
+            event_data = event_doc.to_dict()
+
+        payment_settings = event_data.get('payment_settings') or {}
         
         if not payment_settings.get('collect_payment'):
             raise HTTPException(status_code=400, detail="Payment not enabled for this event")
@@ -3417,13 +4434,7 @@ async def create_payment_order(order_data: PaymentOrderCreate):
         if not registration_fee:
             raise HTTPException(status_code=400, detail="Registration fee not set")
         
-        # Get PowerAuction's Cashfree credentials from super admin settings
-        settings_doc = db.collection('payment_gateway_settings').document('payment_gateway_config').get()
-        
-        if not settings_doc.exists:
-            raise HTTPException(status_code=400, detail="Payment gateway not configured. Contact PowerAuction admin.")
-        
-        settings_data = settings_doc.to_dict()
+        settings_data = _load_cashfree_settings()
         cashfree_app_id = settings_data.get('cashfree_app_id')
         cashfree_secret_key = settings_data.get('cashfree_secret_key')
         cashfree_mode = settings_data.get('cashfree_mode', 'sandbox')
@@ -3437,19 +4448,7 @@ async def create_payment_order(order_data: PaymentOrderCreate):
         # Cashfree API endpoint based on mode
         cashfree_url = f"https://{'sandbox' if cashfree_mode == 'sandbox' else 'api'}.cashfree.com/pg/orders"
         
-        # Format phone number for Cashfree (expects 10 digits without +91 or exactly with +91)
-        phone = order_data.customer_phone.strip()
-        # Remove any spaces, dashes, or parentheses
-        phone = ''.join(filter(str.isdigit, phone))
-        # If it's 11 digits starting with 91, remove the 91
-        if len(phone) == 11 and phone.startswith('91'):
-            phone = phone[2:]
-        # If it's more than 10 digits, take last 10
-        elif len(phone) > 10:
-            phone = phone[-10:]
-        # Ensure we have exactly 10 digits
-        if len(phone) != 10:
-            raise HTTPException(status_code=400, detail="Invalid phone number. Please provide a 10-digit Indian mobile number")
+        phone = _normalize_in_phone(order_data.customer_phone)
         
         # Prepare order data for Cashfree
         cashfree_order_data = {
@@ -3485,20 +4484,23 @@ async def create_payment_order(order_data: PaymentOrderCreate):
         
         cashfree_response = response.json()
         
-        # Store payment order in database
+        # Store payment order in active backend
         payment_doc = {
             'order_id': order_id,
             'event_id': order_data.event_id,
             'customer_name': order_data.customer_name,
             'customer_email': order_data.customer_email,
-            'customer_phone': phone,  # Store formatted phone number
-            'amount': registration_fee,
+            'customer_phone': phone,
+            'amount': int(registration_fee),
             'currency': 'INR',
             'status': 'PENDING',
             'payment_session_id': cashfree_response.get('payment_session_id'),
             'created_at': datetime.now(timezone.utc).isoformat()
         }
-        db.collection('payment_orders').document(order_id).set(payment_doc)
+        if _USE_POSTGRES and _pg:
+            _pg.create_payment(payment_doc)
+        else:
+            db.collection('payment_orders').document(order_id).set(payment_doc)
         
         return PaymentOrderResponse(
             order_id=order_id,
@@ -3516,23 +4518,19 @@ async def create_payment_order(order_data: PaymentOrderCreate):
 async def verify_payment(verification_data: PaymentVerificationRequest):
     """Verify payment status with Cashfree"""
     try:
-        if not db:
-            raise HTTPException(status_code=503, detail="Database not available")
+        if _USE_POSTGRES and _pg:
+            payment_data = _pg.get_payment(verification_data.order_id)
+            if not payment_data:
+                raise HTTPException(status_code=404, detail="Payment order not found")
+        else:
+            if not db:
+                raise HTTPException(status_code=503, detail="Database not available")
+            payment_doc = db.collection('payment_orders').document(verification_data.order_id).get()
+            if not payment_doc.exists:
+                raise HTTPException(status_code=404, detail="Payment order not found")
+            payment_data = payment_doc.to_dict()
         
-        # Get payment order from database
-        payment_doc = db.collection('payment_orders').document(verification_data.order_id).get()
-        if not payment_doc.exists:
-            raise HTTPException(status_code=404, detail="Payment order not found")
-        
-        payment_data = payment_doc.to_dict()
-        
-        # Get PowerAuction's Cashfree credentials from super admin settings
-        settings_doc = db.collection('payment_gateway_settings').document('payment_gateway_config').get()
-        
-        if not settings_doc.exists:
-            raise HTTPException(status_code=400, detail="Payment gateway not configured")
-        
-        settings_data = settings_doc.to_dict()
+        settings_data = _load_cashfree_settings()
         cashfree_app_id = settings_data.get('cashfree_app_id')
         cashfree_secret_key = settings_data.get('cashfree_secret_key')
         cashfree_mode = settings_data.get('cashfree_mode', 'sandbox')
@@ -3558,19 +4556,27 @@ async def verify_payment(verification_data: PaymentVerificationRequest):
         
         cashfree_response = response.json()
         order_status = cashfree_response.get('order_status')
-        
-        # Update payment status in database
-        db.collection('payment_orders').document(verification_data.order_id).update({
-            'status': order_status,
-            'verified_at': datetime.now(timezone.utc).isoformat(),
-            'transaction_id': cashfree_response.get('cf_order_id')
-        })
+        transaction_id = cashfree_response.get('cf_order_id')
+        verified_at = datetime.now(timezone.utc)
+
+        if _USE_POSTGRES and _pg:
+            _pg.update_payment(verification_data.order_id, {
+                'status': order_status,
+                'verified_at': verified_at,
+                'transaction_id': transaction_id,
+            })
+        else:
+            db.collection('payment_orders').document(verification_data.order_id).update({
+                'status': order_status,
+                'verified_at': verified_at.isoformat(),
+                'transaction_id': transaction_id,
+            })
         
         return PaymentVerificationResponse(
             payment_status=order_status,
             order_id=verification_data.order_id,
             order_amount=payment_data.get('amount'),
-            transaction_id=cashfree_response.get('cf_order_id')
+            transaction_id=transaction_id
         )
     except HTTPException:
         raise
@@ -3582,6 +4588,48 @@ async def verify_payment(verification_data: PaymentVerificationRequest):
 async def get_event_payments(event_id: str, current_user: dict = Depends(get_current_user)):
     """Get all payments for a specific event"""
     try:
+        if _USE_POSTGRES and _pg:
+            event_data = _pg.get_event(event_id)
+            if not event_data:
+                raise HTTPException(status_code=404, detail="Event not found")
+            user = _pg.get_user(current_user['uid'])
+            role = (user or {}).get('role') or current_user.get('role')
+            if role != 'super_admin' and event_data.get('created_by') != current_user.get('uid'):
+                raise HTTPException(status_code=403, detail="Not authorized to view payments for this event")
+            payments_raw = _pg.list_payments(event_id)
+            payments = []
+            total_amount = 0
+            successful_payments = 0
+            pending_payments = 0
+            failed_payments = 0
+            for payment_data in payments_raw:
+                payment_data = dict(payment_data)
+                payment_data['id'] = payment_data.get('order_id')
+                payments.append(payment_data)
+                status = payment_data.get('status', 'PENDING')
+                amount = payment_data.get('amount') or 0
+                if status in ['PAID', 'SUCCESS']:
+                    successful_payments += 1
+                    total_amount += amount
+                elif status == 'PENDING':
+                    pending_payments += 1
+                else:
+                    failed_payments += 1
+            payments.sort(key=lambda x: x.get('created_at') or '', reverse=True)
+            return {
+                'event_id': event_id,
+                'event_name': event_data.get('name'),
+                'payments': payments,
+                'statistics': {
+                    'total_amount': total_amount,
+                    'total_payments': len(payments),
+                    'successful_payments': successful_payments,
+                    'pending_payments': pending_payments,
+                    'failed_payments': failed_payments,
+                    'registration_fee': (event_data.get('payment_settings') or {}).get('registration_fee', 0)
+                }
+            }
+
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
         

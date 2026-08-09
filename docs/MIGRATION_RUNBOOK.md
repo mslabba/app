@@ -3,11 +3,22 @@
 **Branch:** `feature/powerauction-platform-modernization`  
 **Scope:** Inventory, schema, ETL tooling. Does **not** switch production off Firestore.
 
+## Local Docker first (recommended)
+
+Before Railway staging, develop against local Postgres:
+
+See **`docs/LOCAL_POSTGRES_SETUP.md`**.
+
+```bash
+./scripts/local_db_up.sh
+# then DATA_BACKEND=postgres + seed + uvicorn
+```
+
 ## Prerequisites
 
 1. Python 3.11+ and `backend/venv`
 2. **Read-only** production Firestore service account JSON (never a write-capable key for inventory/export)
-3. Staging Postgres (`DATABASE_URL`) — Railway staging only
+3. Postgres (`DATABASE_URL`) — **local Docker preferred now**; Railway staging later
 4. Separate **staging Firebase** project for future API tests (not required for inventory alone)
 
 ## Install
