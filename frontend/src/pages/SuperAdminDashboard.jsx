@@ -2,16 +2,56 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar, Users, TrendingUp, Plus, Play, BarChart } from 'lucide-react';
+import {
+  Calendar,
+  Users,
+  TrendingUp,
+  Plus,
+  Play,
+  Gavel,
+  Tag,
+  UserPlus,
+} from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+const statusBadge = (status) => {
+  const s = (status || 'not_started').toLowerCase();
+  if (s === 'in_progress') return 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-400/30';
+  if (s === 'completed') return 'bg-sky-500/20 text-sky-300 ring-1 ring-sky-400/30';
+  if (s === 'paused') return 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/30';
+  return 'bg-white/10 text-white/70 ring-1 ring-white/15';
+};
+
+const StatCard = ({ label, value, icon: Icon, to, testId }) => {
+  const inner = (
+    <Card
+      className={`glass border-white/15 ${to ? 'card-hover cursor-pointer transition hover:border-red-400/40' : ''}`}
+      data-testid={testId}
+    >
+      <CardContent className="pt-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm text-white/55">{label}</p>
+            <h3 className="mt-1 text-3xl font-bold text-white">{value}</h3>
+          </div>
+          <div className="rounded-xl bg-red-600/15 p-3 ring-1 ring-red-500/20">
+            <Icon className="h-7 w-7 text-red-300" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+  return to ? <Link to={to}>{inner}</Link> : inner;
+};
+
 const SuperAdminDashboard = () => {
-  const { token } = useAuth();
+  const { token, isSuperAdmin } = useAuth();
   const [events, setEvents] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,29 +60,22 @@ const SuperAdminDashboard = () => {
   useEffect(() => {
     if (token) {
       fetchEvents();
-      fetchUsers();
+      if (isSuperAdmin) fetchUsers();
+      else setUsersLoading(false);
     }
-  }, [token]);
+  }, [token, isSuperAdmin]);
 
   const fetchEvents = async () => {
     if (!token) {
-      console.log('No token available yet');
       setLoading(false);
       return;
     }
-
     try {
-      console.log('Fetching auctions with token:', token ? 'Token present' : 'No token');
       const response = await axios.get(`${API}/auctions`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` },
       });
       setEvents(response.data);
-      console.log('Auctions loaded successfully:', response.data.length);
     } catch (error) {
-      console.error('Failed to fetch events:', error);
-      console.error('Error response:', error.response?.data);
       toast.error(error.response?.data?.detail || 'Failed to load events');
     } finally {
       setLoading(false);
@@ -51,188 +84,167 @@ const SuperAdminDashboard = () => {
 
   const fetchUsers = async () => {
     if (!token) {
-      console.log('No token available yet');
       setUsersLoading(false);
       return;
     }
-
     try {
       const response = await axios.get(`${API}/auth/users`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` },
       });
       setUsers(response.data);
-      console.log('Users loaded successfully:', response.data.length);
     } catch (error) {
-      console.error('Failed to fetch users:', error);
-      console.error('Error response:', error.response?.data);
       toast.error(error.response?.data?.detail || 'Failed to load users');
     } finally {
       setUsersLoading(false);
     }
   };
 
+  const activeCount = events.filter((e) => e.status === 'in_progress').length;
+  const completedCount = events.filter((e) => e.status === 'completed').length;
+
   return (
-    <AppShell title="Dashboard" subtitle="Manage your sports auctions">
+    <AppShell title="Dashboard" subtitle="Overview of your auctions">
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-8" data-testid="admin-dashboard">
-          <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Super Admin</h1>
-          <p className="text-white/80">powered by Turgut - Manage your sports auctions</p>
+        <PageHeader
+          title="Dashboard"
+          description="Create auctions, manage teams and players, then run live control."
+          actions={
+            <Link to="/admin/events">
+              <Button
+                className="bg-red-600 text-white hover:bg-red-700"
+                data-testid="create-event-button"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                New auction
+              </Button>
+            </Link>
+          }
+        />
+
+        <div
+          className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+          data-testid="admin-dashboard"
+        >
+          <StatCard
+            label="Total auctions"
+            value={loading ? '…' : events.length}
+            icon={Calendar}
+            to="/admin/events"
+            testId="events-card"
+          />
+          {isSuperAdmin && (
+            <StatCard
+              label="Registered users"
+              value={usersLoading ? '…' : users.length}
+              icon={Users}
+              to="/admin/users"
+            />
+          )}
+          <StatCard label="Live now" value={loading ? '…' : activeCount} icon={Play} />
+          <StatCard
+            label="Completed"
+            value={loading ? '…' : completedCount}
+            icon={TrendingUp}
+          />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Link to="/admin/events">
-            <Card className="glass border-white/20 card-hover cursor-pointer" data-testid="events-card">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-white/60 text-sm">Total Auctions</p>
-                    <h3 className="text-3xl font-bold text-white">{events.length}</h3>
-                  </div>
-                  <Calendar className="w-12 h-12 text-white/60" />
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link to="/admin/users">
-            <Card className="glass border-white/20 card-hover cursor-pointer">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-white/60 text-sm">Registered Users</p>
-                    <h3 className="text-3xl font-bold text-white">
-                      {usersLoading ? '...' : users.length}
-                    </h3>
-                  </div>
-                  <Users className="w-12 h-12 text-white/60" />
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Card className="glass border-white/20">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-white/60 text-sm">Active Auctions</p>
-                  <h3 className="text-3xl font-bold text-white">
-                    {events.filter(e => e.status === 'in_progress').length}
-                  </h3>
-                </div>
-                <Play className="w-12 h-12 text-white/60" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glass border-white/20">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-white/60 text-sm">Completed</p>
-                  <h3 className="text-3xl font-bold text-white">
-                    {events.filter(e => e.status === 'completed').length}
-                  </h3>
-                </div>
-                <TrendingUp className="w-12 h-12 text-white/60" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glass border-white/20">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-white/60 text-sm">Quick Actions</p>
-                  <Link to="/admin/events">
-                    <Button className="mt-2 bg-white text-red-700 hover:bg-white/90" data-testid="create-event-button">
-                      <Plus className="w-4 h-4 mr-2" />
-                      New Auction
-                    </Button>
-                  </Link>
-                </div>
-                <BarChart className="w-12 h-12 text-white/60" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="glass border-white/20">
-          <CardHeader>
-            <CardTitle className="text-white">Recent Auctions</CardTitle>
+        <Card className="glass border-white/15">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <CardTitle className="text-white">Recent auctions</CardTitle>
+            <Link
+              to="/admin/events"
+              className="text-sm font-medium text-red-300 hover:text-red-200"
+            >
+              View all
+            </Link>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+              <div className="py-10 text-center">
+                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-white" />
               </div>
             ) : events.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-white/60">No auctions yet. Create your first auction!</p>
+              <div className="rounded-xl border border-dashed border-white/20 bg-white/5 py-12 text-center">
+                <Gavel className="mx-auto mb-3 h-12 w-12 text-white/35" />
+                <p className="text-white/70">No auctions yet</p>
+                <p className="mt-1 text-sm text-white/45">
+                  Create your first auction to set up teams and players.
+                </p>
                 <Link to="/admin/events">
-                  <Button className="mt-4 bg-white text-red-700 hover:bg-white/90">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create Auction
+                  <Button className="mt-5 bg-red-600 text-white hover:bg-red-700">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create auction
                   </Button>
                 </Link>
               </div>
             ) : (
-              <div className="space-y-4">
-                {events.slice(0, 5).map((event) => (
+              <div className="space-y-3">
+                {events.slice(0, 6).map((event) => (
                   <div
                     key={event.id}
-                    className="flex items-center justify-between p-4 bg-white/10 rounded-lg border border-white/10"
+                    className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center sm:justify-between"
                     data-testid={`event-item-${event.id}`}
                   >
-                    <div className="flex items-center flex-1">
-                      {event.logo_url && (
+                    <div className="flex min-w-0 items-center gap-3">
+                      {event.logo_url ? (
                         <img
                           src={event.logo_url}
-                          alt={`${event.name} logo`}
-                          className="w-10 h-10 rounded-lg object-cover mr-3 border border-white/20"
-                          onError={(e) => { e.target.style.display = 'none'; }}
+                          alt=""
+                          className="h-11 w-11 rounded-lg border border-white/15 object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
                         />
+                      ) : (
+                        <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-600/20 ring-1 ring-red-500/25">
+                          <Calendar className="h-5 w-5 text-red-300" />
+                        </div>
                       )}
-                      <div>
-                        <h4 className="text-white font-semibold">{event.name}</h4>
-                        <p className="text-white/60 text-sm">{event.date}</p>
+                      <div className="min-w-0">
+                        <h4 className="truncate font-semibold text-white">{event.name}</h4>
+                        <p className="text-sm text-white/50">{event.date}</p>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${event.status === 'in_progress' ? 'bg-green-500/20 text-green-300' :
-                        event.status === 'completed' ? 'bg-blue-500/20 text-blue-300' :
-                          'bg-yellow-500/20 text-yellow-300'
-                        }`}>
-                        {event.status.replace('_', ' ').toUpperCase()}
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusBadge(event.status)}`}
+                      >
+                        {(event.status || 'not_started').replace(/_/g, ' ')}
                       </span>
                       <Link to={`/admin/categories/${event.id}`}>
-                        <Button size="sm" variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
-                          <Users className="w-4 h-4 mr-1" />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        >
+                          <Tag className="mr-1 h-3.5 w-3.5" />
                           Categories
                         </Button>
                       </Link>
                       <Link to={`/admin/teams/${event.id}`}>
-                        <Button size="sm" variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
-                          <Users className="w-4 h-4 mr-1" />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        >
+                          <Users className="mr-1 h-3.5 w-3.5" />
                           Teams
                         </Button>
                       </Link>
                       <Link to={`/admin/players/${event.id}`}>
-                        <Button size="sm" variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
-                          <Users className="w-4 h-4 mr-1" />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        >
+                          <UserPlus className="mr-1 h-3.5 w-3.5" />
                           Players
                         </Button>
                       </Link>
-                      <Link to={`/admin/sold-players/${event.id}`}>
-                        <Button size="sm" variant="outline" className="bg-green-500/20 border-green-400/40 text-green-300 hover:bg-green-500/30">
-                          <TrendingUp className="w-4 h-4 mr-1" />
-                          Sold Players
-                        </Button>
-                      </Link>
                       <Link to={`/admin/auction/${event.id}`}>
-                        <Button size="sm" className="bg-white text-red-700 hover:bg-white/90">
-                          <Play className="w-4 h-4 mr-1" />
+                        <Button size="sm" className="bg-red-600 text-white hover:bg-red-700">
+                          <Play className="mr-1 h-3.5 w-3.5" />
                           Control
                         </Button>
                       </Link>
@@ -244,74 +256,57 @@ const SuperAdminDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Latest Registered Users */}
-        <Card className="glass border-white/20 mt-8" id="users-section">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center justify-between">
-              <span className="flex items-center">
-                <Users className="w-5 h-5 mr-2" />
-                Latest Registered Users
-              </span>
-              <span className="text-sm font-normal text-white/60">Total: {users.length}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {usersLoading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
-              </div>
-            ) : users.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-white/60">No users registered yet.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {users.slice(0, 10).map((user) => (
-                  <div
-                    key={user.id}
-                    className="flex items-center justify-between p-4 bg-white/10 rounded-lg border border-white/10 hover:bg-white/15 transition-all"
-                  >
-                    <div className="flex items-center flex-1">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center mr-3">
-                        <span className="text-white font-bold text-sm">
-                          {user.display_name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
-                        </span>
+        {isSuperAdmin && (
+          <Card className="glass mt-8 border-white/15" id="users-section">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between text-white">
+                <span className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Latest users
+                </span>
+                <Link
+                  to="/admin/users"
+                  className="text-sm font-normal text-red-300 hover:text-red-200"
+                >
+                  Manage users
+                </Link>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {usersLoading ? (
+                <div className="py-8 text-center">
+                  <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-white" />
+                </div>
+              ) : users.length === 0 ? (
+                <p className="py-6 text-center text-white/55">No users registered yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {users.slice(0, 8).map((user) => (
+                    <div
+                      key={user.id || user.uid}
+                      className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-4 py-3"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-red-700 text-sm font-bold text-white">
+                          {(user.display_name || user.email || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-white">
+                            {user.display_name || 'Unknown'}
+                          </div>
+                          <div className="truncate text-xs text-white/50">{user.email}</div>
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <h4 className="text-white font-semibold">{user.display_name || 'Unknown User'}</h4>
-                        <p className="text-white/60 text-sm">{user.email}</p>
-                        {user.mobile_number && (
-                          <p className="text-white/50 text-xs">{user.mobile_number}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${user.role === 'super_admin' ? 'bg-red-500/20 text-red-300' :
-                        user.role === 'event_organizer' ? 'bg-red-500/20 text-red-200' :
-                          user.role === 'team_admin' ? 'bg-blue-500/20 text-blue-300' :
-                            'bg-gray-500/20 text-gray-300'
-                        }`}>
-                        {user.role?.replace('_', ' ').toUpperCase() || 'USER'}
+                      <span className="ml-3 shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70">
+                        {(user.role || 'user').replace(/_/g, ' ')}
                       </span>
-                      {user.created_at && (
-                        <span className="text-white/50 text-xs">
-                          {new Date(user.created_at).toLocaleDateString()}
-                        </span>
-                      )}
                     </div>
-                  </div>
-                ))}
-                {users.length > 10 && (
-                  <div className="text-center pt-4">
-                    <p className="text-white/50 text-sm">
-                      Showing 10 of {users.length} users
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </AppShell>
   );

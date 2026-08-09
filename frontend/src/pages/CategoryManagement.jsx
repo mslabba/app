@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -178,35 +179,30 @@ const CategoryManagement = () => {
   };
 
   return (
-    <AppShell>
-<div className="container mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Category Management</h1>
-          {event && (
-            <p className="text-white/80">Managing categories for: <span className="font-semibold">{event.name}</span></p>
-          )}
-        </div>
-
-        <div className="flex justify-between items-center mb-8">
-          <div className="text-white/60">
-            <p>Categories define player types (e.g., Icon, Premium, A+, B etc)</p>
-          </div>
+    <AppShell title="Categories" subtitle={event?.name}>
+      <div className="container mx-auto px-4 py-8">
+        <PageHeader
+          title="Categories"
+          description={
+            event
+              ? `Player tiers for ${event.name} (Icon, Premium, A+, B, …)`
+              : 'Define player types and base prices for this auction'
+          }
+          actions={
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            console.log('Category Dialog state changing to:', open);
             setIsDialogOpen(open);
             if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
               <Button
-                className="bg-white text-red-700 hover:bg-white/90"
+                className="bg-red-600 text-white hover:bg-red-700"
                 onClick={() => {
-                  console.log('Add Category button clicked');
                   resetForm();
                   setIsDialogOpen(true);
                 }}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Add Category
+                Add category
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
@@ -304,9 +300,10 @@ const CategoryManagement = () => {
               </form>
             </DialogContent>
           </Dialog>
-        </div>
+          }
+        />
 
-        <Card className="glass border-white/20">
+        <Card className="glass border-white/15">
           <CardHeader>
             <CardTitle className="text-white flex items-center">
               <Tags className="w-5 h-5 mr-2" />
@@ -315,10 +312,10 @@ const CategoryManagement = () => {
           </CardHeader>
           <CardContent>
             {categories.length === 0 ? (
-              <div className="text-center py-12">
-                <Folder className="w-16 h-16 text-white/40 mx-auto mb-4" />
-                <p className="text-white/60 text-lg">No categories added yet</p>
-                <p className="text-white/40 text-sm mt-2">Add categories to organize your players</p>
+              <div className="rounded-xl border border-dashed border-white/15 bg-white/5 py-12 text-center">
+                <Folder className="w-16 h-16 text-white/35 mx-auto mb-4" />
+                <p className="text-white/70 text-lg">No categories yet</p>
+                <p className="text-white/45 text-sm mt-2">Add tiers so players can be priced and slotted correctly</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -379,7 +376,7 @@ const CategoryManagement = () => {
           </CardContent>
         </Card>
       </div>
-</AppShell>
+    </AppShell>
   );
 };
 

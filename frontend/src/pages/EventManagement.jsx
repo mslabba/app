@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Calendar, Settings, Share2, Copy, DollarSign, Users } from 'lucide-react';
+import { Plus, Calendar, Settings, Share2, Gavel, Users, Tag, UserPlus } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
@@ -139,29 +141,24 @@ const EventManagement = () => {
   };
 
   return (
-    <AppShell>
-<div className="container mx-auto px-6 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Auction Management</h1>
-            <p className="text-white/80">powered by Turgut - Create and manage auctions</p>
-          </div>
+    <AppShell title="Auctions" subtitle="Create and manage your events">
+      <div className="container mx-auto px-4 py-8 sm:px-6">
+        <PageHeader
+          title="Auctions"
+          description={`${events.length} auction${events.length === 1 ? '' : 's'} · create, configure, and open live control`}
+          actions={
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            console.log('Dialog state changing to:', open);
             setIsDialogOpen(open);
             if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
               <Button
-                className="bg-white text-red-700 hover:bg-white/90"
+                className="bg-red-600 text-white hover:bg-red-700"
                 data-testid="create-event-button"
-                onClick={() => {
-                  console.log('Create Auction button clicked');
-                  setIsDialogOpen(true);
-                }}
+                onClick={() => setIsDialogOpen(true)}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Create Auction
+                Create auction
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -370,128 +367,117 @@ const EventManagement = () => {
               </form>
             </DialogContent>
           </Dialog>
-        </div>
+          }
+        />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {events.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-16 text-center">
+            <Calendar className="mx-auto mb-4 h-14 w-14 text-white/30" />
+            <p className="text-lg text-white/75">No auctions yet</p>
+            <p className="mt-1 text-sm text-white/45">Create an auction to add categories, teams, and players.</p>
+          </div>
+        ) : (
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {events.map((event) => (
-            <Card key={event.id} className="glass border-white/20 card-hover" data-testid={`event-card-${event.id}`}>
+            <Card key={event.id} className="glass border-white/15" data-testid={`event-card-${event.id}`}>
               <CardHeader className="pb-3">
-                {event.logo_url && (
-                  <div className="flex justify-center mb-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  {event.logo_url ? (
                     <img
                       src={event.logo_url}
-                      alt={`${event.name} logo`}
-                      className="w-20 h-20 rounded-xl object-cover border-2 border-white/30 shadow-lg bg-white/10 p-2"
+                      alt=""
+                      className="h-14 w-14 rounded-xl border border-white/20 object-cover bg-white/5"
                       onError={(e) => { e.target.style.display = 'none'; }}
                     />
-                  </div>
-                )}
-                <CardTitle className="text-white flex items-center justify-between">
-                  <span className="text-lg font-bold">{event.name}</span>
-                  <Calendar className="w-5 h-5" />
-                </CardTitle>
+                  ) : (
+                    <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-red-600/15 ring-1 ring-red-500/25">
+                      <Calendar className="h-6 w-6 text-red-300" />
+                    </div>
+                  )}
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${event.status === 'in_progress' ? 'bg-emerald-500/20 text-emerald-300' :
+                      event.status === 'completed' ? 'bg-sky-500/20 text-sky-300' :
+                        'bg-white/10 text-white/65'
+                      }`}>
+                      {(event.status || 'not_started').replace(/_/g, ' ')}
+                  </span>
+                </div>
+                <CardTitle className="text-lg font-bold text-white">{event.name}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="text-white/80">
-                  <p className="text-sm">Date: {event.date}</p>
-                  <p className="text-sm mt-1">{event.description || 'No description'}</p>
+                <div className="text-sm text-white/70">
+                  <p>Date: {event.date}</p>
+                  <p className="mt-1 line-clamp-2 text-white/55">{event.description || 'No description'}</p>
                   {event.organizer_name && (
-                    <p className="text-sm mt-2 text-white/90">
+                    <p className="mt-2 text-white/80">
                       <span className="font-medium">Organizer:</span> {event.organizer_name}
-                      {event.organizer_mobile && (
-                        <span className="ml-2 text-green-400">📱 {event.organizer_mobile}</span>
-                      )}
                     </p>
                   )}
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${event.status === 'in_progress' ? 'bg-green-500/20 text-green-300' :
-                      event.status === 'completed' ? 'bg-blue-500/20 text-blue-300' :
-                        'bg-yellow-500/20 text-yellow-300'
-                      }`}>
-                      {event.status.replace('_', ' ').toUpperCase()}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-                      onClick={() => handleEdit(event)}
-                    >
-                      <Settings className="w-4 h-4 mr-1" />
-                      Edit
+
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10" onClick={() => handleEdit(event)}>
+                    <Settings className="mr-1 h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                  <Link to={`/admin/auction/${event.id}`}>
+                    <Button size="sm" className="bg-red-600 text-white hover:bg-red-700">
+                      <Gavel className="mr-1 h-3.5 w-3.5" />
+                      Live control
                     </Button>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      <Button
-                        size="sm"
-                        className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
-                        onClick={() => window.location.href = `/admin/categories/${event.id}`}
-                      >
-                        Categories
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="bg-green-500/20 text-green-300 hover:bg-green-500/30"
-                        onClick={() => window.location.href = `/admin/teams/${event.id}`}
-                      >
-                        Teams
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="bg-red-500/20 text-red-200 hover:bg-purple-500/30"
-                        onClick={() => window.location.href = `/admin/players/${event.id}`}
-                      >
-                        Players
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30"
-                        onClick={() => window.location.href = `/admin/registrations/${event.id}`}
-                      >
-                        Registrations
-                      </Button>
-                      {event.payment_settings?.collect_payment && (
-                        <Button
-                          size="sm"
-                          className="bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
-                          onClick={() => window.location.href = `/admin/events/${event.id}/payments`}
-                        >
-                          💰 Payments
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        className="bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30"
-                        onClick={() => window.location.href = `/admin/sponsors/${event.id}`}
-                      >
-                        Sponsors
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="bg-red-500/20 text-red-300 hover:bg-red-500/30"
-                        onClick={() => window.location.href = `/admin/auction/${event.id}`}
-                      >
-                        🎯 Auction Control
-                      </Button>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="w-full bg-orange-500/20 text-orange-300 hover:bg-orange-500/30 flex items-center justify-center"
-                      onClick={() => copyRegistrationLink(event.id)}
-                    >
-                      <Share2 className="w-4 h-4 mr-2" />
-                      Share Registration Link
-                    </Button>
-                  </div>
+                  </Link>
                 </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Link to={`/admin/categories/${event.id}`}>
+                    <Button size="sm" variant="outline" className="w-full border-white/15 bg-white/5 text-white/85 hover:bg-white/10">
+                      <Tag className="mr-1 h-3.5 w-3.5" /> Categories
+                    </Button>
+                  </Link>
+                  <Link to={`/admin/teams/${event.id}`}>
+                    <Button size="sm" variant="outline" className="w-full border-white/15 bg-white/5 text-white/85 hover:bg-white/10">
+                      <Users className="mr-1 h-3.5 w-3.5" /> Teams
+                    </Button>
+                  </Link>
+                  <Link to={`/admin/players/${event.id}`}>
+                    <Button size="sm" variant="outline" className="w-full border-white/15 bg-white/5 text-white/85 hover:bg-white/10">
+                      Players
+                    </Button>
+                  </Link>
+                  <Link to={`/admin/registrations/${event.id}`}>
+                    <Button size="sm" variant="outline" className="w-full border-white/15 bg-white/5 text-white/85 hover:bg-white/10">
+                      <UserPlus className="mr-1 h-3.5 w-3.5" /> Regs
+                    </Button>
+                  </Link>
+                  {event.payment_settings?.collect_payment && (
+                    <Link to={`/admin/events/${event.id}/payments`} className="col-span-2">
+                      <Button size="sm" variant="outline" className="w-full border-emerald-400/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20">
+                        Payments
+                      </Button>
+                    </Link>
+                  )}
+                  <Link to={`/admin/sponsors/${event.id}`} className="col-span-2">
+                    <Button size="sm" variant="outline" className="w-full border-white/15 bg-white/5 text-white/85 hover:bg-white/10">
+                      Sponsors
+                    </Button>
+                  </Link>
+                </div>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full border-amber-400/25 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"
+                  onClick={() => copyRegistrationLink(event.id)}
+                >
+                  <Share2 className="mr-2 h-4 w-4" />
+                  Copy registration link
+                </Button>
               </CardContent>
             </Card>
           ))}
         </div>
+        )}
       </div>
-</AppShell>
+    </AppShell>
   );
 };
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -278,27 +279,22 @@ const TeamManagement = () => {
 
   return (
     <AppShell title="Teams" subtitle={event?.name || 'Loading...'}>
-      <div className="container mx-auto px-6 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Team Management</h1>
-            <p className="text-white/80">{event?.name || 'Loading...'}</p>
-          </div>
+      <div className="container mx-auto px-4 py-8 sm:px-6">
+        <PageHeader
+          title="Teams"
+          description={event ? `Squads and purses for ${event.name}` : 'Create teams and assign budgets'}
+          actions={
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            console.log('Team Dialog state changing to:', open);
             setIsDialogOpen(open);
             if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
               <Button
-                className="bg-white text-red-700 hover:bg-white/90"
-                onClick={() => {
-                  console.log('Create Team button clicked');
-                  setIsDialogOpen(true);
-                }}
+                className="bg-red-600 text-white hover:bg-red-700"
+                onClick={() => setIsDialogOpen(true)}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Create Team
+                Create team
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -374,7 +370,8 @@ const TeamManagement = () => {
               </form>
             </DialogContent>
           </Dialog>
-        </div>
+          }
+        />
 
         {/* Players Dialog */}
         <Dialog open={isPlayersDialogOpen} onOpenChange={setIsPlayersDialogOpen}>
