@@ -71,20 +71,27 @@ PowerAuction must:
 5. **Redesign the product UI** (app shell + Priority A pages) after API stability.  
 6. **Keep marketing site** largely as-is (already modernized).  
 
-### Locked decisions (unless inventory proves otherwise)
+### Locked decisions (product-approved + architecture)
 
 | Decision | Choice |
 |----------|--------|
 | App DB | PostgreSQL (Railway) |
 | ORM | SQLAlchemy 2.x sync + Alembic |
-| Auth | Firebase Auth retained |
+| Auth | Firebase Auth retained (Phase 1) |
+| Staging Firebase | **Separate Firebase project** (Auth + credentials); not production Auth |
+
+*(Decisions 1–6 refined 2026-08-09 — see §45.)*
 | Real-time | Polling retained for cutover |
 | Cutover | Maintenance freeze + final export |
+| Freeze window | **Target 2 hours; max planned 4 hours** (confirm after staging rehearsal timing) |
 | Dual-write | Not required |
-| Firestore deletion | Forbidden until long retention after success |
+| Firestore retention | **90 days read-only** after successful cutover; delete only after review + explicit approval |
+| Firestore inventory/export access | **Read-only production service account** only; no write/delete permissions |
+| Team purse migration | **Approved:** recompute `spent` / `remaining` / `players_count` from sold players; log original Firestore values |
 | Safe-bid formula | Unchanged (`base_price_calculator.py`) |
 | Cashfree behavior | Unchanged |
 | Media | URL-only migration |
+| TeamDashboard event list | See §24.1 — **repository-verified** |
 
 ### Out of scope for first implementation
 
@@ -202,6 +209,30 @@ No contradiction that invalidates Postgres recommendation.
 | `payment_orders` | order_id | Cashfree lifecycle |
 | `bank_details` | UUID | Organizer bank/UPI |
 | `payment_gateway_settings` | intended `payment_gateway_config` | Cashfree secrets (move to env) |
+
+### 5.1b Live inventory snapshot (tooling smoke run — 2026-08-09)
+
+`scripts/firestore_inventory.py` completed successfully.  
+**Total documents (known collections): 2,062**
+
+| Collection | Count | Notes |
+|------------|------:|-------|
+| users | 31 | |
+| events | 20 | |
+| categories | 38 | |
+| teams | 78 | |
+| players | 1,061 | `category_id` present **100%**; **`event_id` field absent** (0% presence) — backfill required |
+| player_registrations | 513 | |
+| sponsors | 7 | |
+| auction_state | 14 | |
+| bids | **0** | **No documents** in `bids` collection — sale history may rely on player `sold_*` + truncated `auction_state.bid_history` only |
+| public_team_tokens | 36 | |
+| payment_orders | 263 | |
+| bank_details | 0 | |
+| payment_gateway_settings | 1 | Migrate secrets to env, not plaintext table |
+
+Full histograms: `backend/migration_output/inventory_latest.json` (**gitignored**).  
+**Policy:** Re-run with dedicated **read-only** service account for official gate evidence.
 
 ### 5.2 Mandatory Phase 0: production read-only inventory
 
@@ -384,7 +415,17 @@ player.category_id → categories.event_id → players.event_id
    unless discrepancy report flags manual review teams (never silent drop of sold player rows).
 
 **Historical SoT for sales:** `players.sold_price` + `sold_to_team_id` + `status`.  
-**Target runtime:** same recompute-or-transactional update pattern; prefer updating spent+remaining+count together in all sell paths (behavior fix only if product accepts as bugfix during API port — document in change log; still no formula change for safe-bid).
+
+**Product-approved migration rule (2026-08-09):**
+
+| Field | Target after migration |
+|-------|------------------------|
+| `spent` | `SUM(sold_price)` for players with `sold_to_team_id = team` and `status = sold` |
+| `remaining` | `budget - spent` |
+| `players_count` | count of those sold players |
+
+**Mandatory audit:** reconciliation report must retain **original Firestore** `budget`, `spent`, `remaining`, `players_count` next to recomputed values for every team.  
+**Forbidden:** silently deleting or altering sold-player records to force numbers to match.
 
 ---
 
@@ -494,12 +535,16 @@ No binary migration. Validate non-null rates in reconciliation.
 
 | Env | Services |
 |-----|----------|
-| Staging | API + Postgres staging |
-| Production (later) | Existing API service + new Postgres |
+| Staging | API + Postgres staging + **separate Firebase project** (Auth + credentials) |
+| Production (later) | Existing API service + new Postgres + production Firebase Auth |
 
-**Vars:** `DATABASE_URL`, Firebase, Cashfree, Cloudinary, `FRONTEND_URL`, `BACKEND_URL`, `APP_ENV`.  
+**Vars:** `DATABASE_URL`, staging vs prod Firebase credentials (never mix), Cashfree, Cloudinary, `FRONTEND_URL`, `BACKEND_URL`, `APP_ENV`.  
 
-**Order:** staging DB → migrate → API port → tests → prod DB → freeze → final migrate → switch release → retain Firestore.
+**Staging Firebase policy (approved):** separate Firebase project for staging Auth; do **not** point staging at production Firebase Auth unless a concrete technical limitation is documented and approved.
+
+**Firestore tooling credentials (approved):** production inventory/export uses a dedicated **read-only** service account (no write/delete).
+
+**Order:** staging DB → migrate → API port → tests → prod DB → freeze → final migrate → switch release → retain Firestore **90 days** read-only.
 
 **No** mandatory Redis/worker for migration.
 
@@ -548,22 +593,33 @@ Semantic checks: category FKs, sold consistency, bid FKs, payment↔registration
 | Staging fail | Fix scripts; no prod impact |
 | Import fail | Do not switch API |
 | Post-switch critical fail | Redeploy last Firestore-backed API image |
-| Success | Keep Firestore 30–90 days |
+| Success | Keep Firestore **90 days** read-only (approved) |
 
 ---
 
 ## 23. Cutover
 
-**Maintenance freeze** (recommended):
+**Maintenance freeze** (approved direction):
 
-1. Announce window  
+| Parameter | Decision |
+|-----------|----------|
+| Target window | **2 hours** |
+| Maximum planned window | **4 hours** |
+| Final duration | Confirmed only after **full staging migration rehearsal + timing** |
+| Post-cutover Firestore | **Read-only 90 days**; no deletion before 90-day review + explicit approval |
+| Inventory/export credentials | Dedicated **read-only** production Firestore service account |
+
+Cutover steps:
+
+1. Announce window (within 2–4h envelope after rehearsal)  
 2. Stop writes / maintenance mode  
-3. Final Firestore export  
+3. Final Firestore export (read-only SA)  
 4. Import + gates  
 5. Deploy Postgres API  
-6. Smoke: login, list events, state read, registration dry-run  
+6. Smoke: login, list auctions, state read, registration dry-run, team bid path  
 7. Open traffic  
 8. Monitor 72h  
+9. Hold Firestore 90 days read-only  
 
 Delta-only cutover is weak without universal `updated_at` — freeze preferred.
 
@@ -577,7 +633,34 @@ Internal: replace Firestore with repositories.
 
 Document if fixing public `auction_state` multi-event bug changes edge behavior — prefer correct `event_id` filter with same JSON shape.
 
-Verify TeamDashboard `/events` vs `/auctions` against production traffic before changing.
+### 24.1 TeamDashboard `/events` vs `/auctions` — repository-verified (2026-08-09)
+
+**Not guessed.** Inspected:
+
+| Layer | Finding |
+|-------|---------|
+| Frontend `TeamDashboard.jsx` | Calls `GET ${API}/events` once in `fetchData` and stores result in `events` state |
+| Frontend usage of `events` state | **Never read** after `setEvents` — no render, no bid logic depends on it |
+| Frontend working TeamDashboard path | `GET /teams/{team_id}` → `event_id` → `GET /auction/state/{event_id}`, `GET /players/{id}`, `GET /teams/{id}/max-safe-bid/{event_id}`, `GET /teams/{id}/budget-analysis/{event_id}`, `POST /bids/place` |
+| Backend FastAPI | **No** `@api_router` route for `GET /events` |
+| Backend canonical event list | **`GET /api/auctions`** → `List[Event]` (`server.py` ~line 540) |
+| Other organizer pages | Consistently use `/auctions` and `/auctions/{eventId}/...` |
+
+**Canonical contract for listing events/auctions:**  
+`GET /api/auctions` (response model `List[Event]`).
+
+**Migration / API port rule:**
+
+1. **Preserve** all TeamDashboard endpoints that implement the real owner workflow:  
+   `/teams/{id}`, `/auction/state/{event_id}`, `/players/{id}`,  
+   `/teams/{id}/max-safe-bid/{event_id}`, `/teams/{id}/budget-analysis/{event_id}`,  
+   `POST /bids/place`.  
+2. **Do not invent** a production dependency on `GET /events` as a first-class contract.  
+3. Treat `GET /events` in TeamDashboard as a **latent frontend defect** (call has no backend route; result unused).  
+4. Fix is **frontend-only and deferred** to a UI/cleanup PR: remove the dead call or switch to `/auctions` if a list is needed.  
+5. Do **not** add a new `/events` alias solely for migration unless product later requires dual paths for compatibility experiments.
+
+**Implication for cutover smoke tests:** team owner smoke must exercise `team_id` → auction state → bid path, not the dead `/events` call.
 
 ---
 
@@ -780,7 +863,7 @@ Rules:
 | A4 | Port FastAPI storage to Postgres (staging) | API parity tests |
 | A5 | Transactional bid/sell | Concurrency tests |
 | A6 | Prod freeze cutover | Smoke + 72h monitor |
-| A7 | Firestore retain | 30–90 days |
+| A7 | Firestore retain | **90 days** read-only (approved) |
 
 ### Workstream B — UI/UX (from UI audit, reordered)
 
@@ -871,28 +954,42 @@ Port order: config/db → users/events → categories/teams/players → registra
 
 ---
 
-## 45. Open Questions (human only)
+## 45. Open Questions — decisions and verification
 
-1. Approve **maintenance window** length for prod freeze?  
-2. Firestore retention after cutover: **30 / 90 / 180 days**?  
-3. Staging: separate Firebase project or shared Auth?  
-4. Accept **spent/remaining recompute** from sold players as bugfix during API port?  
-5. Production Firestore **read credentials** available for inventory script?  
-6. Confirm production use of TeamDashboard path `/events` vs `/auctions`?  
+### 45.1 Resolved product decisions (2026-08-09)
 
-*(Repository-answerable items intentionally omitted.)*
+| # | Question | Decision | Status |
+|---|----------|----------|--------|
+| 1 | Production freeze window | **Target 2 hours; maximum planned 4 hours.** Final duration only after full staging migration rehearsal and timing. | **DECIDED** |
+| 2 | Firestore retention after cutover | **90 days** production Firestore held **read-only**. No deletion before 90-day review and **explicit approval**. | **DECIDED** |
+| 3 | Staging Firebase | **Separate Firebase project for staging**, including separate Auth configuration/credentials. Do not use production Firebase Auth for staging unless a concrete technical limitation is discovered and approved. | **DECIDED** |
+| 4 | Team purse recompute | **Approved.** During migration: `spent = SUM(sold_price)`, `remaining = budget - spent`, `players_count = COUNT(sold)`. Preserve original Firestore financial values in the reconciliation report. Do not silently delete or alter sold-player records. | **DECIDED** |
+| 5 | Firestore inventory/export access | Use a dedicated **read-only production Firestore service account**. Inventory/migration tooling must **not** have permission to modify or delete Firestore data. | **DECIDED** (operational: provision SA when starting A1) |
+| 6 | TeamDashboard `/events` vs `/auctions` | **Repository-verified** — see §24.1. Canonical list endpoint is **`GET /api/auctions`**. TeamDashboard’s `GET /api/events` has **no backend route** and **`events` state is unused**; real owner flow uses `/teams/{id}` + auction/bid endpoints. Preserve working contracts; treat `/events` call as deferred frontend cleanup, not a migration requirement. | **VERIFIED IN REPO** |
+
+### 45.2 Remaining open items (operational / still need action, not product debate)
+
+| # | Item | Owner | Notes |
+|---|------|--------|------|
+| R1 | Provision read-only production Firestore SA and secure delivery of credentials for inventory | Ops / project owner | Blocks Phase A1 execution |
+| R2 | Create separate **staging** Firebase project + Auth apps (web config for staging frontend if needed) | Ops | Before staging API auth tests |
+| R3 | Staging rehearsal clock time for freeze window (confirm ≤2h target or revise plan up to 4h) | Eng after dry-run | After first full staging migration |
+| R4 | Optional later: remove dead `GET /events` from TeamDashboard (UI PR, not DB migration) | Frontend | After or during Workstream B |
+
+No product-direction questions remain open for freeze window, retention, staging Firebase separation, purse recompute policy, or TeamDashboard endpoint canonicity.
 
 ---
 
 ## 46. Recommended Next Action
 
-**Immediate (still no production changes):**
+**Immediate (still no production application changes):**
 
-1. **Approve** this master plan (esp. purse policy, freeze cutover, branch).  
-2. Commit `docs/*` on `feature/powerauction-platform-modernization`.  
-3. Implement **only** read-only `firestore_inventory.py` + run against prod with read credentials → attach counts to §5.  
-4. Create **Railway staging Postgres** (not production) after G1.  
-5. Alembic empty schema + dry-run ETL on staging.  
+1. Treat freeze / retention / staging Firebase / purse / read-only SA / TeamDashboard findings as **locked** in this plan.  
+2. Commit plan updates on `feature/powerauction-platform-modernization` if not already committed.  
+3. Provision **read-only** prod Firestore SA (R1) and **staging** Firebase project (R2).  
+4. Implement **only** read-only `firestore_inventory.py` → attach real counts to inventory section.  
+5. Create **Railway staging Postgres** (not production) after G1.  
+6. Alembic empty schema + dry-run ETL on staging; time the rehearsal for freeze planning (R3).  
 
 **Do not** start AuctionControl UI rewrite or production DB until G7–G8 pass on staging.
 
