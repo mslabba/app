@@ -167,7 +167,7 @@ const UserManagement = () => {
       case 'super_admin':
         return 'bg-red-500/20 text-red-300 border-red-400/40';
       case 'event_organizer':
-        return 'bg-purple-500/20 text-purple-300 border-purple-400/40';
+        return 'bg-red-500/20 text-red-200 border-purple-400/40';
       case 'team_admin':
         return 'bg-blue-500/20 text-blue-300 border-blue-400/40';
       case 'auctioneer':
@@ -199,7 +199,7 @@ const UserManagement = () => {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -344,7 +344,7 @@ const UserManagement = () => {
                     className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-white/10 rounded-lg border border-white/10 hover:bg-white/15 transition-all gap-4"
                   >
                     <div className="flex items-center flex-1 min-w-0">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center mr-4 flex-shrink-0">
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center mr-4 flex-shrink-0">
                         <span className="text-white font-bold text-lg">
                           {user.display_name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
                         </span>
@@ -477,7 +477,7 @@ const UserManagement = () => {
               </Button>
               <Button
                 onClick={handleUpdateUser}
-                className="bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700"
+                className="bg-gradient-to-r from-red-600 to-red-700 text-white hover:from-red-700 hover:to-red-800"
               >
                 Save Changes
               </Button>

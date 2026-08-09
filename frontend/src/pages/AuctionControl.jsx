@@ -870,7 +870,7 @@ const AuctionControl = () => {
   // Show loading state while authentication is being checked
   if (authLoading || !currentUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <div className="min-h-screen app-bg flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-white/80 text-lg">Loading auction control panel...</p>
@@ -940,7 +940,7 @@ const AuctionControl = () => {
                 )}
               </div>
               <div>
-                <div className="text-3xl font-black bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent uppercase tracking-wider">
+                <div className="text-3xl font-black bg-gradient-to-r from-red-400 via-red-500 to-amber-400 bg-clip-text text-transparent uppercase tracking-wider">
                   {event?.name || 'SPORTS AUCTION 2025'}
                 </div>
                 <div className="text-sm text-cyan-300/80 uppercase tracking-widest font-medium">
@@ -1029,7 +1029,7 @@ const AuctionControl = () => {
               {/* Dynamic background effects */}
               <div className="absolute inset-0 opacity-20">
                 <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-cyan-500/20 to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }}></div>
-                <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-purple-500/20 to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s', animationDelay: '2s' }}></div>
+                <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-red-500/20 to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s', animationDelay: '2s' }}></div>
               </div>
 
               {currentPlayer ? (
@@ -1125,7 +1125,7 @@ const AuctionControl = () => {
                     <div
                       className={`w-full h-80 rounded-2xl flex items-center justify-center relative overflow-hidden shadow-2xl cursor-pointer transition-transform hover:scale-105 ${currentPlayer.status === 'sold' && currentTeam ?
                         'ring-4 ring-green-400 shadow-green-400/50' :
-                        'bg-gradient-to-br from-purple-500 to-blue-600'
+                        'bg-gradient-to-br from-red-600 to-red-800'
                         }`}
                       onClick={() => setShowImageModal(true)}
                       title="Click to view full image"
@@ -1165,7 +1165,7 @@ const AuctionControl = () => {
                   <div className="flex flex-col justify-between">
                     <div>
                       {/* Player Name */}
-                      <h1 className="text-4xl font-black mb-4 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent uppercase tracking-wider leading-tight">
+                      <h1 className="text-4xl font-black mb-4 bg-gradient-to-r from-red-400 via-red-500 to-amber-400 bg-clip-text text-transparent uppercase tracking-wider leading-tight">
                         {currentPlayer.name}
                       </h1>
 
@@ -1189,7 +1189,7 @@ const AuctionControl = () => {
                             🏷️ {categories.find(cat => cat.id === currentPlayer.category_id)?.name}
                           </div>
                         )}
-                        <div className="px-4 py-2 bg-purple-500/20 border border-purple-500/50 rounded-xl text-purple-300 font-semibold">
+                        <div className="px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-xl text-red-200 font-semibold">
                           ⚡ {currentPlayer.specialty || 'Versatile'}
                         </div>
                       </div>
@@ -1276,7 +1276,7 @@ const AuctionControl = () => {
               ) : (
                 <div className="relative z-10 flex items-center justify-center h-full">
                   <div className="text-center">
-                    <div className="w-32 h-32 bg-gradient-to-r from-cyan-500/20 to-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-8 animate-pulse">
+                    <div className="w-32 h-32 bg-gradient-to-r from-red-500/20 to-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-8 animate-pulse">
                       <Trophy className="w-16 h-16 text-white/60" />
                     </div>
                     <h2 className="text-4xl font-bold text-white mb-4">No Player Selected</h2>
@@ -1290,7 +1290,7 @@ const AuctionControl = () => {
             <div className="w-[30%] bg-black/20 backdrop-blur-xl rounded-3xl border border-white/10 p-6 flex flex-col h-full">
               {/* Header */}
               <div className="text-center mb-6">
-                <h3 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent uppercase tracking-wider">
+                <h3 className="text-xl font-bold bg-gradient-to-r from-red-400 to-amber-400 bg-clip-text text-transparent uppercase tracking-wider">
                   Bidding Control
                 </h3>
               </div>
@@ -1477,7 +1477,7 @@ const AuctionControl = () => {
                 <button
                   onClick={handleNextPlayer}
                   disabled={loading}
-                  className="px-8 py-4 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-bold uppercase tracking-wider rounded-2xl transition-all hover:scale-105 hover:shadow-lg hover:shadow-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-purple-400 text-lg"
+                  className="px-8 py-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold uppercase tracking-wider rounded-2xl transition-all hover:scale-105 hover:shadow-lg hover:shadow-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-red-400 text-lg"
                 >
                   <ArrowRight className="w-5 h-5 mr-2 inline" />
                   Next Player
@@ -1534,7 +1534,7 @@ const AuctionControl = () => {
 
   // Regular Mode
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg">
       <Navbar />
 
       <div className="container mx-auto px-4 py-8">

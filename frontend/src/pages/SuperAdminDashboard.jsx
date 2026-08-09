@@ -75,7 +75,7 @@ const SuperAdminDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8" data-testid="admin-dashboard">
@@ -148,7 +148,7 @@ const SuperAdminDashboard = () => {
                 <div>
                   <p className="text-white/60 text-sm">Quick Actions</p>
                   <Link to="/admin/events">
-                    <Button className="mt-2 bg-white text-purple-700 hover:bg-white/90" data-testid="create-event-button">
+                    <Button className="mt-2 bg-white text-red-700 hover:bg-white/90" data-testid="create-event-button">
                       <Plus className="w-4 h-4 mr-2" />
                       New Auction
                     </Button>
@@ -173,7 +173,7 @@ const SuperAdminDashboard = () => {
               <div className="text-center py-8">
                 <p className="text-white/60">No auctions yet. Create your first auction!</p>
                 <Link to="/admin/events">
-                  <Button className="mt-4 bg-white text-purple-700 hover:bg-white/90">
+                  <Button className="mt-4 bg-white text-red-700 hover:bg-white/90">
                     <Plus className="w-4 h-4 mr-2" />
                     Create Auction
                   </Button>
@@ -233,7 +233,7 @@ const SuperAdminDashboard = () => {
                         </Button>
                       </Link>
                       <Link to={`/admin/auction/${event.id}`}>
-                        <Button size="sm" className="bg-white text-purple-700 hover:bg-white/90">
+                        <Button size="sm" className="bg-white text-red-700 hover:bg-white/90">
                           <Play className="w-4 h-4 mr-1" />
                           Control
                         </Button>
@@ -274,7 +274,7 @@ const SuperAdminDashboard = () => {
                     className="flex items-center justify-between p-4 bg-white/10 rounded-lg border border-white/10 hover:bg-white/15 transition-all"
                   >
                     <div className="flex items-center flex-1">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center mr-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center mr-3">
                         <span className="text-white font-bold text-sm">
                           {user.display_name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
                         </span>
@@ -289,7 +289,7 @@ const SuperAdminDashboard = () => {
                     </div>
                     <div className="flex items-center space-x-3">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${user.role === 'super_admin' ? 'bg-red-500/20 text-red-300' :
-                        user.role === 'event_organizer' ? 'bg-purple-500/20 text-purple-300' :
+                        user.role === 'event_organizer' ? 'bg-red-500/20 text-red-200' :
                           user.role === 'team_admin' ? 'bg-blue-500/20 text-blue-300' :
                             'bg-gray-500/20 text-gray-300'
                         }`}>

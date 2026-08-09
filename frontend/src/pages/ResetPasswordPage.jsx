@@ -69,7 +69,7 @@ const ResetPasswordPage = () => {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <div className="min-h-screen app-bg flex items-center justify-center">
         <Card className="w-full max-w-md glass border-white/20">
           <CardContent className="p-8 text-center">
             <Lock className="w-16 h-16 text-red-500 mx-auto mb-4" />
@@ -86,7 +86,7 @@ const ResetPasswordPage = () => {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <div className="min-h-screen app-bg flex items-center justify-center">
         <Card className="w-full max-w-md glass border-white/20">
           <CardContent className="p-8 text-center">
             <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
@@ -99,7 +99,7 @@ const ResetPasswordPage = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg flex items-center justify-center p-4">
       <Card className="w-full max-w-md glass border-white/20">
         <CardHeader>
           <div className="flex items-center justify-center mb-4">
@@ -140,7 +140,7 @@ const ResetPasswordPage = () => {
 
             <Button
               type="submit"
-              className="w-full bg-white text-purple-700 hover:bg-white/90"
+              className="w-full bg-white text-red-700 hover:bg-white/90"
               disabled={loading}
             >
               {loading ? 'Resetting Password...' : 'Reset Password'}

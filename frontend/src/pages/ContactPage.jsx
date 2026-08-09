@@ -102,7 +102,7 @@ const ContactPage = () => {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg">
       {/* Header */}
       <div className="glass border-b border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -174,7 +174,7 @@ const ContactPage = () => {
             <Card className="glass border-white/20 shadow-xl">
               <CardContent className="pt-6">
                 <div className="flex items-start space-x-4">
-                  <div className="p-3 bg-purple-500/20 rounded-lg">
+                  <div className="p-3 bg-red-500/20 rounded-lg">
                     <MapPin className="w-6 h-6 text-purple-400" />
                   </div>
                   <div>
@@ -310,7 +310,7 @@ const ContactPage = () => {
                     <Button
                       type="submit"
                       disabled={loading}
-                      className="w-full bg-white text-purple-700 hover:bg-white/90 font-semibold py-3"
+                      className="w-full bg-white text-red-700 hover:bg-white/90 font-semibold py-3"
                     >
                       {loading ? (
                         <>

@@ -38,7 +38,7 @@ const FloatingMenu = () => {
       label: 'Auctions',
       icon: Calendar,
       path: '/admin/events',
-      color: 'bg-purple-500 hover:bg-purple-600',
+      color: 'bg-red-600 hover:bg-red-700',
       description: 'Manage Auctions',
       requiresRole: ['super_admin']
     },

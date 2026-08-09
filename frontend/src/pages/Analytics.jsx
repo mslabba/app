@@ -5,7 +5,7 @@ import FloatingMenu from '@/components/FloatingMenu';
 
 const Analytics = () => {
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold text-white mb-8">Analytics & Reports</h1>

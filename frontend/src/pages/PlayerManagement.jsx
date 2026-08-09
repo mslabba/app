@@ -569,7 +569,7 @@ const PlayerManagement = () => {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
@@ -590,7 +590,7 @@ const PlayerManagement = () => {
             }}>
               <DialogTrigger asChild>
                 <Button
-                  className="bg-white text-purple-700 hover:bg-white/90"
+                  className="bg-white text-red-700 hover:bg-white/90"
                   onClick={() => {
                     console.log('Add Player button clicked');
                     setIsDialogOpen(true);
@@ -917,7 +917,7 @@ const PlayerManagement = () => {
                               }}
                             />
                             <div
-                              className="w-20 h-20 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-bold text-2xl border-2 border-white/30 shadow-lg"
+                              className="w-20 h-20 rounded-xl bg-gradient-to-br from-red-400 to-red-600 flex items-center justify-center text-white font-bold text-2xl border-2 border-white/30 shadow-lg"
                               style={{ display: 'none' }}
                             >
                               {player.name.charAt(0).toUpperCase()}

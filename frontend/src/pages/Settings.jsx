@@ -70,7 +70,7 @@ const Settings = () => {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg">
       <Navbar />
       <div className="container mx-auto px-6 py-8">
         <div className="max-w-4xl mx-auto">
@@ -205,7 +205,7 @@ const Settings = () => {
 
                 <Button
                   type="submit"
-                  className="w-full bg-white text-purple-700 hover:bg-white/90"
+                  className="w-full bg-white text-red-700 hover:bg-white/90"
                   disabled={loading}
                 >
                   {loading ? 'Saving...' : bankDetails.id ? 'Update Bank Details' : 'Save Bank Details'}

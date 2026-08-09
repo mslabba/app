@@ -23,7 +23,7 @@ const PlayerCard = () => {
           {/* Card Content */}
           <div className="relative z-10">
             {/* Player Image Area */}
-            <div className="bg-gradient-to-br from-purple-500 to-pink-500 h-64 flex items-center justify-center">
+            <div className="bg-gradient-to-br from-red-500 to-amber-500 h-64 flex items-center justify-center">
               <div className="w-32 h-32 bg-white rounded-full flex items-center justify-center text-6xl">
                 ⚽
               </div>

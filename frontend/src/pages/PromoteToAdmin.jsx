@@ -52,7 +52,7 @@ const PromoteToAdmin = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <Card className="glass border-white/20 shadow-2xl">
           <CardHeader className="text-center space-y-2">
@@ -85,7 +85,7 @@ const PromoteToAdmin = () => {
             <Button
               onClick={handlePromote}
               disabled={loading || userProfile?.role === 'super_admin'}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 font-semibold"
+              className="w-full bg-gradient-to-r from-red-600 to-red-700 text-white hover:from-red-700 hover:to-red-800 font-semibold"
             >
               {loading ? 'Promoting...' :
                 userProfile?.role === 'super_admin' ? 'Already Super Admin' :

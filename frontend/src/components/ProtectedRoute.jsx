@@ -8,7 +8,7 @@ const ProtectedRoute = ({ children, requireSuperAdmin = false }) => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <div className="flex items-center justify-center min-h-screen app-bg">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
           <p className="text-white">Checking authentication...</p>

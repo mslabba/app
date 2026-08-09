@@ -106,7 +106,7 @@ export const generateTeamRosterPDF = async (team, players, categories, event) =>
 
   // Team Name
   doc.setFontSize(20);
-  doc.setTextColor(team.color || '#667eea');
+  doc.setTextColor(team.color || '#e11d2e');
   doc.text(team.name, pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 8;
 

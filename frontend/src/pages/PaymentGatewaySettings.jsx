@@ -68,7 +68,7 @@ const PaymentGatewaySettings = () => {
 
   if (!isSuperAdmin) {
     return (
-      <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <div className="min-h-screen app-bg">
         <Navbar />
         <div className="container mx-auto px-6 py-8">
           <div className="max-w-2xl mx-auto">
@@ -90,7 +90,7 @@ const PaymentGatewaySettings = () => {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg">
       <Navbar />
       <div className="container mx-auto px-6 py-8">
         <div className="max-w-4xl mx-auto">
@@ -191,7 +191,7 @@ const PaymentGatewaySettings = () => {
 
                 <Button
                   type="submit"
-                  className="w-full bg-white text-purple-700 hover:bg-white/90"
+                  className="w-full bg-white text-red-700 hover:bg-white/90"
                   disabled={loading}
                 >
                   {loading ? 'Saving...' : gatewaySettings.id ? 'Update Gateway Settings' : 'Save Gateway Settings'}

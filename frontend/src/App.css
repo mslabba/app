@@ -8,18 +8,30 @@
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  /* Brand shell: deep charcoal → crimson (aligned with marketing logo palette) */
+  background: linear-gradient(145deg, #0a0809 0%, #1c1518 42%, #4a1020 78%, #b01020 100%);
   min-height: 100vh;
   color: #1a1a1a;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Exo 2', sans-serif;
+  font-family: 'Outfit', 'Exo 2', sans-serif;
   font-weight: 700;
 }
 
 .App {
   min-height: 100vh;
+}
+
+/* Product app page background (use instead of inline purple gradients) */
+.app-bg {
+  min-height: 100vh;
+  background: linear-gradient(145deg, #0a0809 0%, #1c1518 42%, #4a1020 78%, #b01020 100%);
+}
+
+.app-bg-solid {
+  min-height: 100vh;
+  background: #100c0e;
 }
 
 /* Smooth transitions for interactive elements */
@@ -55,20 +67,43 @@ button:active {
   background: rgba(255, 255, 255, 0.5);
 }
 
-/* Glass morphism effect */
+/* Glass morphism effect — brand surfaces */
 .glass {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(28, 21, 24, 0.72);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
 }
 
-/* Gradient text */
+.glass-light {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+/* Gradient text — brand crimson → gold */
 .gradient-text {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #ff4d5a 0%, #e11d2e 45%, #e8b923 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* Brand action helpers for legacy purple button classes */
+.btn-brand {
+  background: #e11d2e;
+  color: #fff;
+}
+.btn-brand:hover {
+  background: #b01020;
+}
+.btn-on-brand {
+  background: #fff;
+  color: #b01020;
+}
+.btn-on-brand:hover {
+  background: rgba(255, 255, 255, 0.92);
 }
 
 /* Animations */

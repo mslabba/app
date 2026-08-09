@@ -179,7 +179,7 @@ const CategoryManagement = () => {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="mb-6">
@@ -200,7 +200,7 @@ const CategoryManagement = () => {
           }}>
             <DialogTrigger asChild>
               <Button
-                className="bg-white text-purple-700 hover:bg-white/90"
+                className="bg-white text-red-700 hover:bg-white/90"
                 onClick={() => {
                   console.log('Add Category button clicked');
                   resetForm();

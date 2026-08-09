@@ -140,7 +140,7 @@ const EventManagement = () => {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg">
       <Navbar />
       <div className="container mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-8">
@@ -155,7 +155,7 @@ const EventManagement = () => {
           }}>
             <DialogTrigger asChild>
               <Button
-                className="bg-white text-purple-700 hover:bg-white/90"
+                className="bg-white text-red-700 hover:bg-white/90"
                 data-testid="create-event-button"
                 onClick={() => {
                   console.log('Create Auction button clicked');
@@ -442,7 +442,7 @@ const EventManagement = () => {
                       </Button>
                       <Button
                         size="sm"
-                        className="bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
+                        className="bg-red-500/20 text-red-200 hover:bg-purple-500/30"
                         onClick={() => window.location.href = `/admin/players/${event.id}`}
                       >
                         Players

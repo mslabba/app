@@ -304,7 +304,7 @@ const PlayerSpinner = ({ players, winnerId, onComplete }) => {
                   onError={(e) => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(winner.name)}&background=random`; }}
                 />
               ) : (
-                <div className="w-40 h-40 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 border-4 border-amber-400 mb-6 flex items-center justify-center shadow-xl">
+                <div className="w-40 h-40 rounded-full bg-gradient-to-br from-red-500 to-red-700 border-4 border-amber-400 mb-6 flex items-center justify-center shadow-xl">
                   <span className="text-6xl font-bold text-white">{winner.name.charAt(0)}</span>
                 </div>
               )}

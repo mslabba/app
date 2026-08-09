@@ -41,7 +41,7 @@ class ErrorBoundary extends React.Component {
 
       // Show fallback UI for other errors
       return (
-        <div className="flex items-center justify-center min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+        <div className="flex items-center justify-center min-h-screen app-bg">
           <div className="text-center text-white">
             <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
             <p className="mb-4">We're sorry, but something unexpected happened.</p>

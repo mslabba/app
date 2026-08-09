@@ -68,7 +68,7 @@ See also: `docs/LOCAL_POSTGRES_SETUP.md`.
 
 ## Recommended next (after local A)
 
-1. You verify smoke + pytest on your machine.  
-2. Commit feature branch if not already.  
-3. **Plan Railway + migration** (staging only first).  
-4. Or start **Workstream B** UI on Firestore-compatible contracts (same API shapes).
+1. ~~Commit dual-backend branch~~ — done (`0e58b4b`).  
+2. Continue **Workstream B** UI (product shell retheme started).  
+3. When Docker is stable: `pytest` + `smoke_local_postgres.py`.  
+4. **Plan Railway + migration** (staging only first) — separate from UI.

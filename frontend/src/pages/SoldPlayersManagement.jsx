@@ -118,7 +118,7 @@ const SoldPlayersManagement = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <div className="min-h-screen app-bg">
         <Navbar />
         <div className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center py-12">
@@ -130,7 +130,7 @@ const SoldPlayersManagement = () => {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
@@ -138,7 +138,7 @@ const SoldPlayersManagement = () => {
             <h1 className="text-4xl font-bold text-white mb-2">Sold Players Management</h1>
             <p className="text-white/80">Manage players sold in the auction</p>
           </div>
-          <Button onClick={fetchData} disabled={loading} className="bg-white text-purple-700 hover:bg-white/90">
+          <Button onClick={fetchData} disabled={loading} className="bg-white text-red-700 hover:bg-white/90">
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>

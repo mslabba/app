@@ -363,7 +363,7 @@ const PublicPlayerRegistration = () => {
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <div className="min-h-screen app-bg flex items-center justify-center">
         <div className="container mx-auto px-6 py-8">
           <Card className="max-w-md mx-auto bg-white/95 backdrop-blur-sm border-white/30 shadow-xl">
             <CardContent className="p-8 text-center">
@@ -389,7 +389,7 @@ const PublicPlayerRegistration = () => {
   }
 
   return (
-    <div className="min-h-screen relative" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg relative">
       {/* Loading Overlay for Payment Verification */}
       {loading && !submitted && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">

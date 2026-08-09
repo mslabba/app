@@ -35,7 +35,7 @@ const TeamManagement = () => {
     name: '',
     budget: 10000000,
     max_squad_size: 18,
-    color: '#667eea',
+    color: '#e11d2e',
     logo_url: '',
     admin_email: ''
   });
@@ -157,7 +157,7 @@ const TeamManagement = () => {
       name: team.name,
       budget: team.budget,
       max_squad_size: team.max_squad_size,
-      color: team.color || '#667eea',
+      color: team.color || '#e11d2e',
       logo_url: team.logo_url || '',
       admin_email: team.admin_email || ''
     });
@@ -225,7 +225,7 @@ const TeamManagement = () => {
       name: '',
       budget: 10000000,
       max_squad_size: 18,
-      color: '#667eea',
+      color: '#e11d2e',
       logo_url: '',
       admin_email: ''
     });
@@ -278,7 +278,7 @@ const TeamManagement = () => {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div className="min-h-screen app-bg">
       <Navbar />
       <div className="container mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-8">
@@ -293,7 +293,7 @@ const TeamManagement = () => {
           }}>
             <DialogTrigger asChild>
               <Button
-                className="bg-white text-purple-700 hover:bg-white/90"
+                className="bg-white text-red-700 hover:bg-white/90"
                 onClick={() => {
                   console.log('Create Team button clicked');
                   setIsDialogOpen(true);
@@ -685,7 +685,7 @@ const TeamManagement = () => {
                   </div>
                   <div className="h-2 bg-white/20 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
+                      className="h-full bg-gradient-to-r from-red-500 to-amber-500"
                       style={{ width: `${(team.spent / team.budget) * 100}%` }}
                     />
                   </div>
@@ -711,7 +711,7 @@ const TeamManagement = () => {
             <CardContent className="py-12 text-center">
               <Users className="w-16 h-16 text-white/40 mx-auto mb-4" />
               <p className="text-white/60 mb-4">No teams created yet</p>
-              <Button onClick={() => setIsDialogOpen(true)} className="bg-white text-purple-700 hover:bg-white/90">
+              <Button onClick={() => setIsDialogOpen(true)} className="bg-white text-red-700 hover:bg-white/90">
                 <Plus className="w-4 h-4 mr-2" />
                 Create First Team
               </Button>
