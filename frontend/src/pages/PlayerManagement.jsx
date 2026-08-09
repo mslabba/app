@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -568,34 +569,30 @@ const PlayerManagement = () => {
   };
 
   return (
-    <AppShell>
-<div className="container mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-white">PowerAuctions - Player Management</h1>
-          <div className="flex gap-3">
+    <AppShell title="Players" subtitle={event?.name}>
+      <div className="container mx-auto px-4 py-8">
+        <PageHeader
+          title="Players"
+          description={event ? `Pool for ${event.name}` : 'Add, edit, and export auction players'}
+          actions={
+            <>
             <Button
               onClick={generatePlayerCardsPDF}
-              className="bg-green-600 text-white hover:bg-green-700"
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
               disabled={players.length === 0}
               title={filteredPlayers.length < players.length ? `Export ${filteredPlayers.length} filtered players` : `Export all ${players.length} players`}
             >
               <Download className="w-4 h-4 mr-2" />
               Export PDF {filteredPlayers.length < players.length && `(${filteredPlayers.length})`}
             </Button>
-            <Dialog open={isDialogOpen} onOpenChange={(open) => {
-              console.log('Player Dialog state changing to:', open);
-              setIsDialogOpen(open);
-            }}>
+            <Dialog open={isDialogOpen} onOpenChange={(open) => setIsDialogOpen(open)}>
               <DialogTrigger asChild>
                 <Button
-                  className="bg-white text-red-700 hover:bg-white/90"
-                  onClick={() => {
-                    console.log('Add Player button clicked');
-                    setIsDialogOpen(true);
-                  }}
+                  className="bg-red-600 text-white hover:bg-red-700"
+                  onClick={() => setIsDialogOpen(true)}
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Player
+                  Add player
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -765,11 +762,12 @@ const PlayerManagement = () => {
                 </form>
               </DialogContent>
             </Dialog>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {/* Search and Filter Section */}
-        <Card className="glass border-white/20 mb-6">
+        <Card className="glass border-white/15 mb-6">
           <CardContent className="p-4">
             <div className="flex flex-col md:flex-row gap-4">
               {/* Search Bar */}
@@ -1023,7 +1021,7 @@ const PlayerManagement = () => {
           </CardContent>
         </Card>
       </div>
-</AppShell>
+    </AppShell>
   );
 };
 

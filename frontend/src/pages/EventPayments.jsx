@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, DollarSign, TrendingUp, CreditCard, Clock, XCircle, CheckCircle } from 'lucide-react';
@@ -80,7 +81,7 @@ const EventPayments = () => {
 
   if (loading) {
     return (
-      <AppShell>
+      <AppShell title="Payments" subtitle="Registration payments for this auction">
         <div className="container mx-auto px-6 py-8">
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
@@ -95,7 +96,7 @@ const EventPayments = () => {
 
   if (!paymentData) {
     return (
-      <AppShell>
+      <AppShell title="Payments" subtitle="Registration payments for this auction">
         <div className="container mx-auto px-6 py-8">
           <Card className="glass border-white/20">
             <CardContent className="pt-6 text-center">
@@ -110,23 +111,24 @@ const EventPayments = () => {
   const { event_name, payments, statistics } = paymentData;
 
   return (
-    <AppShell>
-      <div className="container mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="mb-6">
-          <Link to="/admin/events">
-            <Button variant="ghost" className="text-white hover:bg-white/10 mb-4">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Events
-            </Button>
-          </Link>
-          <h1 className="text-4xl font-bold text-white mb-2">Payment Tracking</h1>
-          <p className="text-white/80">{event_name}</p>
-        </div>
+    <AppShell title="Payments" subtitle={event_name || 'Registration payments'}>
+      <div className="container mx-auto px-4 py-8 sm:px-6">
+        <PageHeader
+          title="Payment tracking"
+          description={event_name || 'Registration payments for this auction'}
+          actions={
+            <Link to="/admin/events">
+              <Button variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/15">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Auctions
+              </Button>
+            </Link>
+          }
+        />
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="glass border-white/20">
+          <Card className="glass border-white/15">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>

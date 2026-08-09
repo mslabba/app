@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -207,28 +208,23 @@ const SponsorManagement = () => {
   };
 
   return (
-    <AppShell>
-<div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Sponsor Management</h1>
-            {event && <p className="text-white/80 text-lg">{event.name}</p>}
-          </div>
-          <Dialog open={isModalOpen} onOpenChange={(open) => {
-            console.log('Sponsor Dialog state changing to:', open);
-            setIsModalOpen(open);
-          }}>
+    <AppShell title="Sponsors" subtitle={event?.name}>
+      <div className="container mx-auto px-4 py-8">
+        <PageHeader
+          title="Sponsors"
+          description={event ? `Partners for ${event.name}` : 'Manage event sponsors'}
+          actions={
+          <Dialog open={isModalOpen} onOpenChange={(open) => setIsModalOpen(open)}>
             <DialogTrigger asChild>
               <Button
                 onClick={() => {
-                  console.log('Add Sponsor button clicked');
                   resetForm();
                   setIsModalOpen(true);
                 }}
-                className="bg-green-600 hover:bg-green-700 text-white"
+                className="bg-red-600 hover:bg-red-700 text-white"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Add Sponsor
+                Add sponsor
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -365,7 +361,8 @@ const SponsorManagement = () => {
               </form>
             </DialogContent>
           </Dialog>
-        </div>
+          }
+        />
 
         {/* Sponsors Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -474,7 +471,7 @@ const SponsorManagement = () => {
           </Card>
         )}
       </div>
-</AppShell>
+    </AppShell>
   );
 };
 

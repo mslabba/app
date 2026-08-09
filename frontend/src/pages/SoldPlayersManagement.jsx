@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -117,7 +118,7 @@ const SoldPlayersManagement = () => {
 
   if (loading) {
     return (
-      <AppShell>
+      <AppShell title="Sold players" subtitle="Squads and sale results">
         <div className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center py-12">
             <div className="text-white">Loading sold players...</div>
@@ -128,22 +129,22 @@ const SoldPlayersManagement = () => {
   }
 
   return (
-    <AppShell>
+    <AppShell title="Sold players" subtitle="Squads and sale results">
       <div className="container mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Sold Players Management</h1>
-            <p className="text-white/80">Manage players sold in the auction</p>
-          </div>
-          <Button onClick={fetchData} disabled={loading} className="bg-white text-red-700 hover:bg-white/90">
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
+        <PageHeader
+          title="Sold players"
+          description="Release players or review purse impact by team"
+          actions={
+            <Button onClick={fetchData} disabled={loading} className="bg-red-600 text-white hover:bg-red-700">
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          }
+        />
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="glass border-white/20">
+          <Card className="glass border-white/15">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>

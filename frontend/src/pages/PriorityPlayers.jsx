@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -85,24 +86,28 @@ const PriorityPlayers = () => {
   });
 
   return (
-    <AppShell>
-<div className="container mx-auto px-4 py-8">
-        <div className="flex items-center mb-8">
-          <Button 
-            variant="outline" 
-            className="mr-4 bg-white/10 text-white border-white/20 hover:bg-white/20"
-            onClick={() => navigate(`/admin/players/${eventId}`)}
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Players
-          </Button>
-          <div>
-            <h1 className="text-4xl font-bold text-white">Manage Priority Players</h1>
-            {event && <p className="text-white/80">Select players to prioritize in random selection for {event.name}</p>}
-          </div>
-        </div>
+    <AppShell title="Priority players" subtitle={event?.name}>
+      <div className="container mx-auto px-4 py-8">
+        <PageHeader
+          title="Priority players"
+          description={
+            event
+              ? `Flag players for priority selection in ${event.name}`
+              : 'Flag players for priority selection'
+          }
+          actions={
+            <Button
+              variant="outline"
+              className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+              onClick={() => navigate(`/admin/players/${eventId}`)}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to players
+            </Button>
+          }
+        />
 
-        <Card className="glass border-white/20 mb-6">
+        <Card className="glass border-white/15 mb-6">
           <CardContent className="p-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-white/60" />

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
+// PageHeader used for consistent team chrome
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -116,7 +118,7 @@ const TeamDashboard = () => {
 
   if (authLoading || loading) {
     return (
-      <AppShell>
+      <AppShell title="Team dashboard" subtitle={team?.name || "Your team"}>
         <div className="container mx-auto flex min-h-[50vh] items-center justify-center px-4">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
@@ -133,36 +135,32 @@ const TeamDashboard = () => {
   }
 
   return (
-    <AppShell>
+    <AppShell title="Team dashboard" subtitle={team?.name || "Your team"}>
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Team Dashboard</h1>
-          {team ? (
-            <p className="text-white/80">Welcome to {team.name}</p>
-          ) : (
-            <p className="text-white/80">You are not assigned to any team yet</p>
-          )}
-        </div>
+        <PageHeader
+          title={team?.name || 'Team dashboard'}
+          description={
+            team
+              ? 'Track purse, squad, and live auction activity'
+              : 'You are not assigned to a team yet'
+          }
+        />
 
         {!team ? (
-          <Card className="glass border-white/20">
+          <Card className="glass border-white/15">
             <CardContent className="py-12 text-center">
               <Users className="w-16 h-16 text-white/40 mx-auto mb-4" />
-              <p className="text-white/80 text-lg">No Team Assigned</p>
-              <p className="text-white/60 text-sm mt-2">Contact the super admin to assign you to a team</p>
-
-              {/* Debug info */}
-              <div className="mt-6 p-4 bg-blue-500/20 rounded-lg border border-blue-500/30 text-left">
-                <h3 className="text-white font-semibold mb-2">Debug Info:</h3>
-                <p className="text-white/80 text-sm">User Profile: {JSON.stringify(userProfile, null, 2)}</p>
-                <div className="mt-4 flex gap-2 justify-center">
-                  <Button
-                    onClick={() => window.location.href = '/test'}
-                    className="bg-gray-600 hover:bg-gray-700"
-                  >
-                    Debug Page
-                  </Button>
-                </div>
+              <p className="text-white/80 text-lg">No team assigned</p>
+              <p className="text-white/55 text-sm mt-2">
+                Ask the event organizer to assign your account as a team admin.
+              </p>
+              <div className="mt-6 flex justify-center gap-2">
+                <Button
+                  onClick={() => window.location.reload()}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  Refresh
+                </Button>
               </div>
             </CardContent>
           </Card>

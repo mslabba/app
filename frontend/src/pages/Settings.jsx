@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,22 +70,21 @@ const Settings = () => {
   };
 
   return (
-    <AppShell>
-<div className="container mx-auto px-6 py-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white mb-2">Settings</h1>
-            <p className="text-white/80">Manage your account and payment settings</p>
-          </div>
+    <AppShell title="Settings" subtitle="Bank details for payouts">
+      <div className="container mx-auto max-w-4xl px-4 py-8 sm:px-6">
+        <PageHeader
+          title="Settings"
+          description="Bank details used for registration payouts"
+        />
 
-          <Card className="glass border-white/20">
+          <Card className="glass border-white/15">
             <CardHeader>
               <CardTitle className="text-white flex items-center">
                 <Landmark className="w-6 h-6 mr-2" />
-                Bank Account Details
+                Bank account details
               </CardTitle>
-              <p className="text-white/70 text-sm mt-2">
-                Add your bank details to receive payments collected from player registrations
+              <p className="text-white/65 text-sm mt-2">
+                Used when you receive manual payouts for collected registration fees
               </p>
             </CardHeader>
             <CardContent>
@@ -211,9 +211,8 @@ const Settings = () => {
               </form>
             </CardContent>
           </Card>
-        </div>
       </div>
-</AppShell>
+    </AppShell>
   );
 };
 

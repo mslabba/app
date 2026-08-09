@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -404,39 +405,37 @@ const PlayerRegistrationManagement = () => {
   const rejectedRegistrations = registrations.filter(reg => reg.status === 'rejected');
 
   return (
-    <AppShell>
-<div className="container mx-auto px-6 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Player Registration Management</h1>
-            <p className="text-white/80">Manage player registrations and approved players</p>
-          </div>
-          <div className="flex space-x-3">
+    <AppShell title="Registrations" subtitle="Review applications and approved players">
+      <div className="container mx-auto px-4 py-8 sm:px-6">
+        <PageHeader
+          title="Registrations"
+          description="Approve applicants, manage the player pool, and export lists"
+          actions={
+            <>
             <Button
-              size="lg"
               variant="outline"
-              className="bg-green-600/80 border-green-500 text-white hover:bg-green-700"
+              className="border-emerald-400/40 bg-emerald-600/80 text-white hover:bg-emerald-700"
               onClick={handleExportAllExcel}
               disabled={registrations.length === 0 && players.length === 0}
             >
-              <FileSpreadsheet className="w-5 h-5 mr-2" />
-              Export All to Excel
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Export Excel
             </Button>
             <Button
-              size="lg"
               variant="outline"
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              className="border-white/20 bg-white/10 text-white hover:bg-white/20"
               onClick={() => handleExportPDF('all')}
               disabled={registrations.length === 0}
             >
-              <Download className="w-5 h-5 mr-2" />
+              <Download className="w-4 h-4 mr-2" />
               Export PDF
             </Button>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 gap-1 bg-white/10 p-1 sm:grid-cols-4">
             <TabsTrigger value="pending" className="flex items-center">
               <Clock className="w-4 h-4 mr-2" />
               Pending ({pendingRegistrations.length})
@@ -1275,7 +1274,7 @@ const PlayerRegistrationManagement = () => {
           </DialogContent>
         </Dialog>
       </div>
-</AppShell>
+    </AppShell>
   );
 };
 

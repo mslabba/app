@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -198,36 +199,25 @@ const UserManagement = () => {
   };
 
   return (
-    <AppShell>
-<div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <Button
-            onClick={() => navigate('/admin')}
-            variant="outline"
-            className="mb-4 bg-white/10 border-white/20 text-white hover:bg-white/20"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Dashboard
-          </Button>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-white mb-2">User Management</h1>
-              <p className="text-white/80">Manage all registered users and their roles</p>
-            </div>
+    <AppShell title="Users" subtitle="Roles and accounts">
+      <div className="container mx-auto px-4 py-8">
+        <PageHeader
+          title="Users"
+          description="Manage accounts, roles, and team admin assignments"
+          actions={
             <Button
               onClick={() => setIsCreateDialogOpen(true)}
-              className="bg-gradient-to-r from-green-600 to-blue-600 text-white hover:from-green-700 hover:to-blue-700"
+              className="bg-red-600 text-white hover:bg-red-700"
             >
               <UserPlus className="w-4 h-4 mr-2" />
-              Create New User
+              Create user
             </Button>
-          </div>
-        </div>
+          }
+        />
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-          <Card className="glass border-white/20">
+          <Card className="glass border-white/15">
             <CardContent className="pt-6">
               <div className="text-center">
                 <p className="text-white/60 text-sm">Total Users</p>
@@ -583,7 +573,7 @@ const UserManagement = () => {
           </DialogContent>
         </Dialog>
       </div>
-</AppShell>
+    </AppShell>
   );
 };
 

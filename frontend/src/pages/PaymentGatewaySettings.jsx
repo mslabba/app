@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
+import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,7 +68,7 @@ const PaymentGatewaySettings = () => {
 
   if (!isSuperAdmin) {
     return (
-      <AppShell>
+      <AppShell title="Payment gateway" subtitle="Cashfree configuration">
         <div className="container mx-auto px-6 py-8">
           <div className="max-w-2xl mx-auto">
             <Card className="glass border-white/20">
@@ -88,23 +89,21 @@ const PaymentGatewaySettings = () => {
   }
 
   return (
-    <AppShell>
-      <div className="container mx-auto px-6 py-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white mb-2">Payment Gateway Settings</h1>
-            <p className="text-white/80">Configure Cashfree payment gateway for PowerAuction</p>
-          </div>
+    <AppShell title="Payment gateway" subtitle="Cashfree configuration">
+      <div className="container mx-auto max-w-4xl px-4 py-8 sm:px-6">
+        <PageHeader
+          title="Payment gateway"
+          description="Cashfree credentials for registration fee collection"
+        />
 
-          <Card className="glass border-white/20">
+          <Card className="glass border-white/15">
             <CardHeader>
               <CardTitle className="text-white flex items-center">
                 <CreditCard className="w-6 h-6 mr-2" />
-                Cashfree Configuration
+                Cashfree configuration
               </CardTitle>
-              <p className="text-white/70 text-sm mt-2">
-                All registration payments will be collected to PowerAuction's Cashfree account.
-                Event organizers will receive manual payouts after their events.
+              <p className="text-white/65 text-sm mt-2">
+                Registration payments go to PowerAuction&apos;s Cashfree account. Organizers receive manual payouts after events.
               </p>
             </CardHeader>
             <CardContent>
@@ -196,7 +195,6 @@ const PaymentGatewaySettings = () => {
               </form>
             </CardContent>
           </Card>
-        </div>
       </div>
     </AppShell>
   );
