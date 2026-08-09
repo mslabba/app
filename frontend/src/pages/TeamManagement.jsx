@@ -810,7 +810,6 @@ const TeamManagement = () => {
           </div>
         </DialogContent>
       </Dialog>
-      </div>
     </AppShell>
   );
 };
