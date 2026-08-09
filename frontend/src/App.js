@@ -36,6 +36,18 @@ import PaymentGatewaySettings from '@/pages/PaymentGatewaySettings';
 import EventPayments from '@/pages/EventPayments';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
+// Marketing product pages (new site IA)
+import FeaturesPage from '@/marketing/pages/FeaturesPage';
+import HowItWorksPage from '@/marketing/pages/HowItWorksPage';
+import PlayerRegistrationPage from '@/marketing/pages/PlayerRegistrationPage';
+import LiveAuctionPage from '@/marketing/pages/LiveAuctionPage';
+import TeamManagementPage from '@/marketing/pages/TeamManagementPage';
+import AuctionDashboardPage from '@/marketing/pages/AuctionDashboardPage';
+import SportsPage from '@/marketing/pages/SportsPage';
+import PricingPage from '@/marketing/pages/PricingPage';
+import ContactMarketingPage from '@/marketing/pages/ContactMarketingPage';
+import ScrollToTop from '@/marketing/components/ScrollToTop';
+
 // Dashboard redirect component for authenticated users
 const DashboardRedirect = () => {
   const { isAuthenticated, isSuperAdmin, isEventOrganizer, userProfile, loading } = useAuth();
@@ -106,9 +118,22 @@ function App() {
     <AuthProvider>
       <div className="App">
         <BrowserRouter>
+          <ScrollToTop />
           <Routes>
-            {/* Public Routes */}
+            {/* Public marketing site */}
             <Route path="/" element={<LandingPage />} />
+            <Route path="/features" element={<FeaturesPage />} />
+            <Route path="/how-it-works" element={<HowItWorksPage />} />
+            <Route path="/player-registration" element={<PlayerRegistrationPage />} />
+            <Route path="/live-auction" element={<LiveAuctionPage />} />
+            <Route path="/team-management" element={<TeamManagementPage />} />
+            <Route path="/auction-dashboard" element={<AuctionDashboardPage />} />
+            <Route path="/sports" element={<SportsPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/contact" element={<ContactMarketingPage />} />
+            <Route path="/demo" element={<ContactMarketingPage />} />
+
+            {/* App / public operational routes */}
             <Route path="/test" element={<TestPage />} />
             <Route path="/test-cloudinary" element={<CloudinaryTest />} />
             <Route path="/login" element={<LoginPage />} />
@@ -117,7 +142,7 @@ function App() {
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
-            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/contact-legacy" element={<ContactPage />} />
             <Route path="/promote-to-admin" element={<PromoteToAdmin />} />
             <Route path="/display/:eventId" element={<AuctionDisplay />} />
             <Route path="/auctions/:eventId/register" element={<PublicPlayerRegistration />} />
