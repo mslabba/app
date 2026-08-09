@@ -179,6 +179,9 @@ export function MarketingFooter() {
 export function MarketingShell({ children }) {
   return (
     <div className="pa-site">
+      <a href="#main-content" className="pa-skip-link">
+        Skip to main content
+      </a>
       <MarketingNav />
       <main id="main-content">{children}</main>
       <MarketingFooter />
@@ -186,13 +189,41 @@ export function MarketingShell({ children }) {
   );
 }
 
-export function SectionHeading({ eyebrow, title, lead, center = false, className = '' }) {
+export function SectionHeading({ eyebrow, title, lead, center = false, className = '', id }) {
   return (
-    <div className={`${center ? 'pa-center' : ''} ${className}`.trim()}>
+    <div className={`${center ? 'pa-center' : ''} ${className}`.trim()} id={id}>
       {eyebrow && <p className="pa-eyebrow pa-mb-sm">{eyebrow}</p>}
       {title && <h2 className="pa-h2 pa-mb-md">{title}</h2>}
       {lead && <p className="pa-lead">{lead}</p>}
     </div>
+  );
+}
+
+/** Optimized marketing image with WebP + JPEG fallback */
+export function MarketingImage({
+  name,
+  alt,
+  className = '',
+  width = 1600,
+  height = 900,
+  priority = false,
+  sizes = '(max-width: 768px) 100vw, 720px',
+}) {
+  const base = `/images/marketing/${name}`;
+  return (
+    <picture className={`pa-picture ${className}`.trim()}>
+      <source srcSet={`${base}.webp`} type="image/webp" />
+      <img
+        src={`${base}.jpg`}
+        alt={alt}
+        width={width}
+        height={height}
+        loading={priority ? 'eager' : 'lazy'}
+        decoding={priority ? 'async' : 'async'}
+        fetchPriority={priority ? 'high' : 'auto'}
+        sizes={sizes}
+      />
+    </picture>
   );
 }
 
