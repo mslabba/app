@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,6 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Tags, Edit, Trash2, Folder } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
-import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -179,9 +178,8 @@ const CategoryManagement = () => {
   };
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
-      <div className="container mx-auto px-4 py-8">
+    <AppShell>
+<div className="container mx-auto px-4 py-8">
         <div className="mb-6">
           <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Category Management</h1>
           {event && (
@@ -381,10 +379,7 @@ const CategoryManagement = () => {
           </CardContent>
         </Card>
       </div>
-
-      {/* Floating Menu */}
-      <FloatingMenu />
-    </div>
+</AppShell>
   );
 };
 

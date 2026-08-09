@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,6 @@ import { Plus, Calendar, Settings, Share2, Copy, DollarSign, Users } from 'lucid
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
-import FloatingMenu from '@/components/FloatingMenu';
 import { Switch } from '@/components/ui/switch';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -140,9 +139,8 @@ const EventManagement = () => {
   };
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
-      <div className="container mx-auto px-6 py-8">
+    <AppShell>
+<div className="container mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Auction Management</h1>
@@ -493,10 +491,7 @@ const EventManagement = () => {
           ))}
         </div>
       </div>
-
-      {/* Floating Menu */}
-      <FloatingMenu />
-    </div>
+</AppShell>
   );
 };
 

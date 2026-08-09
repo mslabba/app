@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Users, Unlock, Trophy, DollarSign, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
-import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -118,20 +117,18 @@ const SoldPlayersManagement = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen app-bg">
-        <Navbar />
+      <AppShell>
         <div className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center py-12">
             <div className="text-white">Loading sold players...</div>
           </div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
+    <AppShell>
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -322,10 +319,7 @@ const SoldPlayersManagement = () => {
           </div>
         </div>
       </div>
-
-      {/* Floating Menu */}
-      <FloatingMenu />
-    </div>
+    </AppShell>
   );
 };
 

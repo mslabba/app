@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar, Users, TrendingUp, Plus, Play, BarChart } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
-import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -75,8 +74,7 @@ const SuperAdminDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
+    <AppShell title="Dashboard" subtitle="Manage your sports auctions">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8" data-testid="admin-dashboard">
           <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Super Admin</h1>
@@ -315,10 +313,7 @@ const SuperAdminDashboard = () => {
           </CardContent>
         </Card>
       </div>
-
-      {/* Floating Menu */}
-      <FloatingMenu />
-    </div>
+    </AppShell>
   );
 };
 

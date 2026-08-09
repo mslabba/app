@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,6 @@ import { Label } from '@/components/ui/label';
 import { Landmark, CreditCard, Building2, MapPin, DollarSign } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
-import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -70,9 +69,8 @@ const Settings = () => {
   };
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
-      <div className="container mx-auto px-6 py-8">
+    <AppShell>
+<div className="container mx-auto px-6 py-8">
         <div className="max-w-4xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-white mb-2">Settings</h1>
@@ -215,9 +213,7 @@ const Settings = () => {
           </Card>
         </div>
       </div>
-
-      <FloatingMenu />
-    </div>
+</AppShell>
   );
 };
 

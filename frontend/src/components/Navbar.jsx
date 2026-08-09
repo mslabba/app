@@ -1,8 +1,12 @@
+/**
+ * @deprecated Prefer AppShell for authenticated product pages.
+ * Thin legacy top bar retained only if a page still imports Navbar directly.
+ */
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { logOut } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
-import { LogOut, Home, Users, TrendingUp, DollarSign, Settings, Landmark } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Navbar = () => {
@@ -14,71 +18,45 @@ const Navbar = () => {
       await logOut();
       toast.success('Logged out successfully');
       navigate('/login');
-    } catch (error) {
+    } catch {
       toast.error('Failed to logout');
     }
   };
 
+  const home = isSuperAdmin || isEventOrganizer ? '/admin' : '/team';
+
   return (
-    <nav className="glass border-b border-white/20 sticky top-0 z-50">
-      <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-8">
-            <Link to={(isSuperAdmin || isEventOrganizer) ? "/admin" : "/team"} className="flex items-center space-x-2">
-              <img
-                src="/images/sports/logo-final.png"
-                alt="PowerAuctions Logo"
-                className="h-10 w-auto"
-                onError={(e) => {
-                  console.error('Logo failed to load:', e.target.src);
-                  e.target.style.display = 'none';
-                }}
-              />
-              <div className="flex flex-col">
-                <span className="text-xl font-bold text-white">Power<span className="text-red-500">Auction</span></span>
-                <span className="text-xs text-white/60">Powered by Turgut</span>
-              </div>
-            </Link>
-
-            {(isSuperAdmin || isEventOrganizer) && (
-              <div className="hidden md:flex items-center space-x-4">
-                <Link to="/admin" className="text-white/80 hover:text-white flex items-center space-x-1">
-                  <Home className="w-4 h-4" />
-                  <span>Dashboard</span>
-                </Link>
-                <Link to="/admin/events" className="text-white/80 hover:text-white flex items-center space-x-1">
-                  <Settings className="w-4 h-4" />
-                  <span>Auctions</span>
-                </Link>
-                <Link to="/admin/settings" className="text-white/80 hover:text-white flex items-center space-x-1">
-                  <Landmark className="w-4 h-4" />
-                  <span>Settings</span>
-                </Link>
-                {isSuperAdmin && (
-                  <Link to="/admin/payment-settings" className="text-white/80 hover:text-white flex items-center space-x-1">
-                    <DollarSign className="w-4 h-4" />
-                    <span>Payment Gateway</span>
-                  </Link>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center space-x-4">
-            <div className="text-white text-sm">
-              <div className="font-medium">{userProfile?.display_name}</div>
-              <div className="text-white/60 text-xs">{userProfile?.role?.replace('_', ' ').toUpperCase()}</div>
+    <nav className="sticky top-0 z-50 border-b border-white/15 bg-black/35 backdrop-blur-xl">
+      <div className="container mx-auto flex items-center justify-between px-4 py-3">
+        <Link to={home} className="flex items-center gap-2">
+          <img
+            src="/images/sports/logo-final.png"
+            alt="PowerAuction"
+            className="h-9 w-auto"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+          <span className="text-lg font-bold text-white">
+            Power<span className="text-red-500">Auction</span>
+          </span>
+        </Link>
+        <div className="flex items-center gap-3">
+          <div className="hidden text-right text-sm text-white sm:block">
+            <div className="font-medium">{userProfile?.display_name}</div>
+            <div className="text-xs uppercase text-white/55">
+              {(userProfile?.role || '').replace(/_/g, ' ')}
             </div>
-            <Button
-              onClick={handleLogout}
-              variant="outline"
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-              data-testid="logout-button"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </Button>
           </div>
+          <Button
+            onClick={handleLogout}
+            variant="outline"
+            className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+            data-testid="logout-button"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </Button>
         </div>
       </div>
     </nav>

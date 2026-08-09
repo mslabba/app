@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -85,9 +85,8 @@ const PriorityPlayers = () => {
   });
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
-      <div className="container mx-auto px-4 py-8">
+    <AppShell>
+<div className="container mx-auto px-4 py-8">
         <div className="flex items-center mb-8">
           <Button 
             variant="outline" 
@@ -172,7 +171,7 @@ const PriorityPlayers = () => {
           )}
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 };
 

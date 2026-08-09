@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
-import FloatingMenu from '@/components/FloatingMenu';
 import { generateRegistrationsPDF } from '@/utils/pdfGenerator';
 import { convertGoogleDriveUrl } from '@/utils/imageUtils';
 import { exportRegistrationsToExcel, exportAllToExcel } from '@/utils/excelExporter';
@@ -405,9 +404,8 @@ const PlayerRegistrationManagement = () => {
   const rejectedRegistrations = registrations.filter(reg => reg.status === 'rejected');
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
-      <div className="container mx-auto px-6 py-8">
+    <AppShell>
+<div className="container mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-4xl font-bold text-white mb-2">Player Registration Management</h1>
@@ -1277,10 +1275,7 @@ const PlayerRegistrationManagement = () => {
           </DialogContent>
         </Dialog>
       </div>
-
-      {/* Floating Menu */}
-      <FloatingMenu />
-    </div>
+</AppShell>
   );
 };
 

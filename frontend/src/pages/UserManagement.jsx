@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,6 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Search, Filter, Mail, Phone, Calendar, Shield, ArrowLeft, Edit, Trash2, Plus, UserPlus } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
-import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -199,9 +198,8 @@ const UserManagement = () => {
   };
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
-      <div className="container mx-auto px-4 py-8">
+    <AppShell>
+<div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
           <Button
@@ -585,9 +583,7 @@ const UserManagement = () => {
           </DialogContent>
         </Dialog>
       </div>
-
-      <FloatingMenu />
-    </div>
+</AppShell>
   );
 };
 

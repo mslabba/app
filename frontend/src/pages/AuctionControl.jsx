@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,7 +30,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/AuthContext';
-import FloatingMenu from '@/components/FloatingMenu';
 import PlayerSpinner from '@/components/PlayerSpinner';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -870,12 +869,14 @@ const AuctionControl = () => {
   // Show loading state while authentication is being checked
   if (authLoading || !currentUser) {
     return (
-      <div className="min-h-screen app-bg flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white/80 text-lg">Loading auction control panel...</p>
+      <AppShell>
+        <div className="container mx-auto flex min-h-[50vh] items-center justify-center px-4">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-white/80 text-lg">Loading auction control panel...</p>
+          </div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
@@ -1526,17 +1527,13 @@ const AuctionControl = () => {
           </div>
         )}
 
-        {/* Floating Menu */}
-        <FloatingMenu />
       </div>
     );
   }
 
   // Regular Mode
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
-
+    <AppShell>
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -2376,10 +2373,7 @@ const AuctionControl = () => {
           }
         `}</style>
       </div>
-
-      {/* Floating Menu */}
-      <FloatingMenu />
-    </div>
+    </AppShell>
   );
 };
 

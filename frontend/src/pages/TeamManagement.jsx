@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,6 @@ import { Plus, Users, DollarSign, Edit, Eye, RefreshCw, Share2, Copy, ExternalLi
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
-import FloatingMenu from '@/components/FloatingMenu';
 import { generateTeamRosterPDF } from '@/utils/pdfGenerator';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -278,8 +277,7 @@ const TeamManagement = () => {
   };
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
+    <AppShell title="Teams" subtitle={event?.name || 'Loading...'}>
       <div className="container mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -812,10 +810,8 @@ const TeamManagement = () => {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Floating Menu */}
-      <FloatingMenu />
-    </div>
+      </div>
+    </AppShell>
   );
 };
 

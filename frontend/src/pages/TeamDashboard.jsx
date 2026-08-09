@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Gavel, Users, DollarSign, Trophy, Clock, User, Target, Calculator } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
-import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -117,23 +116,24 @@ const TeamDashboard = () => {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen app-bg flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-white">Loading dashboard...</p>
-          {error && (
-            <div className="mt-4 p-4 bg-red-500/20 rounded-lg border border-red-500/30">
-              <p className="text-red-200">Error: {error}</p>
-            </div>
-          )}
+      <AppShell>
+        <div className="container mx-auto flex min-h-[50vh] items-center justify-center px-4">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+            <p className="text-white">Loading dashboard...</p>
+            {error && (
+              <div className="mt-4 p-4 bg-red-500/20 rounded-lg border border-red-500/30">
+                <p className="text-red-200">Error: {error}</p>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
+    <AppShell>
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">PowerAuctions - Team Dashboard</h1>
@@ -474,10 +474,7 @@ const TeamDashboard = () => {
           </div>
         )}
       </div>
-
-      {/* Floating Menu */}
-      <FloatingMenu />
-    </div>
+    </AppShell>
   );
 };
 

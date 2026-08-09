@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,6 @@ import { Plus, Users, Edit, Trash2, User, Unlock, RotateCcw, Search, Filter, Dow
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
-import FloatingMenu from '@/components/FloatingMenu';
 import { convertGoogleDriveUrl } from '@/utils/imageUtils';
 import jsPDF from 'jspdf';
 
@@ -569,9 +568,8 @@ const PlayerManagement = () => {
   };
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
-      <div className="container mx-auto px-4 py-8">
+    <AppShell>
+<div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl font-bold text-white">PowerAuctions - Player Management</h1>
           <div className="flex gap-3">
@@ -1025,9 +1023,7 @@ const PlayerManagement = () => {
           </CardContent>
         </Card>
       </div>
-      {/* Floating Menu */}
-      <FloatingMenu />
-    </div>
+</AppShell>
   );
 };
 

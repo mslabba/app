@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,7 +25,6 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/AuthContext';
 import ImageUpload from '@/components/ImageUpload';
-import FloatingMenu from '@/components/FloatingMenu';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -208,9 +207,8 @@ const SponsorManagement = () => {
   };
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
-      <div className="container mx-auto px-4 py-8">
+    <AppShell>
+<div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-4xl font-bold text-white mb-2">Sponsor Management</h1>
@@ -476,10 +474,7 @@ const SponsorManagement = () => {
           </Card>
         )}
       </div>
-
-      {/* Floating Menu */}
-      <FloatingMenu />
-    </div>
+</AppShell>
   );
 };
 

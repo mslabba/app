@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
-import Navbar from '@/components/Navbar';
+import AppShell from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, DollarSign, TrendingUp, CreditCard, Clock, XCircle, CheckCircle } from 'lucide-react';
@@ -80,8 +80,7 @@ const EventPayments = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen app-bg">
-        <Navbar />
+      <AppShell>
         <div className="container mx-auto px-6 py-8">
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
@@ -90,30 +89,28 @@ const EventPayments = () => {
             </div>
           </div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   if (!paymentData) {
     return (
-      <div className="min-h-screen app-bg">
-        <Navbar />
+      <AppShell>
         <div className="container mx-auto px-6 py-8">
           <Card className="glass border-white/20">
             <CardContent className="pt-6 text-center">
-              <p className="text-gray-600">No payment data available</p>
+              <p className="text-white/70">No payment data available</p>
             </CardContent>
           </Card>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   const { event_name, payments, statistics } = paymentData;
 
   return (
-    <div className="min-h-screen app-bg">
-      <Navbar />
+    <AppShell>
       <div className="container mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-6">
@@ -247,7 +244,7 @@ const EventPayments = () => {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </AppShell>
   );
 };
 
