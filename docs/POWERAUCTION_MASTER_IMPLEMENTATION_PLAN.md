@@ -878,6 +878,49 @@ Rules:
 | B7 | Team owner + public stats | Dual-entry polish |
 | B8 | Analytics/settings | Trust |
 | B9 | Responsive + a11y + perf pass | Gates |
+| **B10** | **Public Live Auction Broadcast Screens** (player + teams; OBS/vMix) | Streaming team opens URL, no login; auto-update; public-safe data only |
+
+### B10 — Public Live Auction Broadcast Screens (detail)
+
+**Placement:** After dual-backend/public API stabilization and Workstream B shell (B1–B9 local done). Before final production UI QA / Railway cutover.
+
+**Goal:** Two full-viewport, read-only, unauthenticated presentation screens for broadcast capture, driven by organizer Auction Control (unchanged).
+
+| Subtask | Work | Exit |
+|---------|------|------|
+| B10.1 | Public API design + DTO schemas (player board + teams board) | Documented request/response |
+| B10.2 | Event-scoped public broadcast token (generate + validate; tighten security) | Token cannot mutate; event isolation |
+| B10.3 | `GET …/player` public endpoint (auction state + current player public fields + brands) | No private fields |
+| B10.4 | `GET …/teams` public endpoint (all teams purse + squad + category progress) | Authoritative purse from backend |
+| B10.5 | Frontend `/live/{publicToken}/player` broadcast layout | 1920×1080, all states |
+| B10.6 | Frontend `/live/{publicToken}/teams` scoreboard | Adaptive N-team layout |
+| B10.7 | Branding + sponsor strip (public sponsors only) | Event-agnostic |
+| B10.8 | Polling layer (pause when `document.hidden`; swappable to SSE later) | No leaks; stable order |
+| B10.9 | Security + long-session + OBS smoke tests | Acceptance checklist green |
+
+**Non-goals for B10:** WebSockets/Redis; redesign of Auction Control; production cutover; inventing category types (use real `categories.min_players` / `max_players`).
+
+**Existing assets to reuse (not rewrite):**
+
+- Auction state model + `GET /auction/state/{event_id}` (already unauthenticated; will be replaced for public by token-scoped DTOs)
+- `AuctionDisplay` (`/display/:eventId`) as UX reference only — **not** the final secure broadcast surface
+- Per-team public tokens + `PublicTeamStats` as pattern for tokenized public access (event-level token is new)
+- `base_price_calculator` / sold-player counts for category progress on teams board
+- Team `budget` / `spent` / `remaining` from backend (do not recompute purse in React)
+
+**Architecture:**
+
+```
+Organizer Auction Control (auth)
+        ↓
+Existing auction business logic (start/next/sell/bid)
+        ↓
+Postgres (or Firestore until cutover)
+        ↓
+Public read-only FastAPI (token-scoped DTOs)
+        ↓
+/live/{token}/player   +   /live/{token}/teams
+```
 
 ---
 

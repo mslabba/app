@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -6,41 +6,39 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Trophy, User, CheckCircle, ArrowLeft, DollarSign, CreditCard, Users, XCircle } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Trophy, User, CheckCircle, ArrowLeft, CreditCard, Users, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import ImageUploadWithCrop from '@/components/ImageUploadWithCrop';
 import DocumentUpload from '@/components/DocumentUpload';
+import {
+  buildRegistrationPayload,
+  emptyFormValues,
+  enabledFields,
+  resolveRegistrationFormConfig,
+  validateRegistrationValues,
+  COLUMN_KEYS,
+  STATS_KEYS,
+} from '@/lib/registrationFormConfig';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const PublicPlayerRegistration = () => {
   const { eventId } = useParams();
   const [event, setEvent] = useState(null);
+  const [formConfig, setFormConfig] = useState(null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [paymentOrderId, setPaymentOrderId] = useState(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [registrationInfo, setRegistrationInfo] = useState(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    age: '',
-    position: '',
-    specialty: '',
-    previous_team: '',
-    cricheroes_link: '',
-    contact_number: '',
-    email: '',
-    photo_url: '',
-    district: '',
-    identity_proof_url: '',
-    stats: {
-      matches: '',
-      runs: '',
-      wickets: '',
-      goals: '',
-      assists: ''
-    }
-  });
+  const [formData, setFormData] = useState(() => emptyFormValues(resolveRegistrationFormConfig(null)));
 
   useEffect(() => {
     // Log environment info for debugging
@@ -118,6 +116,20 @@ const PublicPlayerRegistration = () => {
         }
       });
       setEvent(response.data);
+      const cfg = resolveRegistrationFormConfig(response.data);
+      setFormConfig(cfg);
+      // Preserve restored payment form data if present
+      setFormData((prev) => {
+        const base = emptyFormValues(cfg);
+        const hasValues = prev?.name || prev?.contact_number;
+        if (!hasValues) return base;
+        return {
+          ...base,
+          ...prev,
+          stats: { ...base.stats, ...(prev.stats || {}) },
+          extra_fields: { ...base.extra_fields, ...(prev.extra_fields || {}) },
+        };
+      });
 
       // Fetch registration count
       try {
@@ -150,43 +162,147 @@ const PublicPlayerRegistration = () => {
     }
   };
 
-  const handleChange = (field, value) => {
-    if (field.startsWith('stats.')) {
-      const statField = field.split('.')[1];
-      setFormData(prev => ({
+  const activeFields = useMemo(
+    () => enabledFields(formConfig || resolveRegistrationFormConfig(event)),
+    [formConfig, event]
+  );
+
+  const handleChange = (fieldKey, value) => {
+    if (STATS_KEYS.has(fieldKey)) {
+      setFormData((prev) => ({
         ...prev,
-        stats: { ...prev.stats, [statField]: value }
+        stats: { ...(prev.stats || {}), [fieldKey]: value },
       }));
-    } else {
-      setFormData(prev => ({ ...prev, [field]: value }));
+      return;
     }
+    if (COLUMN_KEYS.has(fieldKey)) {
+      setFormData((prev) => ({ ...prev, [fieldKey]: value }));
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      extra_fields: { ...(prev.extra_fields || {}), [fieldKey]: value },
+    }));
+  };
+
+  const getFieldValue = (fieldKey) => {
+    if (STATS_KEYS.has(fieldKey)) return formData.stats?.[fieldKey] ?? '';
+    if (COLUMN_KEYS.has(fieldKey)) return formData[fieldKey] ?? '';
+    return formData.extra_fields?.[fieldKey] ?? '';
+  };
+
+  const renderField = (field) => {
+    const label = `${field.label}${field.required ? ' *' : ''}`;
+    const value = getFieldValue(field.key);
+    const commonClass = 'bg-white border-gray-300 text-gray-900 placeholder-gray-500';
+
+    if (field.type === 'image') {
+      return (
+        <div key={field.id} className="md:col-span-2">
+          <ImageUploadWithCrop
+            label={label}
+            value={value}
+            onChange={(url) => handleChange(field.key, url)}
+            placeholder={field.placeholder || 'Upload image or enter URL'}
+            sampleType={{ type: 'players', subtype: 'photos' }}
+            enableCrop={true}
+            cropAspect={1}
+            required={!!field.required}
+          />
+        </div>
+      );
+    }
+    if (field.type === 'file') {
+      return (
+        <div key={field.id} className="md:col-span-2">
+          <DocumentUpload
+            label={label}
+            value={value}
+            onChange={(url) => handleChange(field.key, url)}
+            placeholder={field.placeholder || 'Upload file (image or PDF) or enter URL'}
+            accept="image/*,application/pdf"
+            maxSize={10 * 1024 * 1024}
+          />
+        </div>
+      );
+    }
+    if (field.type === 'textarea') {
+      return (
+        <div key={field.id} className="md:col-span-2">
+          <Label className="text-gray-700">{label}</Label>
+          <Textarea
+            value={value}
+            onChange={(e) => handleChange(field.key, e.target.value)}
+            placeholder={field.placeholder || ''}
+            required={!!field.required}
+            className={commonClass}
+            rows={3}
+          />
+        </div>
+      );
+    }
+    if (field.type === 'select') {
+      return (
+        <div key={field.id}>
+          <Label className="text-gray-700">{label}</Label>
+          <Select value={value || undefined} onValueChange={(v) => handleChange(field.key, v)}>
+            <SelectTrigger className={commonClass}>
+              <SelectValue placeholder={field.placeholder || 'Select…'} />
+            </SelectTrigger>
+            <SelectContent>
+              {(field.options || []).map((opt) => (
+                <SelectItem key={opt} value={opt}>
+                  {opt}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      );
+    }
+
+    const inputType =
+      field.type === 'number'
+        ? 'number'
+        : field.type === 'email'
+          ? 'email'
+          : field.type === 'tel'
+            ? 'tel'
+            : field.type === 'date'
+              ? 'date'
+              : 'text';
+
+    return (
+      <div key={field.id}>
+        <Label className="text-gray-700">{label}</Label>
+        <Input
+          type={inputType}
+          value={value}
+          onChange={(e) => handleChange(field.key, e.target.value)}
+          placeholder={field.placeholder || ''}
+          required={!!field.required}
+          className={commonClass}
+        />
+      </div>
+    );
   };
 
   const initiateCashfreePayment = async () => {
     try {
       setPaymentLoading(true);
 
-      // Validate required fields for payment
-      if (!formData.name.trim()) {
-        toast.error('Please enter your name');
+      const cfg = formConfig || resolveRegistrationFormConfig(event);
+      const err = validateRegistrationValues(formData, cfg);
+      if (err) {
+        toast.error(err);
         setPaymentLoading(false);
         return;
       }
-      if (!formData.contact_number.trim()) {
-        toast.error('Please enter your contact number');
-        setPaymentLoading(false);
-        return;
-      }
-      if (!formData.email.trim()) {
-        toast.error('Please enter your email');
-        setPaymentLoading(false);
-        return;
-      }
-      if (!formData.photo_url.trim()) {
-        toast.error('Please upload your photo');
-        setPaymentLoading(false);
-        return;
-      }
+
+      // Cashfree typically needs an email — use form email or a placeholder
+      const emailForPayment =
+        (formData.email || '').trim() ||
+        `player+${(formData.contact_number || 'guest').replace(/\D/g, '')}@thepowerauction.com`;
 
       // Save form data to sessionStorage before redirecting to payment
       sessionStorage.setItem(`registration_form_${eventId}`, JSON.stringify(formData));
@@ -196,7 +312,7 @@ const PublicPlayerRegistration = () => {
       const orderResponse = await axios.post(`${API}/payments/create-order`, {
         event_id: eventId,
         customer_name: formData.name.trim(),
-        customer_email: formData.email.trim(),
+        customer_email: emailForPayment,
         customer_phone: formData.contact_number.trim(),
         amount: event.payment_settings.registration_fee
       });
@@ -258,27 +374,10 @@ const PublicPlayerRegistration = () => {
         return;
       }
 
-      // Complete registration with payment order ID
+      const cfg = formConfig || resolveRegistrationFormConfig(event);
       const registrationData = {
-        name: (dataToUse.name || '').trim(),
-        age: (dataToUse.age && !isNaN(parseInt(dataToUse.age))) ? parseInt(dataToUse.age) : null,
-        position: (dataToUse.position || '').trim() || null,
-        specialty: (dataToUse.specialty || '').trim() || null,
-        previous_team: (dataToUse.previous_team || '').trim() || null,
-        cricheroes_link: (dataToUse.cricheroes_link || '').trim() || null,
-        contact_number: (dataToUse.contact_number || '').trim() || null,
-        email: (dataToUse.email || '').trim() || null,
-        photo_url: (dataToUse.photo_url || '').trim() || null,
-        district: (dataToUse.district || '').trim() || null,
-        identity_proof_url: (dataToUse.identity_proof_url || '').trim() || null,
-        stats: {
-          matches: (dataToUse.stats?.matches && !isNaN(parseInt(dataToUse.stats.matches))) ? parseInt(dataToUse.stats.matches) : null,
-          runs: (dataToUse.stats?.runs && !isNaN(parseInt(dataToUse.stats.runs))) ? parseInt(dataToUse.stats.runs) : null,
-          wickets: (dataToUse.stats?.wickets && !isNaN(parseInt(dataToUse.stats.wickets))) ? parseInt(dataToUse.stats.wickets) : null,
-          goals: (dataToUse.stats?.goals && !isNaN(parseInt(dataToUse.stats.goals))) ? parseInt(dataToUse.stats.goals) : null,
-          assists: (dataToUse.stats?.assists && !isNaN(parseInt(dataToUse.stats.assists))) ? parseInt(dataToUse.stats.assists) : null,
-        },
-        payment_order_id: orderId
+        ...buildRegistrationPayload(dataToUse, cfg),
+        payment_order_id: orderId,
       };
 
       console.log('Sending registration request:', registrationData);
@@ -303,17 +402,10 @@ const PublicPlayerRegistration = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validate required fields
-    if (!formData.name.trim()) {
-      toast.error('Please enter your name');
-      return;
-    }
-    if (!formData.contact_number.trim()) {
-      toast.error('Please enter your contact number');
-      return;
-    }
-    if (!formData.photo_url.trim()) {
-      toast.error('Please upload your photo');
+    const cfg = formConfig || resolveRegistrationFormConfig(event);
+    const validationError = validateRegistrationValues(formData, cfg);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
 
@@ -326,26 +418,7 @@ const PublicPlayerRegistration = () => {
       try {
         setLoading(true);
 
-        const registrationData = {
-          name: (formData.name || '').trim(),
-          age: (formData.age && !isNaN(parseInt(formData.age))) ? parseInt(formData.age) : null,
-          position: (formData.position || '').trim() || null,
-          specialty: (formData.specialty || '').trim() || null,
-          previous_team: (formData.previous_team || '').trim() || null,
-          cricheroes_link: (formData.cricheroes_link || '').trim() || null,
-          contact_number: (formData.contact_number || '').trim() || null,
-          email: (formData.email || '').trim() || null,
-          photo_url: (formData.photo_url || '').trim() || null,
-          district: (formData.district || '').trim() || null,
-          identity_proof_url: (formData.identity_proof_url || '').trim() || null,
-          stats: {
-            matches: (formData.stats?.matches && !isNaN(parseInt(formData.stats.matches))) ? parseInt(formData.stats.matches) : null,
-            runs: (formData.stats?.runs && !isNaN(parseInt(formData.stats.runs))) ? parseInt(formData.stats.runs) : null,
-            wickets: (formData.stats?.wickets && !isNaN(parseInt(formData.stats.wickets))) ? parseInt(formData.stats.wickets) : null,
-            goals: (formData.stats?.goals && !isNaN(parseInt(formData.stats.goals))) ? parseInt(formData.stats.goals) : null,
-            assists: (formData.stats?.assists && !isNaN(parseInt(formData.stats.assists))) ? parseInt(formData.stats.assists) : null,
-          }
-        };
+        const registrationData = buildRegistrationPayload(formData, cfg);
 
         console.log('Sending non-payment registration request:', registrationData);
         await axios.post(`${API}/auctions/${eventId}/register-player`, registrationData);
@@ -354,7 +427,7 @@ const PublicPlayerRegistration = () => {
         setSubmitted(true);
       } catch (error) {
         console.error('Registration failed:', error);
-        toast.error('Registration failed. Please try again.');
+        toast.error(error.response?.data?.detail || 'Registration failed. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -496,11 +569,8 @@ const PublicPlayerRegistration = () => {
                       </p>
                     </div>
                     <div className="flex-shrink-0 text-right">
-                      <div className="flex items-center space-x-1">
-                        <DollarSign className="w-5 h-5 text-green-600" />
-                        <span className="text-3xl font-bold text-green-600">
-                          ₹{event.payment_settings.registration_fee}
-                        </span>
+                      <div className="text-3xl font-bold text-green-600">
+                        ₹{Number(event.payment_settings.registration_fee || 0).toLocaleString('en-IN')}
                       </div>
                       <p className="text-xs text-gray-600 mt-1">One-time payment</p>
                     </div>
@@ -515,183 +585,10 @@ const PublicPlayerRegistration = () => {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Basic Information */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
+                  <h3 className="text-lg font-semibold text-gray-800">Your details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="name" className="text-gray-700">Full Name *</Label>
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => handleChange('name', e.target.value)}
-                        placeholder="Enter your full name"
-                        required
-                        className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="age" className="text-gray-700">Age</Label>
-                      <Input
-                        id="age"
-                        type="number"
-                        value={formData.age}
-                        onChange={(e) => handleChange('age', e.target.value)}
-                        placeholder="Your age"
-                        className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Contact Information */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">Contact Information</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="contact_number" className="text-gray-700">Phone Number *</Label>
-                      <Input
-                        id="contact_number"
-                        value={formData.contact_number}
-                        onChange={(e) => handleChange('contact_number', e.target.value)}
-                        placeholder="+1 234 567 8900"
-                        required
-                        className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="email" className="text-gray-700">Email Address</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => handleChange('email', e.target.value)}
-                        placeholder="your@email.com"
-                        className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="district" className="text-gray-700">District</Label>
-                      <Input
-                        id="district"
-                        value={formData.district}
-                        onChange={(e) => handleChange('district', e.target.value)}
-                        placeholder="Enter your district"
-                        className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Playing Information */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">Playing Information</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="position" className="text-gray-700">Position/Role</Label>
-                      <Input
-                        id="position"
-                        value={formData.position}
-                        onChange={(e) => handleChange('position', e.target.value)}
-                        placeholder="e.g., Batsman, Forward, Midfielder"
-                        className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="specialty" className="text-gray-700">Specialty</Label>
-                      <Input
-                        id="specialty"
-                        value={formData.specialty}
-                        onChange={(e) => handleChange('specialty', e.target.value)}
-                        placeholder="e.g., Right-handed, Left foot"
-                        className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="previous_team" className="text-gray-700">Previous Team</Label>
-                      <Input
-                        id="previous_team"
-                        value={formData.previous_team}
-                        onChange={(e) => handleChange('previous_team', e.target.value)}
-                        placeholder="Your previous team name"
-                        className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="cricheroes_link" className="text-gray-700">CricHeroes Profile Link</Label>
-                      <Input
-                        id="cricheroes_link"
-                        value={formData.cricheroes_link}
-                        onChange={(e) => handleChange('cricheroes_link', e.target.value)}
-                        placeholder="https://cricheroes.com/profile/..."
-                        className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Photo Upload */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">Player Photo *</h3>
-                  <ImageUploadWithCrop
-                    label="Upload Your Photo"
-                    value={formData.photo_url}
-                    onChange={(url) => handleChange('photo_url', url)}
-                    placeholder="Upload your photo or enter URL"
-                    sampleType={{ type: 'players', subtype: 'photos' }}
-                    enableCrop={true}
-                    cropAspect={1}
-                    required
-                  />
-                </div>
-
-                {/* Identity Proof Upload */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">Identity Proof</h3>
-                  <DocumentUpload
-                    label="Upload Identity Proof (Aadhaar, Passport, Driver's License, etc.)"
-                    value={formData.identity_proof_url}
-                    onChange={(url) => handleChange('identity_proof_url', url)}
-                    placeholder="Upload your identity proof (image or PDF) or enter URL"
-                    accept="image/*,application/pdf"
-                    maxSize={10 * 1024 * 1024}
-                  />
-                </div>
-
-                {/* Statistics */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">Career Statistics (Optional)</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="matches" className="text-gray-700">Matches</Label>
-                      <Input
-                        id="matches"
-                        type="number"
-                        value={formData.stats.matches}
-                        onChange={(e) => handleChange('stats.matches', e.target.value)}
-                        className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="runs" className="text-gray-700">Runs/Goals</Label>
-                      <Input
-                        id="runs"
-                        type="number"
-                        value={formData.stats.runs}
-                        onChange={(e) => handleChange('stats.runs', e.target.value)}
-                        className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="wickets" className="text-gray-700">Wickets/Assists</Label>
-                      <Input
-                        id="wickets"
-                        type="number"
-                        value={formData.stats.wickets}
-                        onChange={(e) => handleChange('stats.wickets', e.target.value)}
-                        className="bg-white border-gray-300 text-gray-900 placeholder-gray-500"
-                      />
-                    </div>
+                    {activeFields.map((field) => renderField(field))}
                   </div>
                 </div>
 
@@ -711,9 +608,9 @@ const PublicPlayerRegistration = () => {
                 </div>
 
                 <p className="text-sm text-gray-500 text-center">
-                  * Required fields. District and Identity Proof are optional. Your registration will be reviewed by the organizer.
+                  * Required fields. Your registration will be reviewed by the organizer.
                   {event?.payment_settings?.collect_payment && (
-                    <><br />You will be redirected to secure payment gateway to complete registration fee payment.</>
+                    <><br />You will be redirected to a secure payment gateway to complete the registration fee.</>
                   )}
                 </p>
               </form>

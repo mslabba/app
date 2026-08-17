@@ -34,6 +34,10 @@ import UserManagement from '@/pages/UserManagement';
 import Settings from '@/pages/Settings';
 import PaymentGatewaySettings from '@/pages/PaymentGatewaySettings';
 import EventPayments from '@/pages/EventPayments';
+import EventSettings from '@/pages/EventSettings';
+import OrganizerOnboarding from '@/pages/OrganizerOnboarding';
+import LivePlayerBoard from '@/pages/LivePlayerBoard';
+import LiveTeamsBoard from '@/pages/LiveTeamsBoard';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 // Marketing product pages (new site IA)
@@ -150,6 +154,10 @@ function App() {
             {/* Public Team Statistics - No authentication required */}
             <Route path="/public/team/:teamId/stats" element={<PublicTeamStats />} />
 
+            {/* Public live broadcast boards (OBS / vMix) — token-scoped, no login */}
+            <Route path="/live/:publicToken/player" element={<LivePlayerBoard />} />
+            <Route path="/live/:publicToken/teams" element={<LiveTeamsBoard />} />
+
             {/* Dashboard redirect for authenticated users */}
             <Route path="/dashboard" element={<DashboardRedirect />} />
 
@@ -159,6 +167,14 @@ function App() {
               element={
                 <ProtectedRoute requireSuperAdmin>
                   <SuperAdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/onboarding"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <OrganizerOnboarding />
                 </ProtectedRoute>
               }
             />
@@ -263,6 +279,14 @@ function App() {
               element={
                 <ProtectedRoute requireSuperAdmin>
                   <Analytics />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/events/:eventId/settings"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <EventSettings />
                 </ProtectedRoute>
               }
             />

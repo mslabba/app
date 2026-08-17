@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Calendar, Settings, Share2, Gavel, Users, Tag, UserPlus } from 'lucide-react';
+import { Plus, Calendar, Settings, Share2, Gavel, Users, Tag, UserPlus, DollarSign, Sparkles } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
@@ -374,7 +374,15 @@ const EventManagement = () => {
           <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 py-16 text-center">
             <Calendar className="mx-auto mb-4 h-14 w-14 text-white/30" />
             <p className="text-lg text-white/75">No auctions yet</p>
-            <p className="mt-1 text-sm text-white/45">Create an auction to add categories, teams, and players.</p>
+            <p className="mt-1 text-sm text-white/45">
+              Create an auction here, or use the guided setup for categories and teams.
+            </p>
+            <Link to="/admin/onboarding">
+              <Button className="mt-5 bg-red-600 text-white hover:bg-red-700">
+                <Sparkles className="mr-2 h-4 w-4" />
+                Start guided setup
+              </Button>
+            </Link>
           </div>
         ) : (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -415,8 +423,13 @@ const EventManagement = () => {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
+                  <Link to={`/admin/events/${event.id}/settings`}>
+                    <Button size="sm" variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10">
+                      <Settings className="mr-1 h-3.5 w-3.5" />
+                      Settings
+                    </Button>
+                  </Link>
                   <Button size="sm" variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10" onClick={() => handleEdit(event)}>
-                    <Settings className="mr-1 h-3.5 w-3.5" />
                     Edit
                   </Button>
                   <Link to={`/admin/auction/${event.id}`}>

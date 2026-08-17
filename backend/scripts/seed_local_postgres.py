@@ -21,10 +21,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-# Ensure defaults for local docker if unset
+# Default: Homebrew Postgres on 5432 (Docker Compose uses 5434 — set DATABASE_URL explicitly)
 os.environ.setdefault(
     "DATABASE_URL",
-    "postgresql+psycopg://powerauction:powerauction@localhost:5434/powerauction",
+    "postgresql+psycopg://powerauction:powerauction@localhost:5432/powerauction",
 )
 os.environ.setdefault("DATA_BACKEND", "postgres")
 

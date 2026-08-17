@@ -43,6 +43,7 @@ def event_to_dict(e) -> dict[str, Any]:
         "organizer_mobile": e.organizer_mobile,
         "has_registration_limit": bool(e.has_registration_limit),
         "registration_limit": e.registration_limit,
+        "registration_form_config": e.registration_form_config,
     }
 
 
@@ -98,6 +99,7 @@ def player_to_dict(p) -> dict[str, Any]:
         "district": p.district,
         "identity_proof_url": p.identity_proof_url,
         "is_priority": bool(p.is_priority),
+        "extra_fields": getattr(p, "extra_fields", None),
     }
 
 
@@ -122,6 +124,7 @@ def registration_to_dict(r) -> dict[str, Any]:
         "district": r.district,
         "identity_proof_url": r.identity_proof_url,
         "stats": r.stats,
+        "extra_fields": r.extra_fields,
     }
     return d
 
@@ -145,6 +148,9 @@ def sponsor_to_dict(s) -> dict[str, Any]:
 
 
 def auction_state_to_dict(a) -> dict[str, Any]:
+    meta = a.raw_firestore if isinstance(a.raw_firestore, dict) else {}
+    last_result = meta.get("last_result") if isinstance(meta, dict) else None
+    spin = meta.get("spin") if isinstance(meta, dict) else None
     return {
         "id": f"auction_{a.event_id}",
         "event_id": a.event_id,
@@ -155,7 +161,9 @@ def auction_state_to_dict(a) -> dict[str, Any]:
         "timer_started_at": _iso(a.timer_started_at),
         "timer_duration": a.timer_duration,
         "status": a.status,
-        "bid_history": [],  # full history via bids table; API may append later
+        "bid_history": [],  # filled by get_auction_state from bids table
+        "last_result": last_result,
+        "spin": spin,
     }
 
 

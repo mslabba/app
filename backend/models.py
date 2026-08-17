@@ -21,6 +21,8 @@ class PlayerStatus(str, Enum):
     SOLD = "sold"
     UNSOLD = "unsold"
     CURRENT = "current"
+    # Skipped from the block without sale / unsold — can re-enter later
+    ON_HOLD = "on_hold"
 
 # User Models
 class UserCreate(BaseModel):
@@ -60,6 +62,23 @@ class PaymentSettings(BaseModel):
     collect_payment: bool = False
     registration_fee: Optional[int] = None  # Amount to collect
 
+class RegistrationFormField(BaseModel):
+    id: str
+    key: str
+    label: str
+    type: str = "text"  # text, textarea, number, email, tel, date, select, image, file
+    enabled: bool = False
+    required: bool = False
+    builtin: bool = False
+    locked: bool = False
+    placeholder: Optional[str] = None
+    options: Optional[List[str]] = None  # for select / dropdown
+
+
+class RegistrationFormConfig(BaseModel):
+    fields: List[RegistrationFormField] = []
+
+
 class EventCreate(BaseModel):
     name: str
     date: str
@@ -70,6 +89,7 @@ class EventCreate(BaseModel):
     payment_settings: Optional[PaymentSettings] = PaymentSettings()
     has_registration_limit: bool = False
     registration_limit: Optional[int] = None
+    registration_form_config: Optional[RegistrationFormConfig] = None
 
 class Event(BaseModel):
     id: str
@@ -87,6 +107,7 @@ class Event(BaseModel):
     payment_settings: Optional[PaymentSettings] = PaymentSettings()
     has_registration_limit: bool = False
     registration_limit: Optional[int] = None
+    registration_form_config: Optional[Dict[str, Any]] = None
 
 # Category Models
 class CategoryCreate(BaseModel):
@@ -215,7 +236,11 @@ class PlayerCreate(BaseModel):
     previous_team: Optional[str] = None
     cricheroes_link: Optional[str] = None
     contact_number: Optional[str] = None
+    district: Optional[str] = None
+    identity_proof_url: Optional[str] = None
     is_priority: bool = False
+    # Custom + non-column form fields (email, DOB, state, organizer-defined)
+    extra_fields: Optional[Dict[str, Any]] = None
 
 class Player(BaseModel):
     id: str
@@ -234,7 +259,10 @@ class Player(BaseModel):
     previous_team: Optional[str] = None
     cricheroes_link: Optional[str] = None
     contact_number: Optional[str] = None
+    district: Optional[str] = None
+    identity_proof_url: Optional[str] = None
     is_priority: bool = False
+    extra_fields: Optional[Dict[str, Any]] = None
 
 # Public Player Registration Model
 class PublicPlayerRegistration(BaseModel):
@@ -251,6 +279,8 @@ class PublicPlayerRegistration(BaseModel):
     identity_proof_url: Optional[str] = None
     stats: Optional[PlayerStats] = None
     payment_order_id: Optional[str] = None  # For paid registrations
+    # Custom + non-column fields (date_of_birth, state, organizer-defined fields)
+    extra_fields: Optional[Dict[str, Any]] = None
 
 # Approval Request Model
 class ApprovalRequest(BaseModel):
@@ -284,6 +314,9 @@ class AuctionState(BaseModel):
     timer_duration: int = 60
     status: AuctionStatus = AuctionStatus.NOT_STARTED
     bid_history: List[Dict[str, Any]] = []
+    # Ephemeral broadcast UI (stored in raw_firestore / firestore doc)
+    last_result: Optional[Dict[str, Any]] = None
+    spin: Optional[Dict[str, Any]] = None
 
 # Sponsor Models
 class SponsorCreate(BaseModel):

@@ -18,6 +18,7 @@ import {
   LogOut,
   MonitorPlay,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { logOut } from '@/lib/firebase';
@@ -83,6 +84,9 @@ const AppShell = ({ children, title, subtitle, hideSidebar = false }) => {
         items: [
           { to: '/admin', label: 'Dashboard', icon: Home, end: true },
           { to: '/admin/events', label: 'Auctions', icon: Calendar },
+          ...(isEventOrganizer && !isSuperAdmin
+            ? [{ to: '/admin/onboarding', label: 'Setup guide', icon: Sparkles }]
+            : []),
           { to: '/admin/settings', label: 'Bank settings', icon: Landmark },
           ...(isSuperAdmin
             ? [
@@ -106,6 +110,11 @@ const AppShell = ({ children, title, subtitle, hideSidebar = false }) => {
               to: `/admin/auction/${activeEventId}`,
               label: 'Live control',
               icon: Gavel,
+            },
+            {
+              to: `/admin/events/${activeEventId}/settings`,
+              label: 'Auction settings',
+              icon: Settings,
             },
             {
               to: `/display/${activeEventId}`,
@@ -170,7 +179,7 @@ const AppShell = ({ children, title, subtitle, hideSidebar = false }) => {
     }
 
     return sections;
-  }, [isOrganizer, isSuperAdmin, isTeamAdmin, activeEventId, userProfile?.role]);
+  }, [isOrganizer, isSuperAdmin, isEventOrganizer, isTeamAdmin, activeEventId, userProfile?.role]);
 
   const handleLogout = async () => {
     try {

@@ -91,9 +91,19 @@ export const exportRegistrationsToExcel = (registrations, players, categories, e
     // Add ID proof URL instead of embedding document
     row['ID Proof URL'] = item.identity_proof_url || '';
 
+    // Custom / extra form fields (date of birth, state, organizer-defined, etc.)
+    if (item.extra_fields && typeof item.extra_fields === 'object') {
+      Object.entries(item.extra_fields).forEach(([key, val]) => {
+        const col = key
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+        row[col] = val == null ? '' : String(val);
+      });
+    }
+
     // Add registration date if available
-    if (item.created_at) {
-      row['Registration Date'] = formatDate(item.created_at);
+    if (item.created_at || item.registered_at) {
+      row['Registration Date'] = formatDate(item.created_at || item.registered_at);
     }
 
     return row;
@@ -183,8 +193,17 @@ export const exportAllToExcel = (registrations, players, categories, event) => {
     row['Photo URL'] = item.photo_url || '';
     row['ID Proof URL'] = item.identity_proof_url || '';
 
-    if (item.created_at) {
-      row['Registration Date'] = formatDate(item.created_at);
+    if (item.extra_fields && typeof item.extra_fields === 'object') {
+      Object.entries(item.extra_fields).forEach(([key, val]) => {
+        const col = key
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+        row[col] = val == null ? '' : String(val);
+      });
+    }
+
+    if (item.created_at || item.registered_at) {
+      row['Registration Date'] = formatDate(item.created_at || item.registered_at);
     }
 
     return row;

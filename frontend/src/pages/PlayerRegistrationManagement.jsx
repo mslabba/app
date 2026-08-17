@@ -568,11 +568,26 @@ const PlayerRegistrationManagement = () => {
                           />
                         )}
 
-                        <div className="text-sm text-gray-700 mb-3">
+                        <div className="text-sm text-gray-700 mb-3 space-y-0.5">
                           {registration.email && <div>📧 {registration.email}</div>}
                           {registration.contact_number && <div>📱 {registration.contact_number}</div>}
                           {registration.district && <div>📍 {registration.district}</div>}
                           {registration.previous_team && <div>🏆 {registration.previous_team}</div>}
+                          {registration.extra_fields &&
+                            Object.entries(registration.extra_fields)
+                              .slice(0, 4)
+                              .map(([key, val]) => (
+                                <div key={key} className="truncate text-gray-600">
+                                  <span className="capitalize">{key.replace(/_/g, ' ')}</span>
+                                  : {String(val ?? '')}
+                                </div>
+                              ))}
+                          {registration.extra_fields &&
+                            Object.keys(registration.extra_fields).length > 4 && (
+                              <div className="text-xs text-gray-500">
+                                +{Object.keys(registration.extra_fields).length - 4} more fields
+                              </div>
+                            )}
                         </div>
 
                         <div className="flex space-x-2">
@@ -667,11 +682,20 @@ const PlayerRegistrationManagement = () => {
                           />
                         )}
 
-                        <div className="text-sm text-white/90 mb-3">
+                        <div className="mb-3 space-y-0.5 text-sm text-white/90">
                           {registration.email && <div>📧 {registration.email}</div>}
                           {registration.contact_number && <div>📱 {registration.contact_number}</div>}
                           {registration.district && <div>📍 {registration.district}</div>}
                           {registration.previous_team && <div>🏆 {registration.previous_team}</div>}
+                          {registration.extra_fields &&
+                            Object.entries(registration.extra_fields)
+                              .slice(0, 4)
+                              .map(([key, val]) => (
+                                <div key={key} className="truncate text-white/70">
+                                  <span className="capitalize">{key.replace(/_/g, ' ')}</span>
+                                  : {String(val ?? '')}
+                                </div>
+                              ))}
                         </div>
 
                         <Button
@@ -1179,6 +1203,33 @@ const PlayerRegistrationManagement = () => {
                         </a>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {viewingRegistration.extra_fields &&
+                  Object.keys(viewingRegistration.extra_fields).length > 0 && (
+                  <div>
+                    <Label className="font-semibold">Additional fields</Label>
+                    <div className="mt-2 space-y-1 text-sm text-gray-700">
+                      {Object.entries(viewingRegistration.extra_fields).map(([key, val]) => (
+                        <p key={key}>
+                          <span className="font-medium capitalize">{key.replace(/_/g, ' ')}:</span>{' '}
+                          {typeof val === 'string' &&
+                          (val.startsWith('http://') || val.startsWith('https://')) ? (
+                            <a
+                              href={val}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              View
+                            </a>
+                          ) : (
+                            String(val ?? '')
+                          )}
+                        </p>
+                      ))}
+                    </div>
                   </div>
                 )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import AppShell from '@/components/AppShell';
@@ -15,8 +15,19 @@ import { Plus, Users, Edit, Trash2, User, Unlock, RotateCcw, Search, Filter, Dow
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
+import DocumentUpload from '@/components/DocumentUpload';
 import { convertGoogleDriveUrl } from '@/utils/imageUtils';
 import jsPDF from 'jspdf';
+import {
+  buildAdminPlayerPayload,
+  enabledFields,
+  emptyAdminPlayerFormValues,
+  playerToAdminFormValues,
+  resolveRegistrationFormConfig,
+  validateRegistrationValues,
+  COLUMN_KEYS,
+  STATS_KEYS,
+} from '@/lib/registrationFormConfig';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -27,31 +38,21 @@ const PlayerManagement = () => {
   const [categories, setCategories] = useState([]);
   const [teams, setTeams] = useState([]);
   const [event, setEvent] = useState(null);
+  const [formConfig, setFormConfig] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
-  const [formData, setFormData] = useState({
-    name: '',
-    category_id: '',
-    base_price: '',
-    age: '',
-    position: '',
-    specialty: '',
-    previous_team: '',
-    photo_url: '',
-    cricheroes_link: '',
-    contact_number: '',
-    stats: {
-      matches: '',
-      runs: '',
-      wickets: '',
-      goals: '',
-      assists: ''
-    }
-  });
+  const [formData, setFormData] = useState(() =>
+    emptyAdminPlayerFormValues(resolveRegistrationFormConfig(null))
+  );
+
+  const activeFormFields = useMemo(
+    () => enabledFields(formConfig || resolveRegistrationFormConfig(event)),
+    [formConfig, event]
+  );
 
   useEffect(() => {
     fetchEvent();
@@ -64,6 +65,17 @@ const PlayerManagement = () => {
     try {
       const response = await axios.get(`${API}/auctions/${eventId}`);
       setEvent(response.data);
+      const cfg = resolveRegistrationFormConfig(response.data);
+      setFormConfig(cfg);
+      setFormData((prev) => {
+        // Keep auction fields if dialog open; else reset shape to config
+        if (editingPlayer) return prev;
+        return {
+          ...emptyAdminPlayerFormValues(cfg),
+          category_id: prev.category_id || '',
+          base_price: prev.base_price || '',
+        };
+      });
     } catch (error) {
       console.error('Error fetching event:', error);
       toast.error('Failed to fetch event details');
@@ -102,21 +114,26 @@ const PlayerManagement = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.category_id) {
+      toast.error('Please select a category');
+      return;
+    }
+    if (!formData.base_price || parseInt(formData.base_price, 10) <= 0) {
+      toast.error('Please enter a valid base price');
+      return;
+    }
+
+    const cfg = formConfig || resolveRegistrationFormConfig(event);
+    const validationError = validateRegistrationValues(formData, cfg);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const playerData = {
-        ...formData,
-        base_price: parseInt(formData.base_price),
-        age: formData.age ? parseInt(formData.age) : null,
-        stats: {
-          matches: formData.stats.matches ? parseInt(formData.stats.matches) : null,
-          runs: formData.stats.runs ? parseInt(formData.stats.runs) : null,
-          wickets: formData.stats.wickets ? parseInt(formData.stats.wickets) : null,
-          goals: formData.stats.goals ? parseInt(formData.stats.goals) : null,
-          assists: formData.stats.assists ? parseInt(formData.stats.assists) : null,
-        }
-      };
+      const playerData = buildAdminPlayerPayload(formData, cfg);
 
       if (editingPlayer) {
         await axios.put(`${API}/players/${editingPlayer.id}`, playerData, {
@@ -142,25 +159,8 @@ const PlayerManagement = () => {
 
   const handleEdit = (player) => {
     setEditingPlayer(player);
-    setFormData({
-      name: player.name,
-      category_id: player.category_id,
-      base_price: player.base_price.toString(),
-      age: player.age?.toString() || '',
-      position: player.position || '',
-      specialty: player.specialty || '',
-      previous_team: player.previous_team || '',
-      photo_url: player.photo_url || '',
-      cricheroes_link: player.cricheroes_link || '',
-      contact_number: player.contact_number || '',
-      stats: {
-        matches: player.stats?.matches?.toString() || '',
-        runs: player.stats?.runs?.toString() || '',
-        wickets: player.stats?.wickets?.toString() || '',
-        goals: player.stats?.goals?.toString() || '',
-        assists: player.stats?.assists?.toString() || ''
-      }
-    });
+    const cfg = formConfig || resolveRegistrationFormConfig(event);
+    setFormData(playerToAdminFormValues(player, cfg));
     setIsDialogOpen(true);
   };
 
@@ -210,51 +210,144 @@ const PlayerManagement = () => {
 
   const resetForm = () => {
     setEditingPlayer(null);
-    setFormData({
-      name: '',
-      category_id: '',
-      base_price: '',
-      age: '',
-      position: '',
-      specialty: '',
-      previous_team: '',
-      photo_url: '',
-      cricheroes_link: '',
-      contact_number: '',
-      stats: {
-        matches: '',
-        runs: '',
-        wickets: '',
-        goals: '',
-        assists: ''
-      }
-    });
+    const cfg = formConfig || resolveRegistrationFormConfig(event);
+    setFormData(emptyAdminPlayerFormValues(cfg));
   };
 
   const handleChange = (field, value) => {
-    if (field.startsWith('stats.')) {
-      const statField = field.split('.')[1];
-      setFormData(prev => ({
+    if (field === 'category_id') {
+      const selectedCat = categories.find((c) => c.id === value);
+      const basePrice = selectedCat ? selectedCat.base_price : '';
+      setFormData((prev) => ({
         ...prev,
-        stats: { ...prev.stats, [statField]: value }
+        category_id: value,
+        base_price: basePrice !== '' && basePrice != null ? String(basePrice) : prev.base_price,
       }));
-    } else if (field === 'category_id') {
-      // Auto-fill base price when category changes
-      const selectedCategory = categories.find(c => c.id === value);
-      const basePrice = selectedCategory ? selectedCategory.base_price : '';
-
-      setFormData(prev => ({
-        ...prev,
-        [field]: value,
-        base_price: basePrice.toString()
-      }));
-
-      if (selectedCategory) {
-        toast.info(`Base price auto-filled to ₹${basePrice.toLocaleString()} (category base price)`);
+      if (selectedCat) {
+        toast.info(
+          `Base price auto-filled to ₹${Number(basePrice).toLocaleString()} (category base price)`
+        );
       }
-    } else {
-      setFormData(prev => ({ ...prev, [field]: value }));
+      return;
     }
+
+    if (STATS_KEYS.has(field) || field.startsWith('stats.')) {
+      const statField = field.startsWith('stats.') ? field.split('.')[1] : field;
+      setFormData((prev) => ({
+        ...prev,
+        stats: { ...(prev.stats || {}), [statField]: value },
+      }));
+      return;
+    }
+
+    if (COLUMN_KEYS.has(field) || field === 'base_price' || field === 'category_id' || field === 'is_priority') {
+      setFormData((prev) => ({ ...prev, [field]: value }));
+      return;
+    }
+
+    // Custom / extra fields
+    setFormData((prev) => ({
+      ...prev,
+      extra_fields: { ...(prev.extra_fields || {}), [field]: value },
+    }));
+  };
+
+  const getFieldValue = (fieldKey) => {
+    if (STATS_KEYS.has(fieldKey)) return formData.stats?.[fieldKey] ?? '';
+    if (COLUMN_KEYS.has(fieldKey) || fieldKey === 'base_price' || fieldKey === 'category_id') {
+      return formData[fieldKey] ?? '';
+    }
+    return formData.extra_fields?.[fieldKey] ?? formData[fieldKey] ?? '';
+  };
+
+  const renderConfiguredField = (field) => {
+    const label = `${field.label}${field.required ? ' *' : ''}`;
+    const value = getFieldValue(field.key);
+
+    if (field.type === 'image') {
+      return (
+        <div key={field.id} className="col-span-2">
+          <ImageUpload
+            label={label}
+            value={value}
+            onChange={(url) => handleChange(field.key, url)}
+            placeholder={field.placeholder || 'Upload image or enter URL'}
+            sampleType={{ type: 'players', subtype: 'photos' }}
+          />
+        </div>
+      );
+    }
+    if (field.type === 'file') {
+      return (
+        <div key={field.id} className="col-span-2">
+          <DocumentUpload
+            label={label}
+            value={value}
+            onChange={(url) => handleChange(field.key, url)}
+            placeholder={field.placeholder || 'Upload file or enter URL'}
+            accept="image/*,application/pdf"
+            maxSize={10 * 1024 * 1024}
+          />
+        </div>
+      );
+    }
+    if (field.type === 'textarea') {
+      return (
+        <div key={field.id} className="col-span-2">
+          <Label>{label}</Label>
+          <Textarea
+            value={value}
+            onChange={(e) => handleChange(field.key, e.target.value)}
+            placeholder={field.placeholder || ''}
+            required={!!field.required}
+            rows={3}
+          />
+        </div>
+      );
+    }
+    if (field.type === 'select') {
+      return (
+        <div key={field.id}>
+          <Label>{label}</Label>
+          <Select value={value || undefined} onValueChange={(v) => handleChange(field.key, v)}>
+            <SelectTrigger>
+              <SelectValue placeholder={field.placeholder || 'Select…'} />
+            </SelectTrigger>
+            <SelectContent>
+              {(field.options || []).map((opt) => (
+                <SelectItem key={opt} value={opt}>
+                  {opt}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      );
+    }
+
+    const inputType =
+      field.type === 'number'
+        ? 'number'
+        : field.type === 'email'
+          ? 'email'
+          : field.type === 'tel'
+            ? 'tel'
+            : field.type === 'date'
+              ? 'date'
+              : 'text';
+
+    return (
+      <div key={field.id}>
+        <Label>{label}</Label>
+        <Input
+          type={inputType}
+          value={value}
+          onChange={(e) => handleChange(field.key, e.target.value)}
+          placeholder={field.placeholder || ''}
+          required={!!field.required}
+        />
+      </div>
+    );
   };
 
   const getCategoryName = (categoryId) => {
@@ -589,7 +682,10 @@ const PlayerManagement = () => {
               <DialogTrigger asChild>
                 <Button
                   className="bg-red-600 text-white hover:bg-red-700"
-                  onClick={() => setIsDialogOpen(true)}
+                  onClick={() => {
+                    resetForm();
+                    setIsDialogOpen(true);
+                  }}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add player
@@ -602,19 +698,18 @@ const PlayerManagement = () => {
                   </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Fields match this auction’s registration form settings. Category and base price are always required for the auction pool.
+                  </p>
+
+                  {/* Auction-only fields */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="name">Player Name *</Label>
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => handleChange('name', e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div>
                       <Label htmlFor="category">Category *</Label>
-                      <Select value={formData.category_id} onValueChange={(value) => handleChange('category_id', value)}>
+                      <Select
+                        value={formData.category_id || undefined}
+                        onValueChange={(value) => handleChange('category_id', value)}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select category" />
                         </SelectTrigger>
@@ -627,11 +722,8 @@ const PlayerManagement = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <Label htmlFor="base_price">Base Price (₹) *</Label>
+                      <Label htmlFor="base_price">Base price (₹) *</Label>
                       <Input
                         id="base_price"
                         type="number"
@@ -640,118 +732,32 @@ const PlayerManagement = () => {
                         required
                       />
                       {formData.category_id && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Category base price: {getCategoryBasePrice(formData.category_id)}
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Category base: {getCategoryBasePrice(formData.category_id)}
                         </p>
                       )}
                     </div>
-                    <div>
-                      <Label htmlFor="age">Age</Label>
-                      <Input
-                        id="age"
-                        type="number"
-                        value={formData.age}
-                        onChange={(e) => handleChange('age', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="position">Position</Label>
-                      <Input
-                        id="position"
-                        value={formData.position}
-                        onChange={(e) => handleChange('position', e.target.value)}
-                        placeholder="e.g., Batsman, Forward"
-                      />
-                    </div>
                   </div>
 
+                  {/* Configured registration fields */}
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="specialty">Specialty</Label>
-                      <Input
-                        id="specialty"
-                        value={formData.specialty}
-                        onChange={(e) => handleChange('specialty', e.target.value)}
-                        placeholder="e.g., Right-hand bat, Left-foot"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="previous_team">Previous Team</Label>
-                      <Input
-                        id="previous_team"
-                        value={formData.previous_team}
-                        onChange={(e) => handleChange('previous_team', e.target.value)}
-                      />
-                    </div>
+                    {activeFormFields.map((field) => renderConfiguredField(field))}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="cricheroes_link">CricHeroes Profile Link</Label>
-                      <Input
-                        id="cricheroes_link"
-                        value={formData.cricheroes_link}
-                        onChange={(e) => handleChange('cricheroes_link', e.target.value)}
-                        placeholder="https://cricheroes.com/profile/..."
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="contact_number">Mobile Number</Label>
-                      <Input
-                        id="contact_number"
-                        value={formData.contact_number}
-                        onChange={(e) => handleChange('contact_number', e.target.value)}
-                        placeholder="e.g., +91 98765 43210"
-                      />
-                    </div>
-                  </div>
-
-                  <ImageUpload
-                    label="Player Photo"
-                    value={formData.photo_url}
-                    onChange={(url) => handleChange('photo_url', url)}
-                    placeholder="Upload player photo or enter URL"
-                    sampleType={{ type: 'players', subtype: 'photos' }}
-                  />
-
-                  <div>
-                    <Label>Player Statistics</Label>
-                    <div className="grid grid-cols-3 gap-4 mt-2">
-                      <div>
-                        <Label htmlFor="matches">Matches</Label>
-                        <Input
-                          id="matches"
-                          type="number"
-                          value={formData.stats.matches}
-                          onChange={(e) => handleChange('stats.matches', e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="runs">Runs/Goals</Label>
-                        <Input
-                          id="runs"
-                          type="number"
-                          value={formData.stats.runs || formData.stats.goals}
-                          onChange={(e) => handleChange('stats.runs', e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="wickets">Wickets/Assists</Label>
-                        <Input
-                          id="wickets"
-                          type="number"
-                          value={formData.stats.wickets || formData.stats.assists}
-                          onChange={(e) => handleChange('stats.wickets', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  {activeFormFields.length === 0 && (
+                    <p className="text-sm text-amber-700">
+                      No registration fields enabled. Configure them under Auction settings → Registration form.
+                    </p>
+                  )}
 
                   <div className="flex justify-end space-x-2 pt-4">
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setIsDialogOpen(false)}
+                      onClick={() => {
+                        setIsDialogOpen(false);
+                        resetForm();
+                      }}
                     >
                       Cancel
                     </Button>
@@ -812,6 +818,7 @@ const PlayerManagement = () => {
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="available">Available</SelectItem>
                     <SelectItem value="current">Current</SelectItem>
+                    <SelectItem value="on_hold">On Hold</SelectItem>
                     <SelectItem value="sold">Sold</SelectItem>
                     <SelectItem value="unsold">Unsold</SelectItem>
                   </SelectContent>
@@ -855,6 +862,10 @@ const PlayerManagement = () => {
                 <div className="flex items-center">
                   <span className="w-2 h-2 rounded-full bg-yellow-400 mr-1"></span>
                   Current: {filteredPlayers.filter(p => p.status === 'current').length}
+                </div>
+                <div className="flex items-center">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 mr-1"></span>
+                  On hold: {filteredPlayers.filter(p => p.status === 'on_hold').length}
                 </div>
                 <div className="flex items-center">
                   <span className="w-2 h-2 rounded-full bg-blue-400 mr-1"></span>
@@ -964,12 +975,15 @@ const PlayerManagement = () => {
 
                         {/* Player Status */}
                         <div className="flex items-center">
-                          <span className={`w-2 h-2 rounded-full mr-2 ${player.status === 'available' ? 'bg-green-400' :
+                          <span className={`w-2 h-2 rounded-full mr-2 ${
+                            player.status === 'available' ? 'bg-green-400' :
                             player.status === 'sold' ? 'bg-blue-400' :
-                              player.status === 'current' ? 'bg-yellow-400' :
-                                'bg-gray-400'
-                            }`}></span>
-                          {player.status?.replace('_', ' ').toUpperCase()}
+                            player.status === 'current' ? 'bg-yellow-400' :
+                            player.status === 'on_hold' ? 'bg-amber-400' :
+                            player.status === 'unsold' ? 'bg-red-400' :
+                            'bg-gray-400'
+                          }`}></span>
+                          {player.status?.replace(/_/g, ' ').toUpperCase()}
                         </div>
 
                         {/* Current Player Information */}
@@ -984,6 +998,28 @@ const PlayerManagement = () => {
                                 className="bg-green-500/20 border-green-400/40 text-green-300 hover:bg-green-500/30"
                                 onClick={() => handleMakeAvailable(player)}
                                 title="Make player available for future bidding"
+                              >
+                                <RotateCcw className="w-3 h-3 mr-1" />
+                                Make Available
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* On Hold — skipped without sale */}
+                        {player.status === 'on_hold' && (
+                          <div className="mt-3 p-3 bg-amber-500/20 border border-amber-400/30 rounded-lg">
+                            <div className="font-semibold text-amber-200 mb-2">On Hold</div>
+                            <div className="text-white/75 text-xs">
+                              Skipped from the block without sale. Can be put back on the block from auction control.
+                            </div>
+                            <div className="mt-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="bg-green-500/20 border-green-400/40 text-green-300 hover:bg-green-500/30"
+                                onClick={() => handleMakeAvailable(player)}
+                                title="Mark as available"
                               >
                                 <RotateCcw className="w-3 h-3 mr-1" />
                                 Make Available

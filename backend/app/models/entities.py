@@ -65,6 +65,7 @@ class Event(Base):
     organizer_mobile: Mapped[Optional[str]] = mapped_column(String(64))
     has_registration_limit: Mapped[bool] = mapped_column(Boolean, default=False)
     registration_limit: Mapped[Optional[int]] = mapped_column(Integer)
+    registration_form_config: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
     categories: Mapped[list["Category"]] = relationship(back_populates="event")
@@ -148,6 +149,7 @@ class Player(Base):
     district: Mapped[Optional[str]] = mapped_column(String(128))
     identity_proof_url: Mapped[Optional[str]] = mapped_column(Text)
     is_priority: Mapped[bool] = mapped_column(Boolean, default=False)
+    extra_fields: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
     category: Mapped["Category"] = relationship(back_populates="players")
@@ -176,6 +178,7 @@ class PlayerRegistration(Base):
     district: Mapped[Optional[str]] = mapped_column(String(128))
     identity_proof_url: Mapped[Optional[str]] = mapped_column(Text)
     stats: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
+    extra_fields: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
 
@@ -250,6 +253,25 @@ class PublicTeamToken(Base):
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[Optional[str]] = mapped_column(String(128))
     raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+
+class PublicEventBroadcastToken(Base):
+    """Event-scoped token for public live auction OBS/vMix boards (no login)."""
+
+    __tablename__ = "public_event_broadcast_tokens"
+    __table_args__ = (
+        UniqueConstraint("token", name="uq_public_event_broadcast_tokens_token"),
+        Index("ix_public_event_broadcast_tokens_event_id", "event_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    token: Mapped[str] = mapped_column(String(512), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(64), ForeignKey("events.id"), nullable=False)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[Optional[str]] = mapped_column(String(128))
+    label: Mapped[Optional[str]] = mapped_column(String(255))
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class PaymentOrder(Base):

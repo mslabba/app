@@ -279,12 +279,16 @@ const SponsorManagement = () => {
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold">Logo</h3>
                   <ImageUpload
-                    label="Upload Sponsor Logo"
+                    label="Upload sponsor logo"
                     value={formData.logo_url}
                     onChange={(url) => handleChange('logo_url', url)}
-                    placeholder="Upload logo or enter URL"
+                    placeholder="Upload logo or enter URL (any aspect ratio)"
                     sampleType={{ type: 'sponsors', subtype: 'logos' }}
+                    objectFit="contain"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Rectangular logos are supported — full logo is shown without square crop.
+                  </p>
                 </div>
 
                 {/* Contact Information */}
@@ -372,14 +376,16 @@ const SponsorManagement = () => {
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center space-x-3">
                     {sponsor.logo_url ? (
-                      <img
-                        src={sponsor.logo_url}
-                        alt={sponsor.name}
-                        className="w-12 h-12 rounded-lg object-cover"
-                      />
+                      <div className="flex h-14 w-20 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white p-1">
+                        <img
+                          src={sponsor.logo_url}
+                          alt={sponsor.name}
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      </div>
                     ) : (
-                      <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
-                        <Building2 className="w-6 h-6 text-gray-500" />
+                      <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-gray-200">
+                        <Building2 className="h-6 w-6 text-gray-500" />
                       </div>
                     )}
                     <div>

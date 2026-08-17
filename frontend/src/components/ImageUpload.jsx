@@ -15,9 +15,16 @@ const ImageUpload = ({
   accept = "image/*",
   maxSize = 5 * 1024 * 1024, // 5MB default
   className = "",
+  labelClassName = "",
+  /** dark = readable on glass/dark admin surfaces */
+  variant = "default",
+  /** Preview fit: cover (crop) or contain (full logo, good for rectangular) */
+  objectFit = "cover",
   sampleType = null, // e.g., { type: 'events', subtype: 'logos' }
   showSample = true
 }) => {
+  const isDark = variant === 'dark';
+  const fitClass = objectFit === 'contain' ? 'object-contain' : 'object-cover';
   const [preview, setPreview] = useState(value || '');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
@@ -101,18 +108,24 @@ const ImageUpload = ({
 
   return (
     <div className={`space-y-3 ${className}`}>
-      <Label>{label}</Label>
+      <Label className={labelClassName || (isDark ? 'text-white/85' : undefined)}>
+        {label}
+      </Label>
 
       {/* URL Input */}
       <div className="flex space-x-2">
         <div className="flex-1 relative">
-          <Link className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+          <Link className={`absolute left-3 top-3 w-4 h-4 ${isDark ? 'text-white/40' : 'text-gray-400'}`} />
           <Input
             type="url"
             value={value || ''}
             onChange={(e) => handleUrlChange(e.target.value)}
             placeholder={placeholder}
-            className="pl-10"
+            className={
+              isDark
+                ? 'border-white/20 bg-white/5 pl-10 text-white placeholder:text-white/35'
+                : 'pl-10'
+            }
           />
         </div>
         <Button
@@ -120,11 +133,15 @@ const ImageUpload = ({
           variant="outline"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          className="px-3"
+          className={
+            isDark
+              ? 'border-white/20 bg-white/5 px-3 text-white hover:bg-white/10'
+              : 'px-3'
+          }
           title="Upload to Cloudinary"
         >
           {uploading ? (
-            <div className="w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
+            <div className={`w-4 h-4 animate-spin rounded-full border-2 ${isDark ? 'border-white/20 border-t-white' : 'border-gray-300 border-t-blue-600'}`}></div>
           ) : (
             <Cloud className="w-4 h-4" />
           )}
@@ -134,7 +151,11 @@ const ImageUpload = ({
             type="button"
             variant="outline"
             onClick={useSampleImage}
-            className="px-3"
+            className={
+              isDark
+                ? 'border-white/20 bg-white/5 px-3 text-white hover:bg-white/10'
+                : 'px-3'
+            }
             title="Use sample image"
           >
             <Shuffle className="w-4 h-4" />
@@ -154,20 +175,30 @@ const ImageUpload = ({
       {/* Image Preview */}
       {preview && (
         <div className="relative inline-block">
-          <div className="relative w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg overflow-hidden bg-gray-50">
+          <div
+            className={
+              isDark
+                ? `relative overflow-hidden rounded-lg border-2 border-dashed border-white/20 bg-white/5 ${
+                    objectFit === 'contain' ? 'h-28 w-48' : 'h-32 w-32'
+                  }`
+                : `relative overflow-hidden rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 ${
+                    objectFit === 'contain' ? 'h-28 w-48' : 'h-32 w-32'
+                  }`
+            }
+          >
             {preview.startsWith('data:') || preview.startsWith('http') ? (
               <img
                 src={preview}
                 alt="Preview"
-                className="w-full h-full object-cover"
+                className={`h-full w-full ${fitClass}`}
                 onError={() => {
                   setPreview('');
                   toast.error('Failed to load image');
                 }}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <ImageIcon className="w-8 h-8 text-gray-400" />
+              <div className="flex h-full w-full items-center justify-center">
+                <ImageIcon className={`h-8 w-8 ${isDark ? 'text-white/40' : 'text-gray-400'}`} />
               </div>
             )}
           </div>
@@ -176,16 +207,20 @@ const ImageUpload = ({
             variant="outline"
             size="sm"
             onClick={clearImage}
-            className="absolute -top-2 -right-2 w-6 h-6 p-0 rounded-full bg-red-500 hover:bg-red-600 text-white border-red-500"
+            className="absolute -right-2 -top-2 h-6 w-6 rounded-full border-red-500 bg-red-500 p-0 text-white hover:bg-red-600"
           >
-            <X className="w-3 h-3" />
+            <X className="h-3 w-3" />
           </Button>
         </div>
       )}
 
       {uploading && (
-        <div className="flex items-center space-x-2 text-sm text-blue-600">
-          <div className="w-4 h-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600"></div>
+        <div className={`flex items-center space-x-2 text-sm ${isDark ? 'text-red-200' : 'text-blue-600'}`}>
+          <div
+            className={`h-4 w-4 animate-spin rounded-full border-2 ${
+              isDark ? 'border-white/20 border-t-white' : 'border-blue-200 border-t-blue-600'
+            }`}
+          />
           <span>Uploading to Cloudinary...</span>
         </div>
       )}

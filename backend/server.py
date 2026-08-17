@@ -646,8 +646,16 @@ async def create_auction(event_data: EventCreate, current_user: dict = Depends(r
             'organizer_mobile': organizer_mobile,
             'payment_settings': event_data.payment_settings.model_dump() if event_data.payment_settings else {'collect_payment': False, 'registration_fee': None},
             'has_registration_limit': event_data.has_registration_limit,
-            'registration_limit': event_data.registration_limit
+            'registration_limit': event_data.registration_limit,
+            'registration_form_config': (
+                event_data.registration_form_config.model_dump()
+                if event_data.registration_form_config
+                else None
+            ),
         }
+        if not event_doc.get('registration_form_config'):
+            from app.registration_form import default_registration_form_config
+            event_doc['registration_form_config'] = default_registration_form_config()
 
         if _USE_POSTGRES and _pg:
             created = _pg.create_event(event_doc)
@@ -746,8 +754,10 @@ async def update_auction(event_id: str, event_data: EventCreate, current_user: d
             'banner_url': event_data.banner_url,
             'payment_settings': event_data.payment_settings.model_dump() if event_data.payment_settings else {'collect_payment': False, 'registration_fee': None},
             'has_registration_limit': event_data.has_registration_limit,
-            'registration_limit': event_data.registration_limit
+            'registration_limit': event_data.registration_limit,
         }
+        if event_data.registration_form_config is not None:
+            fields['registration_form_config'] = event_data.registration_form_config.model_dump()
 
         if _USE_POSTGRES and _pg:
             _pg.update_event(event_id, fields)
@@ -1670,6 +1680,274 @@ async def get_public_auction_state(team_id: str, token: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+# ============= PUBLIC LIVE BROADCAST (OBS / vMix) =============
+
+def _resolve_broadcast_event_id(token: str) -> str:
+    """Strict event broadcast token → event_id. No demo heuristics."""
+    if not token or len(token) < 16:
+        raise HTTPException(status_code=403, detail="Invalid or expired broadcast token")
+
+    if _USE_POSTGRES and _pg:
+        event_id = _pg.resolve_event_broadcast_token(token)
+        if not event_id:
+            raise HTTPException(status_code=403, detail="Invalid or expired broadcast token")
+        return event_id
+
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    docs = list(
+        db.collection('public_event_broadcast_tokens')
+        .where('token', '==', token)
+        .where('revoked', '==', False)
+        .limit(5)
+        .stream()
+    )
+    now = datetime.now(timezone.utc)
+    for doc in docs:
+        data = doc.to_dict() or {}
+        exp = data.get('expires_at')
+        if exp is not None:
+            if hasattr(exp, 'tzinfo') and exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            try:
+                if exp < now:
+                    continue
+            except TypeError:
+                # Firestore may store as string
+                try:
+                    from dateutil import parser as _dp
+                    if _dp.isoparse(str(exp)) < now:
+                        continue
+                except Exception:
+                    pass
+        eid = data.get('event_id')
+        if eid:
+            return eid
+    raise HTTPException(status_code=403, detail="Invalid or expired broadcast token")
+
+
+def _public_sponsors_for_event(event_id: str) -> list:
+    if _USE_POSTGRES and _pg:
+        return _pg.list_sponsors(event_id)
+    if not db:
+        return []
+    return [s.to_dict() for s in db.collection('sponsors').where('event_id', '==', event_id).stream()]
+
+
+@api_router.post("/events/{event_id}/generate-broadcast-link")
+async def generate_event_broadcast_link(
+    event_id: str,
+    current_user: dict = Depends(require_event_organizer),
+):
+    """Create an event-scoped public token for OBS/vMix live boards (organizer only)."""
+    try:
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only generate broadcast links for events you created",
+            )
+
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=90)
+        frontend = os.getenv('FRONTEND_URL', 'http://localhost:3000').rstrip('/')
+        player_url = f"{frontend}/live/{token}/player"
+        teams_url = f"{frontend}/live/{token}/teams"
+
+        if _USE_POSTGRES and _pg:
+            if not _pg.get_event(event_id):
+                raise HTTPException(status_code=404, detail="Event not found")
+            _pg.create_event_broadcast_token({
+                'token': token,
+                'event_id': event_id,
+                'expires_at': expires_at,
+                'created_by': current_user['uid'],
+                'label': 'live-broadcast',
+            })
+        else:
+            if not db:
+                raise HTTPException(status_code=503, detail="Database not available")
+            event_doc = db.collection('events').document(event_id).get()
+            if not event_doc.exists:
+                raise HTTPException(status_code=404, detail="Event not found")
+            db.collection('public_event_broadcast_tokens').document(str(uuid.uuid4())).set({
+                'token': token,
+                'event_id': event_id,
+                'expires_at': expires_at,
+                'created_at': datetime.now(timezone.utc),
+                'created_by': current_user['uid'],
+                'label': 'live-broadcast',
+                'revoked': False,
+            })
+
+        return {
+            'success': True,
+            'token': token,
+            'expires_at': expires_at.isoformat(),
+            'player_url': player_url,
+            'teams_url': teams_url,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"generate_event_broadcast_link: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@api_router.get("/public/live/{token}/player")
+async def public_live_player_board(token: str):
+    """Public read-only player card payload for broadcast (no auth)."""
+    try:
+        from app.public_live import public_player_payload
+
+        event_id = _resolve_broadcast_event_id(token)
+
+        if _USE_POSTGRES and _pg:
+            event = _pg.get_event(event_id)
+            if not event:
+                raise HTTPException(status_code=404, detail="Event not found")
+            auction = _pg.get_auction_state(event_id)
+            player = None
+            category = None
+            sold_team = None
+            if auction and auction.get('current_player_id'):
+                player = _pg.get_player(auction['current_player_id'])
+            # Also surface just-sold player briefly if state cleared but last sold useful — stick to current only
+            if player and player.get('category_id'):
+                category = _pg.get_category(player['category_id'])
+            if player and player.get('sold_to_team_id'):
+                sold_team = _pg.get_team(player['sold_to_team_id'])
+            sponsors = _public_sponsors_for_event(event_id)
+            return public_player_payload(
+                event=event,
+                auction=auction,
+                player=player,
+                category=category,
+                sold_team=sold_team,
+                sponsors=sponsors,
+            )
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+
+        event_doc = db.collection('events').document(event_id).get()
+        if not event_doc.exists:
+            raise HTTPException(status_code=404, detail="Event not found")
+        event = {**event_doc.to_dict(), 'id': event_id}
+
+        state_id = f"auction_{event_id}"
+        state_doc = db.collection('auction_state').document(state_id).get()
+        auction = state_doc.to_dict() if state_doc.exists else None
+        if auction:
+            auction['id'] = state_id
+
+        player = None
+        category = None
+        sold_team = None
+        if auction and auction.get('current_player_id'):
+            pdoc = db.collection('players').document(auction['current_player_id']).get()
+            if pdoc.exists:
+                player = {**pdoc.to_dict(), 'id': pdoc.id}
+                if player.get('category_id'):
+                    cdoc = db.collection('categories').document(player['category_id']).get()
+                    if cdoc.exists:
+                        category = {**cdoc.to_dict(), 'id': cdoc.id}
+                if player.get('sold_to_team_id'):
+                    tdoc = db.collection('teams').document(player['sold_to_team_id']).get()
+                    if tdoc.exists:
+                        sold_team = {**tdoc.to_dict(), 'id': tdoc.id}
+
+        sponsors = _public_sponsors_for_event(event_id)
+        return public_player_payload(
+            event=event,
+            auction=auction,
+            player=player,
+            category=category,
+            sold_team=sold_team,
+            sponsors=sponsors,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"public_live_player_board: {e}")
+        raise HTTPException(status_code=400, detail="Failed to load live player board")
+
+
+@api_router.get("/public/live/{token}/teams")
+async def public_live_teams_board(token: str):
+    """Public read-only multi-team scoreboard for broadcast (no auth)."""
+    try:
+        from app.public_live import public_teams_payload
+
+        event_id = _resolve_broadcast_event_id(token)
+
+        if _USE_POSTGRES and _pg:
+            event = _pg.get_event(event_id)
+            if not event:
+                raise HTTPException(status_code=404, detail="Event not found")
+            auction = _pg.get_auction_state(event_id)
+            teams = _pg.list_teams(event_id)
+            categories = _pg.list_categories(event_id)
+            # All sold players for category progress
+            sold_players = _pg.list_players_for_event(event_id, status='sold')
+            sponsors = _public_sponsors_for_event(event_id)
+            return public_teams_payload(
+                event=event,
+                auction=auction,
+                teams=teams,
+                categories=categories,
+                sold_players=sold_players,
+                sponsors=sponsors,
+            )
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+
+        event_doc = db.collection('events').document(event_id).get()
+        if not event_doc.exists:
+            raise HTTPException(status_code=404, detail="Event not found")
+        event = {**event_doc.to_dict(), 'id': event_id}
+
+        state_id = f"auction_{event_id}"
+        state_doc = db.collection('auction_state').document(state_id).get()
+        auction = state_doc.to_dict() if state_doc.exists else None
+
+        teams = []
+        for tdoc in db.collection('teams').where('event_id', '==', event_id).stream():
+            td = tdoc.to_dict()
+            td['id'] = tdoc.id
+            teams.append(td)
+
+        categories = []
+        for cdoc in db.collection('categories').where('event_id', '==', event_id).stream():
+            cd = cdoc.to_dict()
+            cd['id'] = cdoc.id
+            categories.append(cd)
+
+        sold_players = []
+        cat_ids = [c['id'] for c in categories]
+        for cid in cat_ids:
+            for pdoc in db.collection('players').where('category_id', '==', cid).where('status', '==', 'sold').stream():
+                pd = pdoc.to_dict()
+                pd['id'] = pdoc.id
+                sold_players.append(pd)
+
+        sponsors = _public_sponsors_for_event(event_id)
+        return public_teams_payload(
+            event=event,
+            auction=auction,
+            teams=teams,
+            categories=categories,
+            sold_players=sold_players,
+            sponsors=sponsors,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"public_live_teams_board: {e}")
+        raise HTTPException(status_code=400, detail="Failed to load live teams board")
+
+
 # ============= PLAYER ROUTES =============
 
 @api_router.get("/auctions/{event_id}/registration-count")
@@ -1936,6 +2214,9 @@ async def approve_player_registration(registration_id: str, approval_data: Appro
         
         # Create actual player
         player_id = str(uuid.uuid4())
+        extra = dict(reg_data.get('extra_fields') or {})
+        if reg_data.get('email') and 'email' not in extra:
+            extra['email'] = reg_data.get('email')
         player_doc = {
             'id': player_id,
             'name': reg_data['name'],
@@ -1954,7 +2235,8 @@ async def approve_player_registration(registration_id: str, approval_data: Appro
             'photo_url': reg_data.get('photo_url'),
             'current_price': None,
             'sold_to_team_id': None,
-            'sold_price': None
+            'sold_price': None,
+            'extra_fields': extra or None,
         }
         
         # Add player to players collection
@@ -2052,7 +2334,10 @@ async def create_player(player_data: PlayerCreate, current_user: dict = Depends(
                 'previous_team': player_data.previous_team,
                 'cricheroes_link': player_data.cricheroes_link,
                 'contact_number': player_data.contact_number,
-                'is_priority': player_data.is_priority
+                'district': player_data.district,
+                'identity_proof_url': player_data.identity_proof_url,
+                'is_priority': player_data.is_priority,
+                'extra_fields': player_data.extra_fields,
             }
             return Player(**_pg.create_player(player_doc))
 
@@ -2087,7 +2372,10 @@ async def create_player(player_data: PlayerCreate, current_user: dict = Depends(
             'previous_team': player_data.previous_team,
             'cricheroes_link': player_data.cricheroes_link,
             'contact_number': player_data.contact_number,
-            'is_priority': player_data.is_priority
+            'district': player_data.district,
+            'identity_proof_url': player_data.identity_proof_url,
+            'is_priority': player_data.is_priority,
+            'extra_fields': player_data.extra_fields,
         }
         
         if db:
@@ -2349,7 +2637,10 @@ async def get_auction_players(
     offset: Optional[int] = 0,
     status: Optional[str] = None
 ):
-    """Get all players for an auction with optional pagination and filtering"""
+    """Get all players for an auction with optional pagination and filtering.
+
+    status may be a single value or comma-separated list (e.g. available,on_hold).
+    """
     try:
         if _USE_POSTGRES and _pg:
             players = _pg.list_players_for_event(event_id, status=status)
@@ -2376,21 +2667,31 @@ async def get_auction_players(
         
         if not category_ids:
             return []
+
+        status_set = None
+        if status:
+            status_set = {s.strip().lower() for s in str(status).split(",") if s.strip()}
         
         # Get all players for these categories with pagination
         result = []
         total_fetched = 0
         
         for category_id in category_ids:
+            # Firestore equality filter only for single status; multi-status filtered in Python
             query = db.collection('players').where('category_id', '==', category_id)
-            
-            # Apply status filter if provided
-            if status:
-                query = query.where('status', '==', status.lower())
+            if status_set and len(status_set) == 1:
+                query = query.where('status', '==', next(iter(status_set)))
             
             players = query.stream()
             
             for player in players:
+                player_data = player.to_dict()
+                # Normalize status to lowercase for compatibility
+                if player_data.get('status'):
+                    player_data['status'] = player_data['status'].lower()
+                if status_set and player_data.get('status') not in status_set:
+                    continue
+
                 # Skip if we haven't reached offset yet
                 if total_fetched < offset:
                     total_fetched += 1
@@ -2400,13 +2701,8 @@ async def get_auction_players(
                 if limit and len(result) >= limit:
                     break
                 
-                player_data = player.to_dict()
                 if player_data.get('stats'):
                     player_data['stats'] = PlayerStats(**player_data['stats'])
-                
-                # Normalize status to lowercase for compatibility
-                if player_data.get('status'):
-                    player_data['status'] = player_data['status'].lower()
                 
                 result.append(Player(**player_data))
                 total_fetched += 1
@@ -2447,7 +2743,10 @@ async def update_player(player_id: str, player_data: PlayerCreate, current_user:
                 'previous_team': player_data.previous_team,
                 'cricheroes_link': player_data.cricheroes_link,
                 'contact_number': player_data.contact_number,
-                'is_priority': player_data.is_priority
+                'district': player_data.district,
+                'identity_proof_url': player_data.identity_proof_url,
+                'is_priority': player_data.is_priority,
+                'extra_fields': player_data.extra_fields,
             }
             player_data_updated = _pg.update_player(player_id, updated_data)
             if player_data_updated.get('stats'):
@@ -2493,7 +2792,10 @@ async def update_player(player_id: str, player_data: PlayerCreate, current_user:
             'previous_team': player_data.previous_team,
             'cricheroes_link': player_data.cricheroes_link,
             'contact_number': player_data.contact_number,
-            'is_priority': player_data.is_priority
+            'district': player_data.district,
+            'identity_proof_url': player_data.identity_proof_url,
+            'is_priority': player_data.is_priority,
+            'extra_fields': player_data.extra_fields,
         }
         
         db.collection('players').document(player_id).update(updated_data)
@@ -2653,6 +2955,92 @@ async def pause_auction(event_id: str, current_user: dict = Depends(require_even
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@api_router.post("/auction/spin/{event_id}")
+async def start_player_spin(
+    event_id: str,
+    payload: dict,
+    current_user: dict = Depends(require_event_organizer),
+):
+    """
+    Broadcast spinning-wheel selection to control + public boards.
+    Does not put the player on the block yet — call next-player after the animation.
+    Body: { winner_id: str, players: [{id, name, photo_url?, position?, base_price?}, ...] }
+    """
+    try:
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only control auctions for events you created",
+            )
+
+        winner_id = (payload or {}).get("winner_id")
+        players_in = (payload or {}).get("players") or []
+        if not winner_id:
+            raise HTTPException(status_code=400, detail="winner_id is required")
+        if not isinstance(players_in, list) or len(players_in) < 2:
+            raise HTTPException(status_code=400, detail="At least 2 players required for the wheel")
+
+        # Public-safe, capped list for canvas performance
+        clean_players = []
+        seen = set()
+        for p in players_in[:48]:
+            if not isinstance(p, dict):
+                continue
+            pid = p.get("id")
+            if not pid or pid in seen:
+                continue
+            seen.add(pid)
+            clean_players.append(
+                {
+                    "id": pid,
+                    "name": p.get("name") or "Player",
+                    "photo_url": p.get("photo_url"),
+                    "position": p.get("position"),
+                    "base_price": p.get("base_price"),
+                }
+            )
+        if winner_id not in seen:
+            raise HTTPException(status_code=400, detail="winner_id must be in players list")
+        if len(clean_players) < 2:
+            raise HTTPException(status_code=400, detail="At least 2 players required for the wheel")
+
+        spin = {
+            "winner_id": winner_id,
+            "players": clean_players,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        if _USE_POSTGRES and _pg:
+            state = _pg.set_spin_state(event_id, spin)
+            return {"message": "Spin started", "spin": state.get("spin") or spin}
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+
+        auction_state_id = f"auction_{event_id}"
+        state_ref = db.collection("auction_state").document(auction_state_id)
+        state_doc = state_ref.get()
+        if state_doc.exists:
+            state_ref.update({"spin": spin})
+        else:
+            state_ref.set(
+                {
+                    "id": auction_state_id,
+                    "event_id": event_id,
+                    "status": AuctionStatus.IN_PROGRESS.value,
+                    "timer_duration": 60,
+                    "spin": spin,
+                    "bid_history": [],
+                },
+                merge=True,
+            )
+        return {"message": "Spin started", "spin": spin}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @api_router.post("/auction/next-player/{event_id}")
 async def next_player(event_id: str, player_id: str, current_user: dict = Depends(require_event_organizer)):
     """Set next player for bidding - only event owner can control"""
@@ -2668,11 +3056,17 @@ async def next_player(event_id: str, player_id: str, current_user: dict = Depend
                 result = _pg.set_next_player(event_id, player_id)
             except ValueError as ve:
                 raise HTTPException(status_code=404 if "not found" in str(ve).lower() else 400, detail=str(ve))
+            held = result.get("held_players") or []
+            msg = f"Player {result['player_name']} set as current for bidding"
+            if held:
+                names = ", ".join(h.get("player_name") or "player" for h in held)
+                msg += f" · previous on hold: {names}"
             return {
-                "message": f"Player {result['player_name']} set as current for bidding",
+                "message": msg,
                 "player_id": result['player_id'],
                 "player_name": result['player_name'],
-                "base_price": result['base_price']
+                "base_price": result['base_price'],
+                "held_players": held,
             }
 
         if not db:
@@ -2684,15 +3078,25 @@ async def next_player(event_id: str, player_id: str, current_user: dict = Depend
             raise HTTPException(status_code=404, detail="Player not found")
         
         player_data = player_doc.to_dict()
+        if (player_data.get("status") or "").lower() == PlayerStatus.SOLD.value:
+            raise HTTPException(status_code=400, detail="Cannot put a sold player on the block")
         
-        # First, clear any existing CURRENT players for this event
+        # Previous CURRENT players (without sale) → on_hold
+        held_players = []
         current_players = db.collection('players').where('event_id', '==', event_id).where('status', '==', PlayerStatus.CURRENT.value).get()
         for current_player_doc in current_players:
+            if current_player_doc.id == player_id:
+                continue
+            pdata = current_player_doc.to_dict() or {}
             db.collection('players').document(current_player_doc.id).update({
-                'status': PlayerStatus.AVAILABLE.value
+                'status': PlayerStatus.ON_HOLD.value
+            })
+            held_players.append({
+                "player_id": current_player_doc.id,
+                "player_name": pdata.get("name"),
             })
         
-        # Update auction state
+        # Update auction state (also clear any active spin)
         auction_state_id = f"auction_{event_id}"
         db.collection('auction_state').document(auction_state_id).update({
             'current_player_id': player_id,
@@ -2700,7 +3104,8 @@ async def next_player(event_id: str, player_id: str, current_user: dict = Depend
             'current_team_id': None,
             'current_team_name': None,
             'timer_started_at': datetime.now(timezone.utc).isoformat(),
-            'bid_history': []
+            'bid_history': [],
+            'spin': None,
         })
         
         # Update player status
@@ -2708,11 +3113,16 @@ async def next_player(event_id: str, player_id: str, current_user: dict = Depend
             'status': PlayerStatus.CURRENT.value
         })
         
+        msg = f"Player {player_data['name']} set as current for bidding"
+        if held_players:
+            names = ", ".join(h.get("player_name") or "player" for h in held_players)
+            msg += f" · previous on hold: {names}"
         return {
-            "message": f"Player {player_data['name']} set as current for bidding",
+            "message": msg,
             "player_id": player_id,
             "player_name": player_data['name'],
-            "base_price": player_data['base_price']
+            "base_price": player_data['base_price'],
+            "held_players": held_players,
         }
     except HTTPException:
         raise
@@ -3040,8 +3450,8 @@ async def get_all_teams_safe_bid_summary(event_id: str, player_category: str = N
                 team_players = _pg.list_players_for_team(team_data['id'])
                 player_count_by_category = get_category_player_count(team_players, categories)
                 base_price_reqs = calculate_base_price_requirements(categories, player_count_by_category)
-                remaining_budget = team_data['remaining']
-                total_obligations = base_price_reqs['total_base_price_obligation']
+                remaining_budget = team_data.get('remaining') or 0
+                total_obligations = base_price_reqs.get('total_base_price_obligation') or 0
                 adjusted_obligations = total_obligations
                 if player_category:
                     for cat in categories:
@@ -3052,17 +3462,37 @@ async def get_all_teams_safe_bid_summary(event_id: str, player_category: str = N
                                     adjusted_obligations -= cat.base_price
                             break
                 max_safe_bid = max(0, remaining_budget - adjusted_obligations)
+                # Match Firestore payload shape used by AuctionControl / AuctionDisplay
+                buffer_amount = max(10000, int(adjusted_obligations * 0.1)) if adjusted_obligations else 10000
+                max_safe_bid_with_buffer = max(0, max_safe_bid - buffer_amount)
                 summary.append({
                     'team_id': team_data['id'],
-                    'team_name': team_data['name'],
-                    'budget': team_data['budget'],
-                    'spent': team_data['spent'],
+                    'team_name': team_data.get('name', 'Unknown Team'),
+                    'budget': team_data.get('budget') or 0,
+                    'total_budget': team_data.get('budget') or 0,
+                    'spent': team_data.get('spent') or 0,
                     'remaining': remaining_budget,
+                    'remaining_budget': remaining_budget,
+                    'players_count': team_data.get('players_count') or len(team_players),
+                    'base_price_obligations': adjusted_obligations,
                     'max_safe_bid': max_safe_bid,
-                    'base_price_obligations': total_obligations,
-                    'players_count': team_data['players_count'],
+                    'max_safe_bid_with_buffer': max_safe_bid_with_buffer,
+                    'buffer_amount': buffer_amount,
+                    'can_bid_safely': max_safe_bid > 0,
+                    'category_status': base_price_reqs.get('category_obligations', {}),
+                    'risk_level': (
+                        'low' if max_safe_bid_with_buffer > 100000
+                        else 'medium' if max_safe_bid_with_buffer > 50000
+                        else 'high'
+                    ),
                 })
-            return {'teams': summary, 'event_id': event_id}
+            summary.sort(key=lambda x: x['max_safe_bid_with_buffer'], reverse=True)
+            return {
+                'teams': summary,
+                'event_id': event_id,
+                'player_category': player_category,
+                'total_teams': len(summary),
+            }
 
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -3157,6 +3587,96 @@ async def get_all_teams_safe_bid_summary(event_id: str, player_category: str = N
         raise HTTPException(status_code=400, detail=str(e))
 
 # ============= BIDDING ROUTES =============
+
+class OrganizerBidCreate(BaseModel):
+    """Organizer records a bid call for a team during live control."""
+    player_id: str
+    event_id: str
+    team_id: str
+    amount: int
+
+
+@api_router.post("/bids/organizer-place", response_model=Bid)
+async def organizer_place_bid(
+    bid_data: OrganizerBidCreate,
+    current_user: dict = Depends(require_event_organizer),
+):
+    """Event organizer records a bid on behalf of a team (live control / auctioneer desk)."""
+    try:
+        if not await check_event_ownership(bid_data.event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only record bids for events you created",
+            )
+        if _USE_POSTGRES and _pg:
+            team_data = _pg.get_team(bid_data.team_id)
+            if not team_data or team_data.get('event_id') != bid_data.event_id:
+                raise HTTPException(status_code=404, detail="Team not found for this event")
+            if (team_data.get('remaining') or 0) < bid_data.amount:
+                raise HTTPException(status_code=400, detail="Insufficient team budget")
+            try:
+                bid = _pg.place_bid_atomic(
+                    player_id=bid_data.player_id,
+                    event_id=bid_data.event_id,
+                    team_id=bid_data.team_id,
+                    team_name=team_data.get('name') or 'Team',
+                    amount=bid_data.amount,
+                )
+            except ValueError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
+            return Bid(**bid)
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        team_doc = db.collection('teams').document(bid_data.team_id).get()
+        if not team_doc.exists:
+            raise HTTPException(status_code=404, detail="Team not found")
+        team_data = team_doc.to_dict()
+        if team_data.get('event_id') != bid_data.event_id:
+            raise HTTPException(status_code=400, detail="Team does not belong to this event")
+        remaining = team_data.get('remaining', team_data.get('budget', 0) - team_data.get('spent', 0))
+        if remaining < bid_data.amount:
+            raise HTTPException(status_code=400, detail="Insufficient team budget")
+
+        # Load auction state
+        state_id = f"auction_{bid_data.event_id}"
+        state_ref = db.collection('auction_state').document(state_id)
+        state_doc = state_ref.get()
+        if not state_doc.exists:
+            raise HTTPException(status_code=400, detail="Auction not started")
+        state = state_doc.to_dict()
+        current_bid = state.get('current_bid') or 0
+        if bid_data.amount <= current_bid:
+            raise HTTPException(status_code=400, detail="Bid must be higher than current bid")
+
+        bid_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        bid_doc = {
+            'id': bid_id,
+            'player_id': bid_data.player_id,
+            'event_id': bid_data.event_id,
+            'team_id': bid_data.team_id,
+            'team_name': team_data.get('name'),
+            'amount': bid_data.amount,
+            'timestamp': now,
+        }
+        db.collection('bids').document(bid_id).set(bid_doc)
+        history = list(state.get('bid_history') or [])
+        history.append(bid_doc)
+        state_ref.update({
+            'current_bid': bid_data.amount,
+            'current_team_id': bid_data.team_id,
+            'current_team_name': team_data.get('name'),
+            'timer_started_at': now,
+            'current_player_id': state.get('current_player_id') or bid_data.player_id,
+            'bid_history': history[-50:],
+        })
+        return Bid(**bid_doc)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 @api_router.post("/bids/place")
 async def place_bid(bid_data: BidCreate, current_user: dict = Depends(require_team_admin)):
@@ -3656,8 +4176,13 @@ async def mark_player_unsold(
 
 @api_router.post("/players/{player_id}/make-available")
 async def make_player_available(player_id: str, current_user: dict = Depends(require_event_organizer)):
-    """Make an unsold or current player available for auction again"""
+    """Make an unsold, on_hold, or current player available for auction again"""
     try:
+        allowed_from = {
+            PlayerStatus.UNSOLD.value,
+            PlayerStatus.CURRENT.value,
+            PlayerStatus.ON_HOLD.value,
+        }
         if _USE_POSTGRES and _pg:
             player_data = _pg.get_player(player_id)
             if not player_data:
@@ -3670,8 +4195,11 @@ async def make_player_available(player_id: str, current_user: dict = Depends(req
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="You can only modify players for events you created"
                 )
-            if player_data.get('status') not in [PlayerStatus.UNSOLD.value, PlayerStatus.CURRENT.value]:
-                raise HTTPException(status_code=400, detail="Player must be unsold or current to make available")
+            if player_data.get('status') not in allowed_from:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Player must be unsold, on hold, or current to make available",
+                )
             _pg.update_player(player_id, {'status': PlayerStatus.AVAILABLE.value})
             return {"message": f"Player {player_data['name']} made available for auction"}
 
@@ -3699,9 +4227,11 @@ async def make_player_available(player_id: str, current_user: dict = Depends(req
                 detail="You can only modify players for events you created"
             )
         
-        # Check if player is unsold or current
-        if player_data.get('status') not in [PlayerStatus.UNSOLD.value, PlayerStatus.CURRENT.value]:
-            raise HTTPException(status_code=400, detail="Player must be unsold or current to make available")
+        if player_data.get('status') not in allowed_from:
+            raise HTTPException(
+                status_code=400,
+                detail="Player must be unsold, on hold, or current to make available",
+            )
         
         # Update player status to available
         db.collection('players').document(player_id).update({
@@ -3917,9 +4447,14 @@ async def release_player_from_team(player_id: str, current_user: dict = Depends(
 # ============= SPONSOR ROUTES =============
 
 @api_router.post("/sponsors", response_model=Sponsor)
-async def create_sponsor(sponsor_data: SponsorCreate, current_user: dict = Depends(require_super_admin)):
-    """Create a new sponsor"""
+async def create_sponsor(sponsor_data: SponsorCreate, current_user: dict = Depends(require_event_organizer)):
+    """Create a new sponsor — event organizers for their events, super admin any event"""
     try:
+        if not await check_event_ownership(sponsor_data.event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only add sponsors for events you created",
+            )
         sponsor_id = str(uuid.uuid4())
         sponsor_doc = {
             'id': sponsor_id,
@@ -3944,6 +4479,8 @@ async def create_sponsor(sponsor_data: SponsorCreate, current_user: dict = Depen
             db.collection('sponsors').document(sponsor_id).set(sponsor_doc)
         
         return Sponsor(**sponsor_doc)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -3986,9 +4523,14 @@ async def get_sponsor(sponsor_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.put("/sponsors/{sponsor_id}", response_model=Sponsor)
-async def update_sponsor(sponsor_id: str, sponsor_data: SponsorCreate, current_user: dict = Depends(require_super_admin)):
-    """Update a sponsor"""
+async def update_sponsor(sponsor_id: str, sponsor_data: SponsorCreate, current_user: dict = Depends(require_event_organizer)):
+    """Update a sponsor — event owner only"""
     try:
+        if not await check_event_ownership(sponsor_data.event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only update sponsors for events you created",
+            )
         updated_data = {
             'name': sponsor_data.name,
             'description': sponsor_data.description,
@@ -4005,6 +4547,12 @@ async def update_sponsor(sponsor_id: str, sponsor_data: SponsorCreate, current_u
 
         if _USE_POSTGRES and _pg:
             try:
+                existing = _pg.get_sponsor(sponsor_id)
+                if not existing:
+                    raise HTTPException(status_code=404, detail="Sponsor not found")
+                if existing.get('event_id') and existing['event_id'] != sponsor_data.event_id:
+                    if not await check_event_ownership(existing['event_id'], current_user):
+                        raise HTTPException(status_code=403, detail="Not allowed")
                 return Sponsor(**_pg.update_sponsor(sponsor_id, updated_data))
             except ValueError:
                 raise HTTPException(status_code=404, detail="Sponsor not found")
@@ -4028,11 +4576,19 @@ async def update_sponsor(sponsor_id: str, sponsor_data: SponsorCreate, current_u
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.delete("/sponsors/{sponsor_id}")
-async def delete_sponsor(sponsor_id: str, current_user: dict = Depends(require_super_admin)):
-    """Delete a sponsor"""
+async def delete_sponsor(sponsor_id: str, current_user: dict = Depends(require_event_organizer)):
+    """Delete a sponsor — event owner only"""
     try:
         if _USE_POSTGRES and _pg:
             try:
+                existing = _pg.get_sponsor(sponsor_id)
+                if not existing:
+                    raise HTTPException(status_code=404, detail="Sponsor not found")
+                if not await check_event_ownership(existing['event_id'], current_user):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="You can only delete sponsors for events you created",
+                    )
                 _pg.delete_sponsor(sponsor_id)
             except ValueError:
                 raise HTTPException(status_code=404, detail="Sponsor not found")
@@ -4045,6 +4601,12 @@ async def delete_sponsor(sponsor_id: str, current_user: dict = Depends(require_s
         sponsor_doc = db.collection('sponsors').document(sponsor_id).get()
         if not sponsor_doc.exists:
             raise HTTPException(status_code=404, detail="Sponsor not found")
+        existing = sponsor_doc.to_dict()
+        if not await check_event_ownership(existing.get('event_id'), current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only delete sponsors for events you created",
+            )
         
         # Delete the sponsor
         db.collection('sponsors').document(sponsor_id).delete()

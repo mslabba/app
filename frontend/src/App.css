@@ -192,3 +192,234 @@ main button:hover, main a.card-hover:hover {
 .animate-scroll {
   animation: scroll 30s linear infinite;
 }
+
+/* ── SOLD / UNSOLD celebration (broadcast + control) ─────────────────────── */
+@keyframes sold-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.35) rotate(-8deg);
+    filter: blur(6px);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.12) rotate(1deg);
+    filter: blur(0);
+  }
+  75% {
+    transform: scale(0.96) rotate(-0.5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    filter: blur(0);
+  }
+}
+
+@keyframes sold-fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sold-ring {
+  0% {
+    opacity: 0.85;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(3.2);
+  }
+}
+
+@keyframes sold-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+}
+
+@keyframes sold-float {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(0deg) scale(0.4);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx, 80px), var(--dy, -120px)) rotate(var(--rot, 180deg))
+      scale(0.2);
+  }
+}
+
+@keyframes sold-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+@keyframes sold-soft-flash {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.35;
+  }
+  40% {
+    opacity: 0.12;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes sold-confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -12vh, 0) rotate(0deg);
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--drift, 20px), 110vh, 0) rotate(var(--spin, 540deg));
+  }
+}
+
+@keyframes sold-price-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.sold-pop {
+  animation: sold-pop 0.75s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+
+.sold-fade-up {
+  animation: sold-fade-up 0.55s ease-out both;
+}
+
+.sold-ring {
+  animation: sold-ring 1.6s ease-out both;
+}
+
+.sold-glow {
+  animation: sold-glow 2.4s ease-in-out infinite;
+}
+
+.sold-float {
+  animation: sold-float 1.65s cubic-bezier(0.15, 0.7, 0.25, 1) both;
+}
+
+.sold-shimmer {
+  background-size: 200% auto;
+  animation: sold-shimmer 2.2s linear infinite;
+}
+
+.sold-soft-flash {
+  animation: sold-soft-flash 0.9s ease-out both;
+}
+
+.sold-confetti {
+  animation: sold-confetti-fall 2.8s ease-in both;
+}
+
+.sold-price-pop {
+  animation: sold-price-pop 0.65s cubic-bezier(0.22, 1.15, 0.36, 1) both;
+}
+
+/* ── Player on-block entry (public + display boards) ─────────────────────── */
+@keyframes block-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes block-photo-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.88);
+    filter: blur(4px);
+  }
+  55% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  75% {
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes block-ring-pulse {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes block-fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.block-enter {
+  animation: block-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.block-photo-enter {
+  animation: block-photo-enter 0.7s cubic-bezier(0.22, 1.15, 0.36, 1) both;
+}
+
+.block-ring-pulse {
+  animation: block-ring-pulse 0.9s ease-out both;
+}
+
+.block-fade-up {
+  animation: block-fade-up 0.5s ease-out both;
+}

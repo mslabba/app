@@ -36,6 +36,7 @@ from app.models import (
     PaymentOrder,
     Player,
     PlayerRegistration,
+    PublicEventBroadcastToken,
     PublicTeamToken,
     Sponsor,
     Team,
@@ -163,6 +164,7 @@ def create_event(data: dict[str, Any]) -> dict[str, Any]:
             organizer_mobile=data.get("organizer_mobile"),
             has_registration_limit=bool(data.get("has_registration_limit")),
             registration_limit=data.get("registration_limit"),
+            registration_form_config=data.get("registration_form_config"),
         )
         s.add(e)
         s.commit()
@@ -324,10 +326,16 @@ def update_team(team_id: str, fields: dict[str, Any]) -> dict[str, Any]:
 def list_players_for_event(
     event_id: str, status: Optional[str] = None
 ) -> list[dict[str, Any]]:
+    """List players for an event. status may be a single value or comma-separated list."""
     with _session() as s:
         q = select(Player).where(Player.event_id == event_id)
+        statuses: list[str] = []
         if status:
-            q = q.where(Player.status == status.lower())
+            statuses = [s.strip().lower() for s in str(status).split(",") if s.strip()]
+            if len(statuses) == 1:
+                q = q.where(Player.status == statuses[0])
+            elif statuses:
+                q = q.where(Player.status.in_(statuses))
         # Fallback: players only linked via category
         players = list(s.scalars(q).all())
         if not players:
@@ -339,8 +347,10 @@ def list_players_for_event(
             ]
             if cat_ids:
                 q2 = select(Player).where(Player.category_id.in_(cat_ids))
-                if status:
-                    q2 = q2.where(Player.status == status.lower())
+                if len(statuses) == 1:
+                    q2 = q2.where(Player.status == statuses[0])
+                elif statuses:
+                    q2 = q2.where(Player.status.in_(statuses))
                 players = list(s.scalars(q2).all())
         return [player_to_dict(p) for p in players]
 
@@ -401,18 +411,23 @@ def clear_current_players(event_id: str, except_player_id: Optional[str] = None)
 
 
 def set_next_player(event_id: str, player_id: str) -> dict[str, Any]:
-    """Atomically set current player for auction (clear previous CURRENT, update state)."""
+    """
+    Atomically set current player for auction.
+    Any previous CURRENT player (not sold/unsold) is moved to on_hold
+    so they can be re-auctioned later without counting as available until ready.
+    """
     with _session() as s:
         player = s.get(Player, player_id)
         if not player:
             raise ValueError("Player not found")
+        if (player.status or "").lower() in ("sold",):
+            raise ValueError("Cannot put a sold player on the block")
 
-        # Clear other CURRENT players for this event
+        # Previous CURRENT players for this event → on_hold (skipped without sale)
         cat_ids = [
             c.id
             for c in s.scalars(select(Category).where(Category.event_id == event_id)).all()
         ]
-        q = select(Player).where(Player.status == "current")
         if player.event_id:
             currents = list(
                 s.scalars(
@@ -431,9 +446,12 @@ def set_next_player(event_id: str, player_id: str) -> dict[str, Any]:
             )
         else:
             currents = []
+
+        held: list[dict[str, Any]] = []
         for p in currents:
             if p.id != player_id:
-                p.status = "available"
+                p.status = "on_hold"
+                held.append({"player_id": p.id, "player_name": p.name})
 
         player.status = "current"
         if not player.event_id:
@@ -453,13 +471,55 @@ def set_next_player(event_id: str, player_id: str) -> dict[str, Any]:
         state.current_team_id = None
         state.current_team_name = None
         state.timer_started_at = now
+        # Clear any in-progress selection wheel once a player is on the block
+        meta = dict(state.raw_firestore or {}) if isinstance(state.raw_firestore, dict) else {}
+        if "spin" in meta:
+            meta.pop("spin", None)
+            state.raw_firestore = meta
 
         s.commit()
         return {
             "player_id": player_id,
             "player_name": player.name,
             "base_price": player.base_price or 0,
+            "held_players": held,
         }
+
+
+def _meta_dict(state: AuctionState) -> dict[str, Any]:
+    return dict(state.raw_firestore or {}) if isinstance(state.raw_firestore, dict) else {}
+
+
+def set_spin_state(event_id: str, spin: Optional[dict[str, Any]]) -> dict[str, Any]:
+    """Broadcast spinning-wheel selection to control + public boards."""
+    with _session() as s:
+        state = s.get(AuctionState, event_id)
+        if not state:
+            state = AuctionState(
+                event_id=event_id,
+                status="in_progress",
+                timer_duration=60,
+            )
+            s.add(state)
+        meta = _meta_dict(state)
+        if spin is None:
+            meta.pop("spin", None)
+        else:
+            meta["spin"] = spin
+        state.raw_firestore = meta
+        s.commit()
+        s.refresh(state)
+        return auction_state_to_dict(state)
+
+
+def _set_last_result(state: AuctionState, result: dict[str, Any]) -> None:
+    """Persist brief sold/unsold snapshot for public boards (12s UI window)."""
+    meta = _meta_dict(state)
+    meta["last_result"] = {
+        **result,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    state.raw_firestore = meta
 
 
 def mark_player_unsold_atomic(player_id: str, event_id: str) -> dict[str, Any]:
@@ -468,6 +528,7 @@ def mark_player_unsold_atomic(player_id: str, event_id: str) -> dict[str, Any]:
         if not player:
             raise ValueError("Player not found")
         name = player.name
+        photo = player.photo_url
         player.status = "unsold"
         state = s.get(AuctionState, event_id)
         if state and state.current_player_id == player_id:
@@ -475,6 +536,18 @@ def mark_player_unsold_atomic(player_id: str, event_id: str) -> dict[str, Any]:
             state.current_bid = None
             state.current_team_id = None
             state.current_team_name = None
+            _set_last_result(
+                state,
+                {
+                    "type": "unsold",
+                    "player_id": player_id,
+                    "player_name": name,
+                    "photo_url": photo,
+                    "team_id": None,
+                    "team_name": None,
+                    "price": None,
+                },
+            )
         s.commit()
         return {"player_id": player_id, "player_name": name}
 
@@ -496,6 +569,18 @@ def finalize_bid_atomic(player_id: str, event_id: str) -> dict[str, Any]:
 
         if not state.current_team_id:
             player.status = "unsold"
+            _set_last_result(
+                state,
+                {
+                    "type": "unsold",
+                    "player_id": player_id,
+                    "player_name": player.name,
+                    "photo_url": player.photo_url,
+                    "team_id": None,
+                    "team_name": None,
+                    "price": None,
+                },
+            )
             state.current_player_id = None
             state.current_bid = None
             state.current_team_id = None
@@ -517,6 +602,20 @@ def finalize_bid_atomic(player_id: str, event_id: str) -> dict[str, Any]:
         team.remaining = team.budget - team.spent
         team.players_count = (team.players_count or 0) + 1
 
+        _set_last_result(
+            state,
+            {
+                "type": "sold",
+                "player_id": player_id,
+                "player_name": player.name,
+                "photo_url": player.photo_url,
+                "team_id": team.id,
+                "team_name": team.name,
+                "team_logo_url": team.logo_url,
+                "team_color": team.color,
+                "price": price,
+            },
+        )
         state.current_player_id = None
         state.current_bid = None
         state.current_team_id = None
@@ -560,6 +659,7 @@ def create_player(data: dict[str, Any]) -> dict[str, Any]:
             district=data.get("district"),
             identity_proof_url=data.get("identity_proof_url"),
             is_priority=bool(data.get("is_priority")),
+            extra_fields=data.get("extra_fields"),
         )
         s.add(p)
         s.commit()
@@ -637,6 +737,7 @@ def create_registration(data: dict[str, Any]) -> dict[str, Any]:
             district=data.get("district"),
             identity_proof_url=data.get("identity_proof_url"),
             stats=data.get("stats"),
+            extra_fields=data.get("extra_fields"),
         )
         s.add(r)
         if data.get("payment_order_id"):
@@ -677,6 +778,10 @@ def approve_registration_atomic(
         if not cat:
             raise ValueError("Category not found")
         player_id = str(uuid.uuid4())
+        # Carry registration extras (custom form fields + email if present on reg)
+        extra = dict(r.extra_fields or {})
+        if getattr(r, "email", None) and "email" not in extra:
+            extra["email"] = r.email
         p = Player(
             id=player_id,
             event_id=r.event_id or cat.event_id,
@@ -694,6 +799,7 @@ def approve_registration_atomic(
             stats=r.stats,
             status="available",
             photo_url=r.photo_url,
+            extra_fields=extra or None,
         )
         s.add(p)
         r.status = "approved"
@@ -775,12 +881,12 @@ def get_auction_state(event_id: str) -> Optional[dict[str, Any]]:
         if not a:
             return None
         d = auction_state_to_dict(a)
-        # Attach last 10 bids as bid_history for API compatibility
+        # Prefer bids for current player so boards show this lot's call trail
+        q = select(Bid).where(Bid.event_id == event_id)
+        if a.current_player_id:
+            q = q.where(Bid.player_id == a.current_player_id)
         bids = s.scalars(
-            select(Bid)
-            .where(Bid.event_id == event_id)
-            .order_by(Bid.created_at.desc().nullslast())
-            .limit(10)
+            q.order_by(Bid.created_at.desc().nullslast()).limit(20)
         ).all()
         d["bid_history"] = list(reversed([bid_to_dict(b) for b in bids]))
         return d
@@ -896,6 +1002,20 @@ def sell_player_atomic(
             select(AuctionState).where(AuctionState.event_id == event_id).with_for_update()
         ).scalar_one_or_none()
         if state and state.current_player_id == player_id:
+            _set_last_result(
+                state,
+                {
+                    "type": "sold",
+                    "player_id": player_id,
+                    "player_name": player.name,
+                    "photo_url": player.photo_url,
+                    "team_id": team_id,
+                    "team_name": team.name,
+                    "team_logo_url": team.logo_url,
+                    "team_color": team.color,
+                    "price": price,
+                },
+            )
             state.current_player_id = None
             state.current_bid = None
             state.current_team_id = None
@@ -1045,6 +1165,47 @@ def create_public_token(data: dict[str, Any]) -> dict[str, Any]:
             "team_id": tok.team_id,
             "expires_at": tok.expires_at.isoformat() if tok.expires_at else None,
         }
+
+
+def create_event_broadcast_token(data: dict[str, Any]) -> dict[str, Any]:
+    with _session() as s:
+        tok = PublicEventBroadcastToken(
+            id=data.get("id") or str(uuid.uuid4()),
+            token=data["token"],
+            event_id=data["event_id"],
+            expires_at=data.get("expires_at"),
+            created_at=datetime.now(timezone.utc),
+            created_by=data.get("created_by"),
+            label=data.get("label"),
+            revoked=False,
+        )
+        s.add(tok)
+        s.commit()
+        return {
+            "id": tok.id,
+            "token": tok.token,
+            "event_id": tok.event_id,
+            "expires_at": tok.expires_at.isoformat() if tok.expires_at else None,
+            "label": tok.label,
+        }
+
+
+def resolve_event_broadcast_token(token: str) -> Optional[str]:
+    """Return event_id if token is valid, else None. Strict validation only."""
+    if not token or len(token) < 16:
+        return None
+    with _session() as s:
+        row = s.scalars(
+            select(PublicEventBroadcastToken).where(
+                PublicEventBroadcastToken.token == token,
+                PublicEventBroadcastToken.revoked.is_(False),
+            )
+        ).first()
+        if not row:
+            return None
+        if row.expires_at and row.expires_at < datetime.now(timezone.utc):
+            return None
+        return row.event_id
 
 
 def list_available_team_admins() -> list[dict[str, Any]]:
