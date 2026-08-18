@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Mail, MessageSquare, CheckCircle2 } from 'lucide-react';
 import { MarketingShell } from '../components/MarketingShell';
 import { useReveal } from '../hooks/useReveal';
+import Captcha from '../../components/Captcha';
 
 export default function ContactMarketingPage() {
   const rootRef = useRef(null);
+  const captchaRef = useRef(null);
   useReveal(rootRef);
 
   const [formData, setFormData] = useState({
@@ -17,6 +19,7 @@ export default function ContactMarketingPage() {
     message: '',
   });
   const [loading, setLoading] = useState(false);
+  const [captchaVerified, setCaptchaVerified] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
 
@@ -30,10 +33,30 @@ export default function ContactMarketingPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
 
+    if (!captchaVerified) {
+      setError('Please complete the security verification (CAPTCHA).');
+      return;
+    }
+
+    setLoading(true);
+
     try {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
+      
+      // Notify backend -> triggers email notification to hello@inraylabs.com
+      try {
+        await fetch(`${backendUrl}/api/contact`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        });
+      } catch (err) {
+        console.warn('Backend contact notification warning:', err);
+      }
+
+      // Also submit to Web3Forms
       const response = await fetch('https://api.web3forms.com/submit', {
         method: 'POST',
         headers: {
@@ -53,7 +76,7 @@ export default function ContactMarketingPage() {
       });
 
       const result = await response.json();
-      if (result.success) {
+      if (result.success || response.ok) {
         setSubmitted(true);
       } else {
         setError('Something went wrong. Please try again or email us directly.');
@@ -164,12 +187,13 @@ export default function ContactMarketingPage() {
                         placeholder="Players, teams, auction date, anything we should know…"
                       />
                     </div>
+                    <Captcha ref={captchaRef} onVerify={setCaptchaVerified} />
                     {error && (
                       <p style={{ color: '#fca5a5', fontSize: '0.9rem' }} role="alert">
                         {error}
                       </p>
                     )}
-                    <button type="submit" className="pa-btn pa-btn--primary pa-btn--lg" disabled={loading}>
+                    <button type="submit" className="pa-btn pa-btn--primary pa-btn--lg" disabled={loading || !captchaVerified}>
                       {loading ? 'Sending…' : 'Request demo'}
                       {!loading && <ArrowRight size={18} />}
                     </button>

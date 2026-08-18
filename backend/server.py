@@ -216,6 +216,14 @@ async def register(user_data: UserCreate):
         elif db:
             db.collection('users').document(user.uid).set(user_doc)
         
+        # Send admin notification email to hello@inraylabs.com asynchronously
+        try:
+            from email_service import send_new_user_registration_notification
+            import threading
+            threading.Thread(target=send_new_user_registration_notification, args=(user_doc,), daemon=True).start()
+        except Exception as notify_err:
+            logger.error(f"Error triggering registration admin notification: {notify_err}")
+
         # Generate custom token
         custom_token = firebase_auth.create_custom_token(user.uid, {'role': user_data.role.value})
         
@@ -226,6 +234,31 @@ async def register(user_data: UserCreate):
     except Exception as e:
         logger.error(f"Registration error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class ContactSubmission(BaseModel):
+    name: str
+    email: str
+    mobile: Optional[str] = None
+    organization: Optional[str] = None
+    sport: Optional[str] = None
+    message: str
+
+
+@api_router.post("/contact")
+async def contact_submission(data: ContactSubmission):
+    """Handle demo request / contact form submissions and notify admin"""
+    try:
+        from email_service import send_contact_form_notification
+        import threading
+
+        contact_dict = data.dict()
+        threading.Thread(target=send_contact_form_notification, args=(contact_dict,), daemon=True).start()
+        return {"success": True, "message": "Demo request received"}
+    except Exception as e:
+        logger.error(f"Contact submission error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process contact request")
+
 
 @api_router.post("/auth/forgot-password")
 async def forgot_password(email: str):

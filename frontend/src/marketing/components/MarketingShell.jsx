@@ -85,8 +85,11 @@ export function MarketingNav() {
           >
             Login
           </Link>
-          <Link to="/contact" className="pa-btn pa-btn--primary pa-btn--sm pa-nav__demo">
+          <Link to="/contact" className="pa-btn pa-btn--ghost pa-btn--sm pa-nav__demo" style={{ color: 'var(--pa-slate-200)' }}>
             Book a Demo
+          </Link>
+          <Link to="/register" className="pa-btn pa-btn--primary pa-btn--sm pa-nav__register">
+            Register for free
           </Link>
           <button
             type="button"
@@ -118,13 +121,18 @@ export function MarketingNav() {
         <Link to="/auction-dashboard" onClick={() => setOpen(false)}>
           Dashboard
         </Link>
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', padding: '0 0.5rem' }}>
-          <Link to="/login" className="pa-btn pa-btn--secondary pa-btn--sm" style={{ flex: 1 }} onClick={() => setOpen(false)}>
-            Login
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem', padding: '0 0.5rem' }}>
+          <Link to="/register" className="pa-btn pa-btn--primary pa-btn--sm" style={{ width: '100%', textAlign: 'center' }} onClick={() => setOpen(false)}>
+            Register for free
           </Link>
-          <Link to="/contact" className="pa-btn pa-btn--primary pa-btn--sm" style={{ flex: 1 }} onClick={() => setOpen(false)}>
-            Book a Demo
-          </Link>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Link to="/login" className="pa-btn pa-btn--secondary pa-btn--sm" style={{ flex: 1, textAlign: 'center' }} onClick={() => setOpen(false)}>
+              Login
+            </Link>
+            <Link to="/contact" className="pa-btn pa-btn--ghost pa-btn--sm" style={{ flex: 1, border: '1px solid rgba(255,255,255,0.2)', textAlign: 'center', color: '#fff' }} onClick={() => setOpen(false)}>
+              Book a Demo
+            </Link>
+          </div>
         </div>
       </div>
     </header>
@@ -143,6 +151,7 @@ export function MarketingFooter() {
 
           <div className="pa-footer__col">
             <h4>Product</h4>
+            <Link to="/register" style={{ color: 'var(--pa-blue-bright, #38bdf8)', fontWeight: 600 }}>Register for free</Link>
             <Link to="/features">Features</Link>
             <Link to="/player-registration">Player Registration</Link>
             <Link to="/live-auction">Live Auction</Link>
@@ -159,9 +168,10 @@ export function MarketingFooter() {
           </div>
 
           <div className="pa-footer__col">
-            <h4>Legal</h4>
+            <h4>Legal & Account</h4>
             <Link to="/privacy-policy">Privacy Policy</Link>
             <Link to="/terms-of-service">Terms of Service</Link>
+            <Link to="/register">Register for free</Link>
             <Link to="/login">Login</Link>
             <Link to="/contact">Book a Demo</Link>
           </div>
@@ -227,7 +237,14 @@ export function MarketingImage({
   );
 }
 
-export function CTAGroup({ primaryTo = '/contact', primaryLabel = 'Book a Demo', secondaryTo = '/how-it-works', secondaryLabel = 'See How It Works', tertiaryTo, tertiaryLabel }) {
+export function CTAGroup({
+  primaryTo = '/register',
+  primaryLabel = 'Register for free',
+  secondaryTo = '/contact',
+  secondaryLabel = 'Book a Demo',
+  tertiaryTo = '/how-it-works',
+  tertiaryLabel = 'See How It Works',
+}) {
   return (
     <div className="pa-hero__ctas">
       <Link to={primaryTo} className="pa-btn pa-btn--primary pa-btn--lg">

@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Mail, Lock, User, Phone, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { MarketingShell, LOGO_SRC } from '@/marketing/components/MarketingShell';
+import Captcha from '@/components/Captcha';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -17,7 +18,9 @@ const RegisterPage = () => {
     role: 'event_organizer',
   });
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [captchaVerified, setCaptchaVerified] = useState(false);
   const [loading, setLoading] = useState(false);
+  const captchaRef = useRef(null);
   const navigate = useNavigate();
   const { isAuthenticated, isSuperAdmin, isEventOrganizer, loading: authLoading } = useAuth();
 
@@ -40,6 +43,11 @@ const RegisterPage = () => {
       return;
     }
 
+    if (!captchaVerified) {
+      toast.error('Please complete the security verification (CAPTCHA).');
+      return;
+    }
+
     setLoading(true);
     try {
       await axios.post(`${API}/auth/register`, formData);
@@ -48,6 +56,7 @@ const RegisterPage = () => {
     } catch (error) {
       console.error('Registration error:', error);
       toast.error(error.response?.data?.detail || 'Failed to register');
+      if (captchaRef.current) captchaRef.current.reset();
     } finally {
       setLoading(false);
     }
@@ -186,11 +195,13 @@ const RegisterPage = () => {
               </label>
             </div>
 
+            <Captcha ref={captchaRef} onVerify={setCaptchaVerified} />
+
             <button
               type="submit"
               className="pa-btn pa-btn--primary"
               style={{ width: '100%' }}
-              disabled={loading || !termsAccepted}
+              disabled={loading || !termsAccepted || !captchaVerified}
             >
               {loading ? 'Creating account…' : 'Create account'}
               {!loading && <ArrowRight size={16} aria-hidden="true" />}

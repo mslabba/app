@@ -264,3 +264,133 @@ def send_welcome_email(email: str, name: str) -> bool:
     except Exception as e:
         print(f"Failed to send welcome email: {str(e)}")
         return False
+
+
+ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", "hello@inraylabs.com")
+
+
+def send_new_user_registration_notification(user_data: dict) -> bool:
+    """Send admin email notification to hello@inraylabs.com when a new user registers"""
+    try:
+        display_name = user_data.get("display_name", "N/A")
+        email = user_data.get("email", "N/A")
+        mobile_number = user_data.get("mobile_number", "N/A")
+        role = user_data.get("role", "event_organizer")
+        created_at = user_data.get("created_at", datetime.now().isoformat())
+
+        message = MIMEMultipart("alternative")
+        message["Subject"] = f"[PowerAuction] New User Registered: {display_name}"
+        message["From"] = f"{FROM_NAME} <{FROM_EMAIL}>"
+        message["To"] = ADMIN_NOTIFICATION_EMAIL
+
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }}
+                .header {{ background: #1e293b; color: white; padding: 20px; text-align: center; border-radius: 6px 6px 0 0; }}
+                .content {{ padding: 20px; background: #ffffff; }}
+                .field {{ margin-bottom: 12px; }}
+                .label {{ font-weight: bold; color: #475569; }}
+                .value {{ color: #0f172a; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>⚡ PowerAuction - New Registration</h2>
+                </div>
+                <div class="content">
+                    <p>A new user has just created an account on PowerAuction:</p>
+                    <div class="field"><span class="label">Full Name:</span> <span class="value">{display_name}</span></div>
+                    <div class="field"><span class="label">Email:</span> <span class="value">{email}</span></div>
+                    <div class="field"><span class="label">Mobile Number:</span> <span class="value">{mobile_number}</span></div>
+                    <div class="field"><span class="label">Role:</span> <span class="value">{role}</span></div>
+                    <div class="field"><span class="label">Time:</span> <span class="value">{created_at}</span></div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        message.attach(MIMEText(html_body, "html"))
+
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(message)
+
+        print(f"Admin registration notification sent to {ADMIN_NOTIFICATION_EMAIL} for user {email}")
+        return True
+    except Exception as e:
+        print(f"Failed to send registration admin notification: {str(e)}")
+        return False
+
+
+def send_contact_form_notification(contact_data: dict) -> bool:
+    """Send admin email notification to hello@inraylabs.com when a new contact / demo request form is submitted"""
+    try:
+        name = contact_data.get("name", "N/A")
+        email = contact_data.get("email", "N/A")
+        mobile = contact_data.get("mobile", "N/A")
+        organization = contact_data.get("organization", "N/A")
+        sport = contact_data.get("sport", "N/A")
+        user_message = contact_data.get("message", "N/A")
+        submitted_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        message = MIMEMultipart("alternative")
+        message["Subject"] = f"[PowerAuction] New Demo Request: {name}{f' ({organization})' if organization else ''}"
+        message["From"] = f"{FROM_NAME} <{FROM_EMAIL}>"
+        message["To"] = ADMIN_NOTIFICATION_EMAIL
+
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }}
+                .header {{ background: #0284c7; color: white; padding: 20px; text-align: center; border-radius: 6px 6px 0 0; }}
+                .content {{ padding: 20px; background: #ffffff; }}
+                .field {{ margin-bottom: 12px; }}
+                .label {{ font-weight: bold; color: #475569; }}
+                .value {{ color: #0f172a; }}
+                .msg-box {{ background: #f8fafc; border-left: 4px solid #0284c7; padding: 12px; margin-top: 10px; borderRadius: 4px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>📬 PowerAuction - New Contact / Demo Request</h2>
+                </div>
+                <div class="content">
+                    <p>A new demo request was submitted on PowerAuction:</p>
+                    <div class="field"><span class="label">Name:</span> <span class="value">{name}</span></div>
+                    <div class="field"><span class="label">Work Email:</span> <span class="value">{email}</span></div>
+                    <div class="field"><span class="label">Mobile:</span> <span class="value">{mobile}</span></div>
+                    <div class="field"><span class="label">Organization / League:</span> <span class="value">{organization}</span></div>
+                    <div class="field"><span class="label">Primary Sport:</span> <span class="value">{sport}</span></div>
+                    <div class="field"><span class="label">Submitted At:</span> <span class="value">{submitted_at}</span></div>
+                    <div class="field">
+                        <span class="label">Message / Details:</span>
+                        <div class="msg-box">{user_message}</div>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        message.attach(MIMEText(html_body, "html"))
+
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(message)
+
+        print(f"Admin contact notification sent to {ADMIN_NOTIFICATION_EMAIL} for demo request from {email}")
+        return True
+    except Exception as e:
+        print(f"Failed to send contact admin notification: {str(e)}")
+        return False
+
