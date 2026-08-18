@@ -219,10 +219,18 @@ export default function ContactMarketingPage() {
                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
                   <Mail size={22} style={{ color: 'var(--pa-gold)', flexShrink: 0 }} />
                   <div>
-                    <h3 className="pa-h3" style={{ fontSize: '1.1rem' }}>Prefer email?</h3>
+                    <h3 className="pa-h3" style={{ fontSize: '1.1rem' }}>Direct Contact</h3>
                     <p className="pa-body pa-mt-sm" style={{ fontSize: '0.95rem' }}>
-                      Use the form and we’ll respond on the address you provide. Existing organizers can also{' '}
-                      <Link to="/login" style={{ color: 'var(--pa-blue-bright)' }}>log in</Link> to the platform.
+                      Email:{' '}
+                      <a href="mailto:powerauction@inraylabs.com" style={{ color: 'var(--pa-blue-bright)', fontWeight: 600 }}>
+                        powerauction@inraylabs.com
+                      </a>
+                    </p>
+                    <p className="pa-body pa-mt-xs" style={{ fontSize: '0.95rem' }}>
+                      Phone / WhatsApp:{' '}
+                      <a href="tel:+919947702294" style={{ color: 'var(--pa-blue-bright)', fontWeight: 600 }}>
+                        +91 9947702294
+                      </a>
                     </p>
                   </div>
                 </div>

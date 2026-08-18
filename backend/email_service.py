@@ -266,11 +266,11 @@ def send_welcome_email(email: str, name: str) -> bool:
         return False
 
 
-ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", "hello@inraylabs.com")
+ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", "powerauction@inraylabs.com")
 
 
 def send_new_user_registration_notification(user_data: dict) -> bool:
-    """Send admin email notification to hello@inraylabs.com when a new user registers"""
+    """Send admin email notification to powerauction@inraylabs.com when a new user registers"""
     try:
         display_name = user_data.get("display_name", "N/A")
         email = user_data.get("email", "N/A")
@@ -329,7 +329,7 @@ def send_new_user_registration_notification(user_data: dict) -> bool:
 
 
 def send_contact_form_notification(contact_data: dict) -> bool:
-    """Send admin email notification to hello@inraylabs.com when a new contact / demo request form is submitted"""
+    """Send admin email notification to powerauction@inraylabs.com when a new contact / demo request form is submitted"""
     try:
         name = contact_data.get("name", "N/A")
         email = contact_data.get("email", "N/A")

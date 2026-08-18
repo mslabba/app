@@ -216,7 +216,7 @@ async def register(user_data: UserCreate):
         elif db:
             db.collection('users').document(user.uid).set(user_doc)
         
-        # Send admin notification email to hello@inraylabs.com asynchronously
+        # Send admin notification email to powerauction@inraylabs.com asynchronously
         try:
             from email_service import send_new_user_registration_notification
             import threading

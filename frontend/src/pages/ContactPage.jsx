@@ -150,8 +150,7 @@ const ContactPage = () => {
                   </div>
                   <div>
                     <h3 className="text-white font-semibold mb-1">Email</h3>
-                    <p className="text-white/70 text-sm">bid@thepowerauction.com</p>
-                    <p className="text-white/70 text-sm">support@turgut.in</p>
+                    <p className="text-white/70 text-sm">powerauction@inraylabs.com</p>
                   </div>
                 </div>
               </CardContent>
@@ -165,7 +164,7 @@ const ContactPage = () => {
                   </div>
                   <div>
                     <h3 className="text-white font-semibold mb-1">Phone</h3>
-                    <p className="text-white/70 text-sm">+91 9037138030</p>
+                    <p className="text-white/70 text-sm">+91 9947702294</p>
                   </div>
                 </div>
               </CardContent>

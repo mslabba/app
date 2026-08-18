@@ -47,7 +47,7 @@ const TermsOfService = () => {
                     <strong>Registered Office:</strong> 10/179, Alappuzha, Kerala, India
                   </li>
                   <li>
-                    <strong>Contact Email:</strong> support@thepowerauction.com
+                    <strong>Contact Email:</strong> powerauction@inraylabs.com
                   </li>
                   <li>
                     <strong>Grievance Officer:</strong> Muhammed Shihabudeen, grievance@thepowerauction.com
@@ -325,11 +325,11 @@ const TermsOfService = () => {
                 <h4>General Inquiries</h4>
                 <div className="pa-legal__contact-row">
                   <Mail size={16} aria-hidden="true" />
-                  <span>support@thepowerauction.com</span>
+                  <span>powerauction@inraylabs.com</span>
                 </div>
                 <div className="pa-legal__contact-row">
                   <Phone size={16} aria-hidden="true" />
-                  <span>+91-9037138030</span>
+                  <span>+91 9947702294</span>
                 </div>
                 <h4>Legal Matters</h4>
                 <div className="pa-legal__contact-row">

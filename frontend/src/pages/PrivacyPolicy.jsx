@@ -192,11 +192,11 @@ const PrivacyPolicy = () => {
                 <h4>The Power Auction</h4>
                 <div className="pa-legal__contact-row">
                   <Mail size={16} aria-hidden="true" />
-                  <span>privacy@thepowerauction.com</span>
+                  <span>powerauction@inraylabs.com</span>
                 </div>
                 <div className="pa-legal__contact-row">
                   <Phone size={16} aria-hidden="true" />
-                  <span>+91-9037138030</span>
+                  <span>+91 9947702294</span>
                 </div>
                 <div className="pa-legal__contact-row">
                   <MapPin size={16} aria-hidden="true" />
