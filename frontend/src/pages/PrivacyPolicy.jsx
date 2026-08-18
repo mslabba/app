@@ -144,7 +144,7 @@ const PrivacyPolicy = () => {
                 </li>
               </ul>
               <p>
-                To exercise your rights, please contact us at: privacy@thepowerauction.com. We will respond to your request
+                To exercise your rights, please contact us at: powerauction@inraylabs.com. We will respond to your request
                 within 30 days.
               </p>
             </section>

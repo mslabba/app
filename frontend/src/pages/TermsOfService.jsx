@@ -50,7 +50,7 @@ const TermsOfService = () => {
                     <strong>Contact Email:</strong> powerauction@inraylabs.com
                   </li>
                   <li>
-                    <strong>Grievance Officer:</strong> Muhammed Shihabudeen, grievance@thepowerauction.com
+                    <strong>Grievance Officer:</strong> Muhammed Shihabudeen, powerauction@inraylabs.com
                   </li>
                   <li>
                     <strong>Website:</strong> https://thepowerauction.com
@@ -334,13 +334,13 @@ const TermsOfService = () => {
                 <h4>Legal Matters</h4>
                 <div className="pa-legal__contact-row">
                   <Mail size={16} aria-hidden="true" />
-                  <span>legal@thepowerauction.com</span>
+                  <span>powerauction@inraylabs.com</span>
                 </div>
                 <h4>Grievances (Indian Users)</h4>
                 <p style={{ marginBottom: '0.35rem' }}>Grievance Officer: Muhammed Shihabudeen</p>
                 <div className="pa-legal__contact-row">
                   <Mail size={16} aria-hidden="true" />
-                  <span>grievance@thepowerauction.com</span>
+                  <span>powerauction@inraylabs.com</span>
                 </div>
                 <p style={{ fontSize: '0.85rem', color: 'var(--pa-slate-500)', marginTop: '0.35rem' }}>
                   Response Time: Within 24 hours
