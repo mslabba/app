@@ -10,7 +10,7 @@ from typing import Optional
 SMTP_HOST = "smtppro.zoho.in"
 SMTP_PORT = 465  # SSL port (use 587 for TLS)
 SMTP_USER = os.getenv("SMTP_USER", "bid@thepowerauction.com")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")  # Set this in environment variables
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "msl@OP12")  # Set this in environment variables or fallback
 FROM_EMAIL = "bid@thepowerauction.com"
 FROM_NAME = "PowerAuction"
 

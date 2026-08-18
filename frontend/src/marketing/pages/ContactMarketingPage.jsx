@@ -43,7 +43,7 @@ export default function ContactMarketingPage() {
     setLoading(true);
 
     try {
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'https://power-auction-app-production.up.railway.app';
       
       // Notify backend -> triggers email notification to hello@inraylabs.com
       try {
