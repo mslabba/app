@@ -136,6 +136,15 @@ function App() {
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/contact" element={<ContactMarketingPage />} />
             <Route path="/demo" element={<ContactMarketingPage />} />
+            <Route
+              path="/launch"
+              element={
+                <Navigate
+                  to="/?utm_source=linkedin&utm_medium=social&utm_campaign=powerauction_launch&utm_content=founder_story"
+                  replace
+                />
+              }
+            />
 
             {/* App / public operational routes */}
             <Route path="/test" element={<TestPage />} />
