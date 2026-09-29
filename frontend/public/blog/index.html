@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blog — PowerAuction</title>
+  <meta name="description" content="Guides for organizers running a sports player auction, from registration and categories to live bidding.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://thepowerauction.com/blog">
+  <meta property="og:title" content="Blog — PowerAuction">
+  <meta property="og:description" content="Guides for organizers running a sports player auction, from registration and categories to live bidding.">
+  <meta property="og:url" content="https://thepowerauction.com/blog">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://thepowerauction.com/images/marketing/what-is-a-sports-player-auction.jpg">
+  <link rel="icon" href="/images/favicon/favicon.ico" sizes="any">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+:root {
+  --pa-void: #060507;
+  --pa-navy-950: #0a0809;
+  --pa-navy-800: #1c1518;
+  --pa-gold: #e8b923;
+  --pa-white: #ffffff;
+  --pa-off: #f7f4f4;
+  --pa-slate-300: #c4b4b7;
+  --pa-slate-100: #efe8e9;
+  --pa-brand: #e11d2e;
+  --pa-border: rgba(255,255,255,0.1);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse 70% 40% at 50% 0%, rgba(225,29,46,0.14), transparent 60%),
+    var(--pa-void);
+  color: var(--pa-off);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--pa-gold); }
+img { max-width: 100%; }
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(10,8,9,0.92);
+  border-bottom: 1px solid var(--pa-border);
+  backdrop-filter: blur(12px);
+}
+.nav {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 0.85rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--pa-white);
+  text-decoration: none;
+}
+.logo img { width: 40px; height: 40px; display: block; }
+.logo-name {
+  font-family: Outfit, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.logo-name span { color: var(--pa-brand); }
+.logo-tag {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--pa-slate-300);
+  letter-spacing: 0.03em;
+}
+.nav-links { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
+.nav-links a {
+  color: var(--pa-slate-100);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+.nav-links a:hover, .nav-links a[aria-current="page"] { color: var(--pa-gold); }
+.column {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 3rem 1.25rem 4.5rem;
+}
+.eyebrow {
+  margin: 0;
+  color: var(--pa-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+}
+h1, h2, h3 {
+  font-family: Outfit, system-ui, sans-serif;
+  color: var(--pa-white);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-weight: 700;
+}
+h1 {
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  text-align: center;
+  margin: 0.65rem 0 0.35rem;
+}
+.meta {
+  text-align: center;
+  color: var(--pa-slate-300);
+  margin: 0 0 1.75rem;
+}
+.hero { margin: 0 0 2rem; }
+.hero img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 1rem;
+  border: 1px solid var(--pa-border);
+}
+.lead { font-size: 1.125rem; text-align: center; color: var(--pa-slate-100); }
+h2 { font-size: 1.55rem; margin: 2.25rem 0 0.65rem; }
+h3 { font-size: 1.15rem; margin: 1.6rem 0 0.35rem; color: var(--pa-gold); }
+p { margin: 0 0 1rem; }
+ol { margin: 0 0 1rem; padding-left: 1.3rem; }
+li { margin: 0.35rem 0; }
+.site-footer {
+  border-top: 1px solid var(--pa-border);
+  color: var(--pa-slate-300);
+  text-align: center;
+  padding: 1.5rem 1rem 2rem;
+  font-size: 0.9rem;
+}
+.site-footer a { color: var(--pa-slate-100); text-decoration: none; }
+.site-footer a:hover { color: var(--pa-gold); }
+.card {
+  display: grid;
+  grid-template-columns: 16rem 1fr;
+  gap: 0;
+  background: var(--pa-navy-800);
+  border: 1px solid var(--pa-border);
+  border-radius: 1rem;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  margin-top: 2rem;
+}
+.card img { width: 100%; height: 100%; object-fit: cover; display: block; min-height: 10rem; }
+.card-body { padding: 1.15rem 1.25rem 1.35rem; }
+.card-body h2 { margin: 0.25rem 0 0.5rem; font-size: 1.35rem; }
+.card-body p { margin: 0; color: var(--pa-slate-100); }
+.card-body .meta { text-align: left; margin: 0; }
+.card:hover { border-color: rgba(232,185,35,0.45); }
+@media (max-width: 720px) {
+  .card { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+  <header class="site-header">
+  <div class="nav">
+    <a class="logo" href="/">
+      <img src="/images/sports/logo-final.png" alt="" width="40" height="40">
+      <span>
+        <span class="logo-name">Power<span>Auction</span></span>
+        <span class="logo-tag">Powered by Turgut</span>
+      </span>
+    </a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="/">Home</a>
+      <a href="/blog" aria-current="page">Blog</a>
+    </nav>
+  </div>
+</header>
+  <main class="column">
+    <p class="eyebrow">Blog</p>
+    <h1>Guides for running a player auction</h1>
+    <p class="lead">Practical notes on how a sports player auction works, written for organizers.</p>
+    <a class="card" href="/blog/what-is-a-sports-player-auction">
+      <img src="/images/marketing/what-is-a-sports-player-auction.jpg" alt="Team owners at a table watching a cricket player card on a large screen, with an operator at a side desk." width="1600" height="900">
+      <div class="card-body">
+        <p class="meta"><time datetime="2026-09-29">29 September 2026</time></p>
+        <h2>What Is a Sports Player Auction? A Complete Guide</h2>
+        <p>A sports player auction is a live event where teams bid for players, one at a time. Each team spends from a purse the organizer sets. When a player is sold, that player joins the winning team’s squad and the price comes off that team’s purse.</p>
+      </div>
+    </a>
+  </main>
+  <footer class="site-footer">
+  <p>© 2026 PowerAuction. <a href="/">Home</a> · <a href="/blog">Blog</a></p>
+</footer>
+</body>
+</html>
