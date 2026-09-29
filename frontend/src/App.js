@@ -50,6 +50,7 @@ import AuctionDashboardPage from '@/marketing/pages/AuctionDashboardPage';
 import SportsPage from '@/marketing/pages/SportsPage';
 import PricingPage from '@/marketing/pages/PricingPage';
 import ContactMarketingPage from '@/marketing/pages/ContactMarketingPage';
+import { BlogIndexPage, BlogPostPage } from '@/marketing/pages/BlogPages';
 import ScrollToTop from '@/marketing/components/ScrollToTop';
 
 // Dashboard redirect component for authenticated users
@@ -136,6 +137,8 @@ function App() {
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/contact" element={<ContactMarketingPage />} />
             <Route path="/demo" element={<ContactMarketingPage />} />
+            <Route path="/blog" element={<BlogIndexPage />} />
+            <Route path="/blog/what-is-a-sports-player-auction" element={<BlogPostPage />} />
             <Route
               path="/launch"
               element={

@@ -8,6 +8,7 @@ const PRIMARY_NAV = [
   { to: '/how-it-works', label: 'How It Works' },
   { to: '/sports', label: 'Sports' },
   { to: '/pricing', label: 'Pricing' },
+  { to: '/blog', label: 'Blog' },
 ];
 
 const LOGO_SRC = '/images/sports/logo-final.png';
@@ -164,6 +165,7 @@ export function MarketingFooter() {
             <Link to="/how-it-works">How It Works</Link>
             <Link to="/sports">Sports</Link>
             <Link to="/pricing">Pricing</Link>
+            <Link to="/blog">Blog</Link>
             <Link to="/contact">Contact</Link>
           </div>
 
