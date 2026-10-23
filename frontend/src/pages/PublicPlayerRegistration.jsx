@@ -29,6 +29,61 @@ import {
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+const URL_PATTERN = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+const TRAILING_PUNCT = /[.,;:!?)\]]+$/;
+
+// Render one line of organizer text, turning URLs into clickable links.
+const renderLineWithLinks = (line, keyPrefix) =>
+  line.split(URL_PATTERN).map((part, i) => {
+    if (!part) return null;
+    if (/^(https?:\/\/|www\.)/.test(part)) {
+      const trailing = (part.match(TRAILING_PUNCT) || [''])[0];
+      const url = trailing ? part.slice(0, -trailing.length) : part;
+      const href = url.startsWith('www.') ? `https://${url}` : url;
+      return (
+        <span key={`${keyPrefix}-${i}`}>
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-red-700 underline decoration-red-300 underline-offset-2 break-all hover:text-red-800"
+          >
+            {url}
+          </a>
+          {trailing}
+        </span>
+      );
+    }
+    return <span key={`${keyPrefix}-${i}`}>{part}</span>;
+  });
+
+// Organizer description with its original line breaks preserved:
+// blank lines start a new paragraph, single line breaks stay as breaks.
+const RichDescription = ({ text }) => {
+  const paragraphs = String(text || '')
+    .replace(/\r\n?/g, '\n')
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      {paragraphs.map((paragraph, pi) => (
+        <p key={pi} className="break-words">
+          {paragraph.split('\n').map((line, li, lines) => (
+            <span key={li}>
+              {renderLineWithLinks(line, `${pi}-${li}`)}
+              {li < lines.length - 1 && <br />}
+            </span>
+          ))}
+        </p>
+      ))}
+    </div>
+  );
+};
+
 const PublicPlayerRegistration = () => {
   const { eventId } = useParams();
   const [event, setEvent] = useState(null);
@@ -481,33 +536,52 @@ const PublicPlayerRegistration = () => {
         </div>
       )}
 
-      <div className="container mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            {event && event.logo_url ? (
+      <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-10">
+        {/* Event hero: banner, logo, event name and organizer description */}
+        <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden mb-6 sm:mb-8">
+          {event?.banner_url && (
+            <div className="bg-neutral-950 flex justify-center">
               <img
-                src={event.logo_url}
-                alt={`${event.name} logo`}
-                className="w-16 h-16 object-contain rounded-lg bg-white/20 p-2 backdrop-blur-sm"
+                src={event.banner_url}
+                alt={`${event.name} banner`}
+                className="w-auto max-w-full h-auto max-h-[300px] sm:max-h-[420px] object-contain"
               />
-            ) : (
-              <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
-                <Trophy className="w-8 h-8 text-white" />
+            </div>
+          )}
+          <div className="px-5 sm:px-8 pb-6 sm:pb-8 text-center">
+            <div
+              className={`flex justify-center ${
+                event?.banner_url ? '-mt-10 sm:-mt-12 relative' : 'pt-6 sm:pt-8'
+              }`}
+            >
+              {event?.logo_url ? (
+                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 px-4 py-3">
+                  <img
+                    src={event.logo_url}
+                    alt={`${event.name} logo`}
+                    className="h-16 sm:h-20 w-auto max-w-[220px] object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-red-600 to-red-800 rounded-2xl shadow-lg flex items-center justify-center">
+                  <Trophy className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                </div>
+              )}
+            </div>
+            {event?.name && (
+              <p className="mt-4 text-[11px] sm:text-xs font-bold tracking-[0.2em] text-red-700 uppercase">
+                Player Registration
+              </p>
+            )}
+            <h1 className="mt-1 text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 break-words">
+              {event ? event.name : 'Player Registration'}
+            </h1>
+            {event?.description && (
+              <div className="mt-5 text-left bg-gray-50 border border-gray-200 rounded-2xl px-4 py-4 sm:px-6 sm:py-5 text-[15px] leading-relaxed text-gray-700">
+                <RichDescription text={event.description} />
               </div>
             )}
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2">Player Registration</h1>
-          {event && (
-            <div className="space-y-2">
-              <p className="text-white/90 text-xl font-medium">Register for {event.name}</p>
-              {event.description && (
-                <p className="text-white/70 text-sm max-w-2xl mx-auto">
-                  {event.description}
-                </p>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Registration Closed Message */}
@@ -537,9 +611,9 @@ const PublicPlayerRegistration = () => {
 
         {/* Registration Form - only show if registration is open */}
         {(!registrationInfo?.has_limit || (registrationInfo?.slots_remaining !== null && registrationInfo.slots_remaining > 0)) && (
-          <Card className="max-w-4xl mx-auto bg-white/95 backdrop-blur-sm border-white/30 shadow-xl">
+          <Card className="max-w-4xl mx-auto bg-white/95 backdrop-blur-sm border-white/30 shadow-xl rounded-3xl overflow-hidden">
             <CardHeader>
-              <CardTitle className="text-gray-800 flex items-center justify-between">
+              <CardTitle className="text-gray-800 flex flex-wrap items-center justify-between gap-2">
                 <span className="flex items-center">
                   <User className="w-5 h-5 mr-2" />
                   Player Registration
@@ -555,20 +629,22 @@ const PublicPlayerRegistration = () => {
             <CardContent className="space-y-6">
               {/* Payment Info Banner */}
               {event?.payment_settings?.collect_payment && (
-                <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-300 rounded-lg p-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="flex-shrink-0">
-                      <CreditCard className="w-8 h-8 text-green-600" />
+                <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-300 rounded-2xl p-4 sm:p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="flex-shrink-0">
+                        <CreditCard className="w-8 h-8 text-green-600" />
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-semibold text-gray-900">
+                          Registration Fee Required
+                        </h4>
+                        <p className="text-gray-700 text-sm mt-1">
+                          This event requires a registration fee to participate
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <h4 className="text-lg font-semibold text-gray-900 flex items-center">
-                        Registration Fee Required
-                      </h4>
-                      <p className="text-gray-700 text-sm mt-1">
-                        This event requires a registration fee to participate
-                      </p>
-                    </div>
-                    <div className="flex-shrink-0 text-right">
+                    <div className="flex-shrink-0 text-center sm:text-right border-t border-green-200 sm:border-0 pt-3 sm:pt-0">
                       <div className="text-3xl font-bold text-green-600">
                         ₹{Number(event.payment_settings.registration_fee || 0).toLocaleString('en-IN')}
                       </div>
@@ -597,7 +673,7 @@ const PublicPlayerRegistration = () => {
                   <Button
                     type="submit"
                     disabled={loading || paymentLoading}
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-3 text-lg font-medium"
+                    className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-3 text-lg font-medium"
                   >
                     {loading ? 'Submitting...' :
                       paymentLoading ? 'Processing Payment...' :
