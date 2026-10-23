@@ -31,6 +31,7 @@ import {
   FormInput,
   Plus,
   Trash2,
+  X,
   GripVertical,
   MonitorPlay,
   Copy,
@@ -41,12 +42,124 @@ import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
 import {
   FIELD_TYPES,
+  CONDITION_OPS_DATE,
+  CONDITION_OPS_VALUE,
   defaultRegistrationFormConfig,
   newCustomField,
   resolveRegistrationFormConfig,
 } from '@/lib/registrationFormConfig';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+/**
+ * Editor for a field's validation conditions (number/date fields only).
+ * A condition is { kind: "value" | "date" | "age", op, value, message? } —
+ * see lib/registrationFormConfig for how rules are enforced on the public form.
+ */
+const FieldConditionsEditor = ({ field, onChange }) => {
+  if (!field.enabled || (field.type !== 'number' && field.type !== 'date')) return null;
+  const conditions = Array.isArray(field.conditions) ? field.conditions : [];
+  const isDate = field.type === 'date';
+
+  const update = (idx, patch) =>
+    onChange(conditions.map((c, i) => (i === idx ? { ...c, ...patch } : c)));
+  const add = () =>
+    onChange([
+      ...conditions,
+      isDate
+        ? { kind: 'date', op: 'lt', value: '', message: '' }
+        : { kind: 'value', op: 'lt', value: '', message: '' },
+    ]);
+  const remove = (idx) => onChange(conditions.filter((_, i) => i !== idx));
+
+  const inputCls = 'border-white/20 bg-white/5 text-white placeholder:text-white/35 h-9';
+  const selectCls = 'border-white/20 bg-white/5 text-white h-9';
+
+  return (
+    <div className="space-y-2 border-t border-white/10 pt-3">
+      <p className="text-xs font-medium text-white/60">
+        Conditions{' '}
+        <span className="font-normal text-white/35">
+          — a registration that breaks a rule is rejected with your message (or a default one).
+        </span>
+      </p>
+      {conditions.map((cond, idx) => (
+        <div key={idx} className="flex flex-wrap items-center gap-2">
+          {isDate && (
+            <Select
+              value={cond.kind || 'date'}
+              onValueChange={(v) => update(idx, { kind: v, op: 'lt', value: '' })}
+            >
+              <SelectTrigger className={`${selectCls} w-[132px]`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Date itself</SelectItem>
+                <SelectItem value="age">Age in years</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={cond.op} onValueChange={(v) => update(idx, { op: v })}>
+            <SelectTrigger className={`${selectCls} w-[132px]`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(cond.kind === 'date' ? CONDITION_OPS_DATE : CONDITION_OPS_VALUE).map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {cond.kind === 'date' ? (
+            <Input
+              type="date"
+              value={cond.value || ''}
+              onChange={(e) => update(idx, { value: e.target.value })}
+              className={`${inputCls} w-[168px]`}
+            />
+          ) : (
+            <Input
+              type="number"
+              value={cond.value ?? ''}
+              onChange={(e) =>
+                update(idx, { value: e.target.value === '' ? '' : Number(e.target.value) })
+              }
+              placeholder={cond.kind === 'age' ? 'Years' : 'Value'}
+              className={`${inputCls} w-[110px]`}
+            />
+          )}
+          <Input
+            value={cond.message || ''}
+            onChange={(e) => update(idx, { message: e.target.value })}
+            placeholder="Custom error message (optional)"
+            className={`${inputCls} min-w-[180px] flex-1`}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="text-white/50 hover:text-red-300"
+            onClick={() => remove(idx)}
+            aria-label="Remove condition"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+        onClick={add}
+      >
+        <Plus className="mr-1.5 h-3.5 w-3.5" />
+        Add condition
+      </Button>
+    </div>
+  );
+};
 
 const emptyForm = () => ({
   name: '',
@@ -215,6 +328,14 @@ const EventSettings = () => {
         locked: !!f.locked,
         placeholder: f.placeholder || null,
         options: f.options || [],
+        conditions: (f.conditions || [])
+          .filter((c) => c && c.op && c.value !== '' && c.value !== null && c.value !== undefined)
+          .map((c) => ({
+            kind: c.kind || (f.type === 'date' ? 'date' : 'value'),
+            op: c.op,
+            value: c.value,
+            message: c.message?.trim() || null,
+          })),
       })),
     };
 
@@ -529,46 +650,52 @@ const EventSettings = () => {
                 {builtinFields.map((field) => (
                   <div
                     key={field.id}
-                    className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    className="space-y-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3"
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-white">
-                        {field.label}
-                        {field.locked && (
-                          <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-white/40">
-                            always on
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-xs text-white/45">
-                        {FIELD_TYPES.find((t) => t.value === field.type)?.label || field.type}
-                      </p>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-white">
+                          {field.label}
+                          {field.locked && (
+                            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-white/40">
+                              always on
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-white/45">
+                          {FIELD_TYPES.find((t) => t.value === field.type)?.label || field.type}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-4">
+                        <label className="flex items-center gap-2 text-xs text-white/70">
+                          <Switch
+                            checked={!!field.enabled}
+                            disabled={!!field.locked}
+                            onCheckedChange={(checked) =>
+                              updateField(field.id, {
+                                enabled: checked,
+                                required: checked ? field.required : false,
+                              })
+                            }
+                          />
+                          Show
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-white/70">
+                          <Switch
+                            checked={!!field.required}
+                            disabled={!!field.locked || !field.enabled}
+                            onCheckedChange={(checked) =>
+                              updateField(field.id, { required: checked })
+                            }
+                          />
+                          Required
+                        </label>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-4">
-                      <label className="flex items-center gap-2 text-xs text-white/70">
-                        <Switch
-                          checked={!!field.enabled}
-                          disabled={!!field.locked}
-                          onCheckedChange={(checked) =>
-                            updateField(field.id, {
-                              enabled: checked,
-                              required: checked ? field.required : false,
-                            })
-                          }
-                        />
-                        Show
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-white/70">
-                        <Switch
-                          checked={!!field.required}
-                          disabled={!!field.locked || !field.enabled}
-                          onCheckedChange={(checked) =>
-                            updateField(field.id, { required: checked })
-                          }
-                        />
-                        Required
-                      </label>
-                    </div>
+                    <FieldConditionsEditor
+                      field={field}
+                      onChange={(conditions) => updateField(field.id, { conditions })}
+                    />
                   </div>
                 ))}
               </div>
@@ -579,8 +706,9 @@ const EventSettings = () => {
                   {customFields.map((field) => (
                     <div
                       key={field.id}
-                      className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      className="space-y-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3"
                     >
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex min-w-0 items-start gap-2">
                         <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-white/25" />
                         <div>
@@ -626,6 +754,11 @@ const EventSettings = () => {
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
+                      </div>
+                      <FieldConditionsEditor
+                        field={field}
+                        onChange={(conditions) => updateField(field.id, { conditions })}
+                      />
                     </div>
                   ))}
                 </div>

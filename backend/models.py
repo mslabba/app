@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
 
@@ -62,6 +62,23 @@ class PaymentSettings(BaseModel):
     collect_payment: bool = False
     registration_fee: Optional[int] = None  # Amount to collect
 
+class RegistrationFormFieldCondition(BaseModel):
+    """One validation rule on a registration form field.
+
+    kind:
+      - "value": compare the field's numeric value (number fields, e.g. Age)
+      - "date": compare the field's date value (date fields, e.g. Date of birth)
+      - "age": compute age in years from the field's date value and compare
+    op: lt | lte | gt | gte | eq
+    value: number for "value"/"age" rules, "YYYY-MM-DD" string for "date" rules
+    """
+
+    kind: str = "value"
+    op: str
+    value: Union[float, str]
+    message: Optional[str] = None  # custom error shown to the player
+
+
 class RegistrationFormField(BaseModel):
     id: str
     key: str
@@ -73,6 +90,7 @@ class RegistrationFormField(BaseModel):
     locked: bool = False
     placeholder: Optional[str] = None
     options: Optional[List[str]] = None  # for select / dropdown
+    conditions: Optional[List[RegistrationFormFieldCondition]] = None
 
 
 class RegistrationFormConfig(BaseModel):
