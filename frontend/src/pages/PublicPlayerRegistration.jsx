@@ -19,8 +19,10 @@ import ImageUploadWithCrop from '@/components/ImageUploadWithCrop';
 import DocumentUpload from '@/components/DocumentUpload';
 import {
   buildRegistrationPayload,
+  describeCondition,
   emptyFormValues,
   enabledFields,
+  fieldConditions,
   resolveRegistrationFormConfig,
   validateRegistrationValues,
   COLUMN_KEYS,
@@ -327,6 +329,8 @@ const PublicPlayerRegistration = () => {
               ? 'date'
               : 'text';
 
+    const hints = fieldConditions(field).map((c) => describeCondition(field, c));
+
     return (
       <div key={field.id}>
         <Label className="text-gray-700">{label}</Label>
@@ -338,6 +342,9 @@ const PublicPlayerRegistration = () => {
           required={!!field.required}
           className={commonClass}
         />
+        {hints.length > 0 && (
+          <p className="mt-1 text-xs text-gray-500">{hints.join(' · ')}</p>
+        )}
       </div>
     );
   };

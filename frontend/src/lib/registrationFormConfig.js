@@ -365,16 +365,127 @@ export function buildRegistrationPayload(values, config) {
   return payload;
 }
 
+/**
+ * Field conditions — organizer-set validation rules on number/date fields.
+ * A condition is { kind, op, value, message? }:
+ *   kind "value": compare the field's numeric value (e.g. Age less than 40)
+ *   kind "date":  compare the field's date value (e.g. DOB before 24/12/2026)
+ *   kind "age":   age in years computed from the field's date value
+ *   op: "lt" | "lte" | "gt" | "gte" | "eq"
+ *   value: number for "value"/"age", "YYYY-MM-DD" for "date"
+ */
+export const CONDITION_OPS_VALUE = [
+  { value: 'lt', label: 'less than' },
+  { value: 'lte', label: 'at most' },
+  { value: 'gt', label: 'more than' },
+  { value: 'gte', label: 'at least' },
+  { value: 'eq', label: 'exactly' },
+];
+
+export const CONDITION_OPS_DATE = [
+  { value: 'lt', label: 'before' },
+  { value: 'lte', label: 'on or before' },
+  { value: 'gt', label: 'after' },
+  { value: 'gte', label: 'on or after' },
+  { value: 'eq', label: 'exactly on' },
+];
+
+export function fieldConditions(field) {
+  if (!Array.isArray(field?.conditions)) return [];
+  return field.conditions.filter(
+    (c) => c && c.op && c.value !== undefined && c.value !== null && c.value !== ''
+  );
+}
+
+function compareOp(actual, op, target) {
+  switch (op) {
+    case 'lt': return actual < target;
+    case 'lte': return actual <= target;
+    case 'gt': return actual > target;
+    case 'gte': return actual >= target;
+    case 'eq': return actual === target;
+    default: return true;
+  }
+}
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export function formatConditionDate(iso) {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Whole years between a date value and today (standard age calculation). */
+export function ageInYears(dateStr, asOf = new Date()) {
+  const birth = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return null;
+  let years = asOf.getFullYear() - birth.getFullYear();
+  const monthDiff = asOf.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && asOf.getDate() < birth.getDate())) {
+    years -= 1;
+  }
+  return years;
+}
+
+function opLabel(kind, op) {
+  const list = kind === 'date' ? CONDITION_OPS_DATE : CONDITION_OPS_VALUE;
+  return list.find((o) => o.value === op)?.label || op;
+}
+
+/** Human-readable rule text, e.g. "Age must be less than 40". */
+export function describeCondition(field, cond) {
+  if (cond.kind === 'age') {
+    return `Age must be ${opLabel('value', cond.op)} ${cond.value} years`;
+  }
+  if (cond.kind === 'date') {
+    return `${field.label} must be ${opLabel('date', cond.op)} ${formatConditionDate(cond.value)}`;
+  }
+  return `${field.label} must be ${opLabel('value', cond.op)} ${cond.value}`;
+}
+
+/** Error message for a failed condition (organizer's custom message wins). */
+export function conditionError(field, cond) {
+  return cond.message?.trim() || describeCondition(field, cond);
+}
+
+/** Validate one field's conditions against a raw value. Returns error or null. */
+export function validateFieldConditions(field, raw) {
+  const conditions = fieldConditions(field);
+  if (!conditions.length) return null;
+  if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+
+  for (const cond of conditions) {
+    if (cond.kind === 'age') {
+      const years = ageInYears(String(raw).trim());
+      if (years === null) return `${field.label} must be a valid date`;
+      if (!compareOp(years, cond.op, Number(cond.value))) return conditionError(field, cond);
+    } else if (cond.kind === 'date' || field.type === 'date') {
+      const actual = new Date(`${String(raw).trim()}T00:00:00`).getTime();
+      const target = new Date(`${cond.value}T00:00:00`).getTime();
+      if (Number.isNaN(actual)) return `${field.label} must be a valid date`;
+      if (Number.isNaN(target)) continue;
+      if (!compareOp(actual, cond.op, target)) return conditionError(field, cond);
+    } else {
+      const actual = Number(raw);
+      if (Number.isNaN(actual)) return `${field.label} must be a number`;
+      if (!compareOp(actual, cond.op, Number(cond.value))) return conditionError(field, cond);
+    }
+  }
+  return null;
+}
+
 export function validateRegistrationValues(values, config) {
   for (const f of enabledFields(config)) {
-    if (!f.required) continue;
     let raw;
     if (STATS_KEYS.has(f.key)) raw = values.stats?.[f.key];
     else if (COLUMN_KEYS.has(f.key)) raw = values[f.key];
     else raw = values.extra_fields?.[f.key];
-    if (raw === undefined || raw === null || String(raw).trim() === '') {
+    if (f.required && (raw === undefined || raw === null || String(raw).trim() === '')) {
       return `${f.label} is required`;
     }
+    const condError = validateFieldConditions(f, raw);
+    if (condError) return condError;
   }
   return null;
 }
@@ -392,6 +503,7 @@ export function newCustomField() {
     locked: false,
     options: [],
     placeholder: '',
+    conditions: [],
   };
 }
 
