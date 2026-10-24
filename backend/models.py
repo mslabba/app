@@ -192,12 +192,20 @@ class PaymentOrderCreate(BaseModel):
     customer_email: str
     customer_phone: str
     amount: float
+    # Full register-player payload, saved on the order so the server can
+    # complete the registration even if the player never returns from the
+    # payment gateway (see _complete_paid_registration in server.py).
+    form_data: Optional[Dict[str, Any]] = None
 
 class PaymentOrderResponse(BaseModel):
     order_id: str
     payment_session_id: str
     order_amount: float
     order_currency: str
+    # Set when the player already has a PAID order for this event: no new
+    # charge was created; registration_id is set when it was completed.
+    already_paid: bool = False
+    registration_id: Optional[str] = None
 
 class PaymentVerificationRequest(BaseModel):
     order_id: str
@@ -208,6 +216,12 @@ class PaymentVerificationResponse(BaseModel):
     order_id: str
     order_amount: float
     transaction_id: Optional[str] = None
+    # Registration completed server-side from the payload saved at order
+    # creation (webhook path or this verify call). False when paid but no
+    # saved payload exists (orders created before this fix) — those need
+    # organizer follow-up, not another payment.
+    registration_completed: bool = False
+    registration_id: Optional[str] = None
 
 # Team Models
 class TeamCreate(BaseModel):

@@ -1,6 +1,10 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, File, UploadFile, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, File, UploadFile, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+import base64
+import hashlib
+import hmac
+import json
 import os
 import logging
 from pathlib import Path
@@ -5003,6 +5007,176 @@ def _normalize_in_phone(raw_phone: str) -> str:
 
 # ============= PAYMENT ROUTES (CASHFREE) =============
 
+# ---------------------------------------------------------------------------
+# Cashfree payment completion — webhook-first registration recovery.
+#
+# The player may never come back from the payment gateway (UPI app-switch is
+# the common case), so registration must NOT depend on the browser return.
+# The form payload is saved on the payment order at create-order time, and
+# the registration is completed server-side from that payload by any of:
+#   * the Cashfree webhook (primary — server-to-server),
+#   * /payments/verify (browser return fast path),
+#   * /payments/reconcile (organizer-triggered safety net).
+# All three funnel through _complete_paid_registration(), which is idempotent
+# (guarded by the payment's registration_completed flag).
+# ---------------------------------------------------------------------------
+
+def _verify_cashfree_webhook_signature(timestamp: str, raw_body: bytes, signature: str, secret: str) -> bool:
+    """Cashfree webhook signature: Base64(HMAC-SHA256(secret, timestamp + raw_body))."""
+    if not timestamp or not signature or not secret:
+        return False
+    expected = base64.b64encode(
+        hmac.new(secret.encode(), timestamp.encode() + raw_body, hashlib.sha256).digest()
+    ).decode()
+    return hmac.compare_digest(expected, signature)
+
+
+def _load_payment(order_id: str):
+    """Load a payment order from the active backend. Returns a dict or None."""
+    if _USE_POSTGRES and _pg:
+        return _pg.get_payment(order_id)
+    if not db:
+        return None
+    doc = db.collection('payment_orders').document(order_id).get()
+    return doc.to_dict() if doc.exists else None
+
+
+def _get_payment_form_data(order_id: str, payment: dict):
+    """Registration payload saved at order creation, or None (orders created
+    before this fix have none — those stay organizer follow-ups)."""
+    if _USE_POSTGRES and _pg:
+        return _pg.get_payment_form_data(order_id)
+    return payment.get('form_data')
+
+
+def _update_payment_status(order_id: str, status_value: str, transaction_id=None, verified_at=None):
+    if _USE_POSTGRES and _pg:
+        fields = {'status': status_value}
+        if transaction_id is not None:
+            fields['transaction_id'] = transaction_id
+        if verified_at is not None:
+            fields['verified_at'] = verified_at
+        _pg.update_payment(order_id, fields)
+    else:
+        fields = {'status': status_value}
+        if transaction_id is not None:
+            fields['transaction_id'] = transaction_id
+        if verified_at is not None:
+            fields['verified_at'] = verified_at.isoformat()
+        db.collection('payment_orders').document(order_id).update(fields)
+
+
+def _find_payment_for_customer(event_id: str, customer_phone: str):
+    """Most recent payment order for a phone number in an event, if any."""
+    phone = _normalize_in_phone(customer_phone)
+    if _USE_POSTGRES and _pg:
+        matches = [p for p in (_pg.list_payments(event_id) or [])
+                   if (p.get('customer_phone') or '') == phone]
+    elif db:
+        docs = db.collection('payment_orders') \
+            .where('event_id', '==', event_id) \
+            .where('customer_phone', '==', phone).stream()
+        matches = [d.to_dict() for d in docs]
+    else:
+        return None
+    # created_at is an ISO string in both backends, so lexicographic order
+    # is chronological order.
+    matches.sort(key=lambda p: p.get('created_at') or '')
+    return matches[-1] if matches else None
+
+
+def _create_registration_for_payment(event_id: str, order_id: str, form_data: dict):
+    """Create the pending_approval registration from a stored form payload.
+    Mirrors register_player_public's record shape. The registration-limit
+    check is deliberately skipped here: payment is already captured, and
+    registrations still need organizer approval, so the organizer remains
+    the gate — silently dropping a paid registration would be worse."""
+    player_data = PublicPlayerRegistration(**{**form_data, 'payment_order_id': order_id})
+    if _USE_POSTGRES and _pg:
+        event_data = _pg.get_event(event_id)
+        if not event_data:
+            raise ValueError("Event not found")
+        registration_id = str(uuid.uuid4())
+        registration_doc = {
+            'id': registration_id,
+            'event_id': event_id,
+            'status': 'pending_approval',
+            'payment_order_id': order_id,
+            **player_data.model_dump(exclude={'payment_order_id'})
+        }
+        if registration_doc.get('stats') and hasattr(registration_doc['stats'], 'model_dump'):
+            registration_doc['stats'] = registration_doc['stats'].model_dump()
+        # Also marks the payment registration_completed + registration_id.
+        _pg.create_registration(registration_doc)
+        return registration_id
+    if not db:
+        raise ValueError("Database not available")
+    event_doc = db.collection('events').document(event_id).get()
+    if not event_doc.exists:
+        raise ValueError("Event not found")
+    registration_id = str(uuid.uuid4())
+    registration_doc = {
+        'id': registration_id,
+        'event_id': event_id,
+        'status': 'pending_approval',
+        'registered_at': datetime.now(timezone.utc).isoformat(),
+        'payment_order_id': order_id,
+        **player_data.model_dump(exclude={'payment_order_id'})
+    }
+    db.collection('player_registrations').document(registration_id).set(registration_doc)
+    db.collection('payment_orders').document(order_id).update({
+        'registration_completed': True,
+        'registration_id': registration_id
+    })
+    return registration_id
+
+
+def _complete_paid_registration(order_id: str):
+    """Idempotently complete the registration for a PAID order.
+    Returns {'completed': bool, 'registration_id': str|None, 'reason': str|None}."""
+    payment = _load_payment(order_id)
+    if not payment:
+        return {'completed': False, 'registration_id': None, 'reason': 'not_found'}
+    if payment.get('status') not in ('PAID', 'SUCCESS'):
+        return {'completed': False, 'registration_id': None, 'reason': 'not_paid'}
+    if payment.get('registration_completed') and payment.get('registration_id'):
+        return {'completed': True, 'registration_id': payment.get('registration_id'),
+                'reason': 'already_completed'}
+    form_data = _get_payment_form_data(order_id, payment)
+    if not form_data:
+        return {'completed': False, 'registration_id': None, 'reason': 'missing_form_data'}
+    try:
+        registration_id = _create_registration_for_payment(
+            payment.get('event_id'), order_id, form_data)
+    except Exception as e:
+        logger.error(f"Failed to complete registration for order {order_id}: {e}")
+        return {'completed': False, 'registration_id': None, 'reason': 'creation_failed'}
+    return {'completed': True, 'registration_id': registration_id, 'reason': None}
+
+
+def _fetch_cashfree_order(order_id: str):
+    """Fetch an order from Cashfree. Returns (order_status, cf_order_id)."""
+    settings_data = _load_cashfree_settings()
+    cashfree_app_id = settings_data.get('cashfree_app_id')
+    cashfree_secret_key = settings_data.get('cashfree_secret_key')
+    cashfree_mode = settings_data.get('cashfree_mode', 'sandbox')
+    if not cashfree_app_id or not cashfree_secret_key:
+        raise HTTPException(status_code=400, detail="Payment gateway credentials not configured")
+    cashfree_url = f"https://{'sandbox' if cashfree_mode == 'sandbox' else 'api'}.cashfree.com/pg/orders/{order_id}"
+    headers = {
+        "accept": "application/json",
+        "x-api-version": "2023-08-01",
+        "x-client-id": cashfree_app_id,
+        "x-client-secret": cashfree_secret_key
+    }
+    response = requests.get(cashfree_url, headers=headers)
+    if response.status_code != 200:
+        logger.error(f"Cashfree verification error: {response.text}")
+        raise HTTPException(status_code=400, detail="Failed to verify payment")
+    data = response.json()
+    return data.get('order_status'), data.get('cf_order_id')
+
+
 @api_router.post("/payments/create-order", response_model=PaymentOrderResponse)
 async def create_payment_order(order_data: PaymentOrderCreate):
     """Create a Cashfree payment order for player registration"""
@@ -5036,7 +5210,27 @@ async def create_payment_order(order_data: PaymentOrderCreate):
         
         if not cashfree_app_id or not cashfree_secret_key:
             raise HTTPException(status_code=400, detail="Payment gateway credentials not configured")
-        
+
+        # Never create a second charge for a player who already paid for
+        # this event (e.g. paid in the UPI app, never returned, then retries).
+        existing = _find_payment_for_customer(order_data.event_id, order_data.customer_phone)
+        if existing and existing.get('status') in ('PAID', 'SUCCESS'):
+            if existing.get('registration_completed'):
+                raise HTTPException(status_code=400, detail="This number is already registered for this event.")
+            result = _complete_paid_registration(existing['order_id'])
+            if result['completed']:
+                return PaymentOrderResponse(
+                    order_id=existing['order_id'],
+                    payment_session_id=existing.get('payment_session_id') or '',
+                    order_amount=existing.get('amount') or int(registration_fee),
+                    order_currency='INR',
+                    already_paid=True,
+                    registration_id=result['registration_id'],
+                )
+            raise HTTPException(
+                status_code=400,
+                detail="Payment already received for this event. Your registration is being confirmed — please contact the organizer if it is not visible.")
+
         # Create unique order ID
         order_id = f"order_{order_data.event_id[:8]}_{str(uuid.uuid4())[:8]}"
         
@@ -5096,7 +5290,17 @@ async def create_payment_order(order_data: PaymentOrderCreate):
             _pg.create_payment(payment_doc)
         else:
             db.collection('payment_orders').document(order_id).set(payment_doc)
-        
+
+        # Save the registration payload on the order so the webhook, verify
+        # and reconcile paths can complete the registration server-side
+        # even if the player never returns from the gateway.
+        if order_data.form_data:
+            if _USE_POSTGRES and _pg:
+                _pg.set_payment_form_data(order_id, order_data.form_data)
+            else:
+                db.collection('payment_orders').document(order_id).update(
+                    {'form_data': order_data.form_data})
+
         return PaymentOrderResponse(
             order_id=order_id,
             payment_session_id=cashfree_response.get('payment_session_id'),
@@ -5125,59 +5329,154 @@ async def verify_payment(verification_data: PaymentVerificationRequest):
                 raise HTTPException(status_code=404, detail="Payment order not found")
             payment_data = payment_doc.to_dict()
         
-        settings_data = _load_cashfree_settings()
-        cashfree_app_id = settings_data.get('cashfree_app_id')
-        cashfree_secret_key = settings_data.get('cashfree_secret_key')
-        cashfree_mode = settings_data.get('cashfree_mode', 'sandbox')
-        
-        if not cashfree_app_id or not cashfree_secret_key:
-            raise HTTPException(status_code=400, detail="Payment gateway credentials not configured")
-        
-        # Verify with Cashfree API based on mode
-        cashfree_url = f"https://{'sandbox' if cashfree_mode == 'sandbox' else 'api'}.cashfree.com/pg/orders/{verification_data.order_id}"
-        
-        headers = {
-            "accept": "application/json",
-            "x-api-version": "2023-08-01",
-            "x-client-id": cashfree_app_id,
-            "x-client-secret": cashfree_secret_key
-        }
-        
-        response = requests.get(cashfree_url, headers=headers)
-        
-        if response.status_code != 200:
-            logger.error(f"Cashfree verification error: {response.text}")
-            raise HTTPException(status_code=400, detail="Failed to verify payment")
-        
-        cashfree_response = response.json()
-        order_status = cashfree_response.get('order_status')
-        transaction_id = cashfree_response.get('cf_order_id')
+        # Verify with Cashfree API
+        order_status, transaction_id = _fetch_cashfree_order(verification_data.order_id)
         verified_at = datetime.now(timezone.utc)
 
-        if _USE_POSTGRES and _pg:
-            _pg.update_payment(verification_data.order_id, {
-                'status': order_status,
-                'verified_at': verified_at,
-                'transaction_id': transaction_id,
-            })
-        else:
-            db.collection('payment_orders').document(verification_data.order_id).update({
-                'status': order_status,
-                'verified_at': verified_at.isoformat(),
-                'transaction_id': transaction_id,
-            })
-        
+        _update_payment_status(verification_data.order_id, order_status,
+                               transaction_id=transaction_id, verified_at=verified_at)
+
+        # Browser return fast path: complete the registration server-side
+        # from the payload saved at order creation (same operation the
+        # webhook performs — idempotent, so both can fire safely).
+        completion = {'completed': False, 'registration_id': None}
+        if order_status in ('PAID', 'SUCCESS'):
+            completion = _complete_paid_registration(verification_data.order_id)
+
         return PaymentVerificationResponse(
             payment_status=order_status,
             order_id=verification_data.order_id,
             order_amount=payment_data.get('amount'),
-            transaction_id=transaction_id
+            transaction_id=transaction_id,
+            registration_completed=completion['completed'],
+            registration_id=completion['registration_id']
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error verifying payment: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/payments/webhook")
+async def cashfree_webhook(request: Request):
+    """Cashfree server-to-server webhook (the notify_url set at order creation).
+    Signature-verified; completes the registration even when the player never
+    returns from the gateway. Always answers 200 for well-formed, verified
+    calls so Cashfree does not retry endlessly; 400 only on bad signature
+    or malformed payload."""
+    raw_body = await request.body()
+    signature = request.headers.get('x-webhook-signature')
+    timestamp = request.headers.get('x-webhook-timestamp')
+    try:
+        settings_data = _load_cashfree_settings()
+    except HTTPException:
+        logger.error("Cashfree webhook: gateway settings missing, cannot verify signature")
+        raise HTTPException(status_code=400, detail="Payment gateway not configured")
+    if not _verify_cashfree_webhook_signature(
+            timestamp, raw_body, signature, settings_data.get('cashfree_secret_key')):
+        logger.warning("Cashfree webhook: invalid signature")
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+    try:
+        payload = json.loads(raw_body.decode('utf-8'))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid webhook payload")
+    data = payload.get('data') or {}
+    order_data = data.get('order') or {}
+    order_id = order_data.get('order_id') or data.get('order_id')
+    order_status = order_data.get('order_status') or data.get('order_status')
+    if not order_id or not order_status:
+        logger.warning(f"Cashfree webhook: missing order id/status (type={payload.get('type')})")
+        return {"status": "OK"}
+    if not _load_payment(order_id):
+        logger.warning(f"Cashfree webhook: unknown order {order_id}")
+        return {"status": "OK"}
+    if order_status in ('PAID', 'SUCCESS'):
+        payment_info = data.get('payment') or {}
+        _update_payment_status(
+            order_id, order_status,
+            transaction_id=payment_info.get('cf_payment_id'),
+            verified_at=datetime.now(timezone.utc))
+        result = _complete_paid_registration(order_id)
+        logger.info(f"Cashfree webhook: order {order_id} {order_status}, "
+                    f"registration completed={result['completed']} reason={result['reason']}")
+    else:
+        _update_payment_status(order_id, order_status)
+        logger.info(f"Cashfree webhook: order {order_id} status updated to {order_status}")
+    return {"status": "OK"}
+
+
+@api_router.post("/auctions/{event_id}/payments/reconcile")
+async def reconcile_event_payments(event_id: str, current_user: dict = Depends(get_current_user)):
+    """Organizer safety net: re-check PENDING orders against Cashfree and
+    complete registrations for any that are actually PAID. Orders younger
+    than 10 minutes are skipped so in-flight checkouts are not disturbed."""
+    try:
+        if _USE_POSTGRES and _pg:
+            event_data = _pg.get_event(event_id)
+            if not event_data:
+                raise HTTPException(status_code=404, detail="Event not found")
+            user = _pg.get_user(current_user['uid'])
+            role = (user or {}).get('role') or current_user.get('role')
+            if role != 'super_admin' and event_data.get('created_by') != current_user.get('uid'):
+                raise HTTPException(status_code=403, detail="Not authorized to reconcile payments for this event")
+            payments_raw = _pg.list_payments(event_id)
+        else:
+            if not db:
+                raise HTTPException(status_code=503, detail="Database not available")
+            event_doc = db.collection('events').document(event_id).get()
+            if not event_doc.exists:
+                raise HTTPException(status_code=404, detail="Event not found")
+            event_data = event_doc.to_dict()
+            if current_user.get('role') != 'super_admin' and event_data.get('created_by') != current_user.get('uid'):
+                raise HTTPException(status_code=403, detail="Not authorized to reconcile payments for this event")
+            payments_raw = [d.to_dict() for d in
+                            db.collection('payment_orders').where('event_id', '==', event_id).stream()]
+
+        grace_cutoff = datetime.now(timezone.utc).timestamp() - 10 * 60
+        summary = {'event_id': event_id, 'checked': 0, 'confirmed': [],
+                   'still_pending': 0, 'failed': [], 'needs_followup': [], 'errors': []}
+        for payment in payments_raw:
+            if payment.get('status') != 'PENDING':
+                continue
+            created_at = payment.get('created_at')
+            try:
+                created_ts = datetime.fromisoformat(
+                    str(created_at).replace('Z', '+00:00')).timestamp()
+            except Exception:
+                created_ts = 0  # unparseable: check it rather than skip it
+            if created_ts > grace_cutoff:
+                continue
+            order_id = payment.get('order_id')
+            summary['checked'] += 1
+            try:
+                order_status, transaction_id = _fetch_cashfree_order(order_id)
+            except Exception as e:
+                logger.error(f"Reconcile: Cashfree lookup failed for {order_id}: {e}")
+                summary['errors'].append(order_id)
+                continue
+            if order_status in ('PAID', 'SUCCESS'):
+                _update_payment_status(order_id, order_status,
+                                       transaction_id=transaction_id,
+                                       verified_at=datetime.now(timezone.utc))
+                result = _complete_paid_registration(order_id)
+                if result['completed']:
+                    summary['confirmed'].append(order_id)
+                else:
+                    # Paid at Cashfree but no saved payload (pre-fix order) or
+                    # a creation failure: organizer follow-up, never a re-charge.
+                    summary['needs_followup'].append(order_id)
+            elif order_status in ('FAILED', 'CANCELLED', 'EXPIRED'):
+                _update_payment_status(order_id, order_status)
+                summary['failed'].append(order_id)
+            else:
+                summary['still_pending'] += 1
+        return summary
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reconciling payments: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 @api_router.get("/auctions/{event_id}/payments")
 async def get_event_payments(event_id: str, current_user: dict = Depends(get_current_user)):
