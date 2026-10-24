@@ -16,6 +16,7 @@ const EventPayments = () => {
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
   const [paymentData, setPaymentData] = useState(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (token && eventId) {
@@ -37,6 +38,31 @@ const EventPayments = () => {
       toast.error('Failed to load payment data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Safety net for payments completed at the gateway but never returned to
+  // the site: re-check PENDING orders against Cashfree and complete any
+  // registrations that are actually paid.
+  const syncPayments = async () => {
+    try {
+      setSyncing(true);
+      const response = await axios.post(`${API}/auctions/${eventId}/payments/reconcile`, {}, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const s = response.data;
+      toast.success(`Sync done: ${s.confirmed.length} registration(s) completed, ${s.still_pending} still pending.`);
+      if (s.needs_followup.length > 0) {
+        toast.warning(`${s.needs_followup.length} paid payment(s) need follow-up (no saved registration details — contact the player, do not ask them to pay again).`);
+      }
+      fetchPayments();
+    } catch (error) {
+      console.error('Error syncing payments:', error);
+      toast.error(error.response?.data?.detail || 'Sync failed. Please try again.');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -117,12 +143,23 @@ const EventPayments = () => {
           title="Payment tracking"
           description={event_name || 'Registration payments for this auction'}
           actions={
-            <Link to="/admin/events">
-              <Button variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/15">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Auctions
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="border-white/20 bg-white/10 text-white hover:bg-white/15"
+                onClick={syncPayments}
+                disabled={syncing}
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                {syncing ? 'Syncing...' : 'Sync payments'}
               </Button>
-            </Link>
+              <Link to="/admin/events">
+                <Button variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/15">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Auctions
+                </Button>
+              </Link>
+            </div>
           }
         />
 

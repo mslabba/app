@@ -1124,6 +1124,29 @@ def update_payment(order_id: str, fields: dict[str, Any]) -> dict[str, Any]:
         return payment_to_dict(p)
 
 
+def get_payment_form_data(order_id: str) -> Optional[dict[str, Any]]:
+    """Registration form payload saved at order creation (pending-registration
+    recovery). Stored under raw_firestore['form_data'] — that JSONB column is
+    otherwise unused by the app, so no schema migration is needed."""
+    with _session() as s:
+        p = s.get(PaymentOrder, order_id)
+        if not p or not isinstance(p.raw_firestore, dict):
+            return None
+        data = p.raw_firestore.get("form_data")
+        return data if isinstance(data, dict) else None
+
+
+def set_payment_form_data(order_id: str, form_data: dict[str, Any]) -> None:
+    with _session() as s:
+        p = s.get(PaymentOrder, order_id)
+        if not p:
+            raise ValueError("Payment not found")
+        raw = dict(p.raw_firestore) if isinstance(p.raw_firestore, dict) else {}
+        raw["form_data"] = form_data
+        p.raw_firestore = raw
+        s.commit()
+
+
 def list_payments(event_id: str) -> list[dict[str, Any]]:
     with _session() as s:
         rows = s.scalars(

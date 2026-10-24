@@ -118,23 +118,9 @@ const PublicPlayerRegistration = () => {
     if (paymentStatus === 'success' && orderId) {
       console.log('Detected payment return. Order ID:', orderId);
       setLoading(true); // Show loading overlay immediately
-
-      // Restore form data from sessionStorage
-      const savedFormData = sessionStorage.getItem(`registration_form_${eventId}`);
-      if (savedFormData) {
-        const parsedData = JSON.parse(savedFormData);
-        setFormData(parsedData);
-        console.log('Restored form data:', parsedData);
-
-        // Auto-complete registration with the restored form data
-        setTimeout(() => {
-          verifyAndCompleteRegistration(orderId, parsedData);
-        }, 500);
-      } else {
-        console.error('No saved form data found');
-        toast.error('Registration data not found. Please fill the form again.');
-        setLoading(false);
-      }
+      // The server holds the form payload saved at order creation, so the
+      // return no longer depends on this browser's session storage.
+      verifyAndCompleteRegistration(orderId);
     }
   }, [eventId]);
 
@@ -366,18 +352,28 @@ const PublicPlayerRegistration = () => {
         (formData.email || '').trim() ||
         `player+${(formData.contact_number || 'guest').replace(/\D/g, '')}@thepowerauction.com`;
 
-      // Save form data to sessionStorage before redirecting to payment
-      sessionStorage.setItem(`registration_form_${eventId}`, JSON.stringify(formData));
-      console.log('Saved form data to sessionStorage');
-
-      // Create payment order
+      // Send the full registration payload with the order, so the server can
+      // complete the registration even if the player never returns from the
+      // gateway (UPI app-switch is the common case).
+      const registrationPayload = buildRegistrationPayload(formData, cfg);
       const orderResponse = await axios.post(`${API}/payments/create-order`, {
         event_id: eventId,
         customer_name: formData.name.trim(),
         customer_email: emailForPayment,
         customer_phone: formData.contact_number.trim(),
-        amount: event.payment_settings.registration_fee
+        amount: event.payment_settings.registration_fee,
+        form_data: registrationPayload
       });
+
+      // Player already paid for this event (paid, never returned, retried):
+      // the server completed the registration from the saved payload.
+      if (orderResponse.data.already_paid) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        toast.success('Registration completed successfully!');
+        setSubmitted(true);
+        setPaymentLoading(false);
+        return;
+      }
 
       const { order_id, payment_session_id } = orderResponse.data;
       setPaymentOrderId(order_id);
@@ -416,43 +412,42 @@ const PublicPlayerRegistration = () => {
     }
   };
 
-  const verifyAndCompleteRegistration = async (orderId, savedFormData = null) => {
+  // The server completes the registration from the payload saved at order
+  // creation (verify does it, the webhook does it too) — the return no
+  // longer posts the registration from this browser's state.
+  const verifyAndCompleteRegistration = async (orderId) => {
     try {
       setLoading(true);
 
-      // Use saved form data if provided, otherwise use current state
-      const dataToUse = savedFormData || formData;
-      console.log('Using form data for registration:', dataToUse);
-
-      // Verify payment
+      // Verify payment (server also completes the registration from the
+      // saved payload when the payment is PAID).
       const verifyResponse = await axios.post(`${API}/payments/verify`, {
         order_id: orderId,
         event_id: eventId
       });
 
-      if (verifyResponse.data.payment_status !== 'PAID' && verifyResponse.data.payment_status !== 'SUCCESS') {
-        toast.error('Payment verification failed. Please contact support.');
-        setLoading(false);
-        return;
-      }
-
-      const cfg = formConfig || resolveRegistrationFormConfig(event);
-      const registrationData = {
-        ...buildRegistrationPayload(dataToUse, cfg),
-        payment_order_id: orderId,
-      };
-
-      console.log('Sending registration request:', registrationData);
-      await axios.post(`${API}/auctions/${eventId}/register-player`, registrationData);
-
-      // Clear saved form data
-      sessionStorage.removeItem(`registration_form_${eventId}`);
+      const { payment_status, registration_completed } = verifyResponse.data;
 
       // Clear URL parameters
       window.history.replaceState({}, document.title, window.location.pathname);
 
-      toast.success('Registration completed successfully!');
-      setSubmitted(true);
+      if (payment_status !== 'PAID' && payment_status !== 'SUCCESS') {
+        // Payment still processing at the gateway — the webhook (or a later
+        // organizer sync) will complete the registration automatically.
+        toast.info('Payment is still processing. Your registration will be confirmed automatically once the payment completes.');
+        setLoading(false);
+        return;
+      }
+
+      if (registration_completed) {
+        toast.success('Registration completed successfully!');
+        setSubmitted(true);
+      } else {
+        // Paid, but the server holds no saved form payload (orders created
+        // before this fix). No re-payment: the organizer completes it from
+        // the payment record.
+        toast.info('Payment received. Please contact the organizer to complete your registration.');
+      }
     } catch (error) {
       console.error('Registration failed:', error);
       toast.error(error.response?.data?.detail || 'Registration failed. Please try again.');
