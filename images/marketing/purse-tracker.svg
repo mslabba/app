@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img">
+  <rect width="1600" height="900" fill="#0a0809"/>
+  <ellipse cx="800" cy="120" rx="520" ry="180" fill="#e11d2e" opacity="0.10"/>
+  <text x="800" y="80" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="40" font-weight="700" fill="#ffffff">Team purse tracking</text>
+  <text x="800" y="130" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="24" fill="#c4b4b7">spent vs remaining, live for the whole room</text>
+  <!-- header row -->
+  <text x="220" y="220" font-family="Inter,system-ui,sans-serif" font-size="24" font-weight="600" fill="#c4b4b7">TEAM</text>
+  <text x="640" y="220" font-family="Inter,system-ui,sans-serif" font-size="24" font-weight="600" fill="#c4b4b7">PURSE USED</text>
+  <text x="1290" y="220" font-family="Inter,system-ui,sans-serif" font-size="24" font-weight="600" fill="#c4b4b7">LEFT</text>
+  <!-- team rows -->
+  <g font-family="Inter,system-ui,sans-serif">
+    <text x="220" y="300" font-size="30" font-weight="600" fill="#ffffff">Falcons</text>
+    <rect x="640" y="272" width="560" height="34" rx="17" fill="#1c1518"/>
+    <rect x="640" y="272" width="392" height="34" rx="17" fill="#e11d2e"/>
+    <text x="1290" y="300" font-size="28" fill="#e8b923">₹15,000</text>
+    <text x="220" y="390" font-size="30" font-weight="600" fill="#ffffff">Titans</text>
+    <rect x="640" y="362" width="560" height="34" rx="17" fill="#1c1518"/>
+    <rect x="640" y="362" width="280" height="34" rx="17" fill="#e11d2e"/>
+    <text x="1290" y="390" font-size="28" fill="#e8b923">₹25,000</text>
+    <text x="220" y="480" font-size="30" font-weight="600" fill="#ffffff">Warriors</text>
+    <rect x="640" y="452" width="560" height="34" rx="17" fill="#1c1518"/>
+    <rect x="640" y="452" width="476" height="34" rx="17" fill="#e11d2e"/>
+    <text x="1290" y="480" font-size="28" fill="#e8b923">₹7,500</text>
+    <text x="220" y="570" font-size="30" font-weight="600" fill="#ffffff">Kings</text>
+    <rect x="640" y="542" width="560" height="34" rx="17" fill="#1c1518"/>
+    <rect x="640" y="542" width="168" height="34" rx="17" fill="#e11d2e"/>
+    <text x="1290" y="570" font-size="28" fill="#e8b923">₹35,000</text>
+  </g>
+  <line x1="180" y1="630" x2="1420" y2="630" stroke="#e8b923" stroke-width="2" opacity="0.4"/>
+  <text x="220" y="690" font-family="Inter,system-ui,sans-serif" font-size="26" fill="#c4b4b7">Squad</text>
+  <text x="640" y="690" font-family="Inter,system-ui,sans-serif" font-size="26" fill="#ffffff">9/12 · 7/12 · 11/12 · 5/12 players</text>
+  <text x="800" y="800" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="24" fill="#c4b4b7">Every bid updates purses and squads instantly — visible to owners and the room.</text>
+</svg>
