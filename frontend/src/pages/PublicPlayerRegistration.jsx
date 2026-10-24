@@ -138,6 +138,15 @@ const PublicPlayerRegistration = () => {
     }
   }, [eventId]);
 
+  // Browser tab title shows the event name. (Share previews are a separate
+  // mechanism — see scripts/generate-event-pages.js — because preview
+  // crawlers do not run JavaScript.)
+  useEffect(() => {
+    if (event?.name) {
+      document.title = `${event.name} — Player Registration | PowerAuction`;
+    }
+  }, [event]);
+
   const testConnectivity = async () => {
     try {
       console.log('Testing basic connectivity...');

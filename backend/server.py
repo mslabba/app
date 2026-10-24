@@ -882,6 +882,31 @@ async def get_event_categories(event_id: str):
         logger.error(f"Error fetching categories for event {event_id}: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
+@api_router.get("/public/auctions")
+async def get_public_auctions():
+    """Public share data for all auctions: only the fields link previews
+    need (id, name, description, banner/logo). No auth — the same data is
+    already visible on the public registration pages. Consumed by the
+    frontend's generate-event-pages build step."""
+    try:
+        if _USE_POSTGRES and _pg:
+            events = _pg.list_all_events()
+        else:
+            if not db:
+                return []
+            events = [d.to_dict() for d in db.collection('events').stream()]
+        return [{
+            'id': e.get('id'),
+            'name': e.get('name'),
+            'description': e.get('description'),
+            'banner_url': e.get('banner_url'),
+            'logo_url': e.get('logo_url'),
+        } for e in events if e.get('id') and e.get('name')]
+    except Exception as e:
+        logger.error(f"Error listing public auctions: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @api_router.get("/auctions/{event_id}/categories", response_model=List[Category])
 async def get_categories_for_auction(event_id: str):
     """Get categories for an auction (alternative endpoint)"""

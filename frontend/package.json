@@ -64,6 +64,8 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
+    "postbuild": "node scripts/generate-event-pages.js",
+    "generate-event-pages": "node scripts/generate-event-pages.js",
     "test": "craco test",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build"

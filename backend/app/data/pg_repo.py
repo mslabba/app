@@ -139,6 +139,13 @@ def list_events_for_user(uid: str, role: str) -> list[dict[str, Any]]:
         return [event_to_dict(e) for e in s.scalars(q).all()]
 
 
+def list_all_events() -> list[dict[str, Any]]:
+    """All events, for public share pages (no per-user filtering)."""
+    with _session() as s:
+        q = select(Event).order_by(Event.created_at.desc().nullslast())
+        return [event_to_dict(e) for e in s.scalars(q).all()]
+
+
 def get_event(event_id: str) -> Optional[dict[str, Any]]:
     with _session() as s:
         e = s.get(Event, event_id)
