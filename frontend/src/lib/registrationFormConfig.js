@@ -582,3 +582,66 @@ export function playerToAdminFormValues(player, config) {
     },
   };
 }
+
+/* ---------- Display helpers for admin views / exports ---------- */
+
+const PLAYING_KEYWORDS = /\b(role|position|bat|batting|batter|batsman|bowl|bowling|bowler|keeper|wicket|style|hand|handed|playing|play|team|club|jersey|specialty|speciality|all[-\s]?rounder|foot|striker|defender|goalkeeper)/i;
+
+export function humanizeFieldKey(key) {
+  return String(key || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Map of field key/id -> field definition from an event's registration form config. */
+export function fieldDefinitionMap(event) {
+  const map = new Map();
+  const fields = event?.registration_form_config?.fields || [];
+  fields.forEach((f) => {
+    if (f?.key) map.set(f.key, f);
+    if (f?.id) map.set(f.id, f);
+  });
+  return map;
+}
+
+export function fieldLabel(defs, key) {
+  const def = defs?.get(key);
+  return (def?.label && String(def.label).trim()) || humanizeFieldKey(key);
+}
+
+export function fieldDisplayValue(defs, key, val) {
+  if (val === undefined || val === null) return '';
+  const def = defs?.get(key);
+  if (def?.type === 'select' && Array.isArray(def.options)) {
+    const opt = def.options.find((o) =>
+      o && typeof o === 'object' ? String(o.value) === String(val) : String(o) === String(val)
+    );
+    if (opt && typeof opt === 'object') return String(opt.label ?? opt.value);
+  }
+  return String(val);
+}
+
+export function isPlayingField(defs, key) {
+  const def = defs?.get(key);
+  if (def?.section) return /play/i.test(def.section);
+  if (def?.category) return /play/i.test(def.category);
+  return PLAYING_KEYWORDS.test(`${def?.label || ''} ${key}`);
+}
+
+/** Returns [{key,label,value,playing}] for a registration's extra_fields, in form-config order. */
+export function describeExtraFields(event, extraFields) {
+  if (!extraFields || typeof extraFields !== 'object') return [];
+  const defs = fieldDefinitionMap(event);
+  const order = (event?.registration_form_config?.fields || []).map((f) => f.key);
+  const keys = Object.keys(extraFields).sort((a, b) => {
+    const ia = order.indexOf(a);
+    const ib = order.indexOf(b);
+    return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib);
+  });
+  return keys.map((key) => ({
+    key,
+    label: fieldLabel(defs, key),
+    value: fieldDisplayValue(defs, key, extraFields[key]),
+    playing: isPlayingField(defs, key),
+  }));
+}

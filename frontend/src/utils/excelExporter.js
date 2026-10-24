@@ -1,3 +1,4 @@
+import { describeExtraFields } from '@/lib/registrationFormConfig';
 import * as XLSX from 'xlsx';
 
 /**
@@ -93,11 +94,8 @@ export const exportRegistrationsToExcel = (registrations, players, categories, e
 
     // Custom / extra form fields (date of birth, state, organizer-defined, etc.)
     if (item.extra_fields && typeof item.extra_fields === 'object') {
-      Object.entries(item.extra_fields).forEach(([key, val]) => {
-        const col = key
-          .replace(/_/g, ' ')
-          .replace(/\b\w/g, (c) => c.toUpperCase());
-        row[col] = val == null ? '' : String(val);
+      describeExtraFields(event, item.extra_fields).forEach(({ label, value }) => {
+        row[label] = value;
       });
     }
 
@@ -194,11 +192,8 @@ export const exportAllToExcel = (registrations, players, categories, event) => {
     row['ID Proof URL'] = item.identity_proof_url || '';
 
     if (item.extra_fields && typeof item.extra_fields === 'object') {
-      Object.entries(item.extra_fields).forEach(([key, val]) => {
-        const col = key
-          .replace(/_/g, ' ')
-          .replace(/\b\w/g, (c) => c.toUpperCase());
-        row[col] = val == null ? '' : String(val);
+      describeExtraFields(event, item.extra_fields).forEach(({ label, value }) => {
+        row[label] = value;
       });
     }
 

@@ -31,6 +31,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import { generateRegistrationsPDF } from '@/utils/pdfGenerator';
 import { convertGoogleDriveUrl } from '@/utils/imageUtils';
+import { describeExtraFields } from '@/lib/registrationFormConfig';
 import { exportRegistrationsToExcel, exportAllToExcel } from '@/utils/excelExporter';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -573,13 +574,11 @@ const PlayerRegistrationManagement = () => {
                           {registration.contact_number && <div>📱 {registration.contact_number}</div>}
                           {registration.district && <div>📍 {registration.district}</div>}
                           {registration.previous_team && <div>🏆 {registration.previous_team}</div>}
-                          {registration.extra_fields &&
-                            Object.entries(registration.extra_fields)
+                          {describeExtraFields(event, registration.extra_fields)
                               .slice(0, 4)
-                              .map(([key, val]) => (
-                                <div key={key} className="truncate text-gray-600">
-                                  <span className="capitalize">{key.replace(/_/g, ' ')}</span>
-                                  : {String(val ?? '')}
+                              .map((f) => (
+                                <div key={f.key} className="truncate text-gray-600">
+                                  <span>{f.label}</span>: {f.value}
                                 </div>
                               ))}
                           {registration.extra_fields &&
@@ -687,13 +686,11 @@ const PlayerRegistrationManagement = () => {
                           {registration.contact_number && <div>📱 {registration.contact_number}</div>}
                           {registration.district && <div>📍 {registration.district}</div>}
                           {registration.previous_team && <div>🏆 {registration.previous_team}</div>}
-                          {registration.extra_fields &&
-                            Object.entries(registration.extra_fields)
+                          {describeExtraFields(event, registration.extra_fields)
                               .slice(0, 4)
-                              .map(([key, val]) => (
-                                <div key={key} className="truncate text-white/70">
-                                  <span className="capitalize">{key.replace(/_/g, ' ')}</span>
-                                  : {String(val ?? '')}
+                              .map((f) => (
+                                <div key={f.key} className="truncate text-white/70">
+                                  <span>{f.label}</span>: {f.value}
                                 </div>
                               ))}
                         </div>
@@ -1134,8 +1131,16 @@ const PlayerRegistrationManagement = () => {
                   <div>
                     <Label className="font-semibold">Playing Information</Label>
                     <div className="mt-2 space-y-1">
+                      {viewingRegistration.position && <p>🎯 {viewingRegistration.position}</p>}
                       {viewingRegistration.specialty && <p>⚡ {viewingRegistration.specialty}</p>}
                       {viewingRegistration.previous_team && <p>🏆 {viewingRegistration.previous_team}</p>}
+                      {describeExtraFields(event, viewingRegistration.extra_fields)
+                        .filter((f) => f.playing)
+                        .map((f) => (
+                          <p key={f.key}>
+                            <span className="font-medium">{f.label}:</span> {f.value}
+                          </p>
+                        ))}
                     </div>
                   </div>
                 </div>
@@ -1206,14 +1211,15 @@ const PlayerRegistrationManagement = () => {
                   </div>
                 )}
 
-                {viewingRegistration.extra_fields &&
-                  Object.keys(viewingRegistration.extra_fields).length > 0 && (
+                {describeExtraFields(event, viewingRegistration.extra_fields).some((f) => !f.playing) && (
                   <div>
                     <Label className="font-semibold">Additional fields</Label>
                     <div className="mt-2 space-y-1 text-sm text-gray-700">
-                      {Object.entries(viewingRegistration.extra_fields).map(([key, val]) => (
+                      {describeExtraFields(event, viewingRegistration.extra_fields)
+                        .filter((f) => !f.playing)
+                        .map(({ key, label, value: val }) => (
                         <p key={key}>
-                          <span className="font-medium capitalize">{key.replace(/_/g, ' ')}:</span>{' '}
+                          <span className="font-medium">{label}:</span>{' '}
                           {typeof val === 'string' &&
                           (val.startsWith('http://') || val.startsWith('https://')) ? (
                             <a
