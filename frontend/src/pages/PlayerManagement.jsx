@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Users, Edit, Trash2, User, Unlock, RotateCcw, Search, Filter, Download } from 'lucide-react';
+import { reauctionPlayer, reauctionPlayers } from '@/lib/reauction';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
@@ -206,6 +207,27 @@ const PlayerManagement = () => {
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to make player available');
     }
+  };
+
+  const handleReauction = async (player) => {
+    if (!confirm(`Put ${player.name} back into the auction? They will appear in the available pool again.`)) return;
+    try {
+      await reauctionPlayer(player.id, token);
+      toast.success(`${player.name} is back in the auction pool`);
+      fetchPlayers();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to re-auction player');
+    }
+  };
+
+  const handleReauctionAllUnsold = async () => {
+    const unsold = players.filter((p) => p.status === 'unsold');
+    if (!unsold.length) return;
+    if (!confirm(`Put all ${unsold.length} unsold players back into the auction pool?`)) return;
+    const { ok, failed } = await reauctionPlayers(unsold, token);
+    if (ok) toast.success(`${ok} unsold player${ok === 1 ? '' : 's'} back in the auction pool`);
+    if (failed.length) toast.error(`${failed.length} could not be updated: ${failed.map((p) => p.name).join(', ')}`);
+    fetchPlayers();
   };
 
   const resetForm = () => {
@@ -875,6 +897,18 @@ const PlayerManagement = () => {
                   <span className="w-2 h-2 rounded-full bg-red-400 mr-1"></span>
                   Unsold: {filteredPlayers.filter(p => p.status === 'unsold').length}
                 </div>
+                {players.some((p) => p.status === 'unsold') && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 bg-green-500/20 border-green-400/40 text-green-300 hover:bg-green-500/30"
+                    onClick={handleReauctionAllUnsold}
+                    title="Put every unsold player back into the auction pool"
+                  >
+                    <RotateCcw className="w-3 h-3 mr-1" />
+                    Re-auction all unsold
+                  </Button>
+                )}
               </div>
             </CardTitle>
           </CardHeader>
@@ -1023,6 +1057,28 @@ const PlayerManagement = () => {
                               >
                                 <RotateCcw className="w-3 h-3 mr-1" />
                                 Make Available
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Unsold — can be put back into the auction */}
+                        {player.status === 'unsold' && (
+                          <div className="mt-3 p-3 bg-red-500/15 border border-red-400/30 rounded-lg">
+                            <div className="font-semibold text-red-200 mb-2">Unsold</div>
+                            <div className="text-white/75 text-xs">
+                              No team bought this player. Put them back into the pool to auction again.
+                            </div>
+                            <div className="mt-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="bg-green-500/20 border-green-400/40 text-green-300 hover:bg-green-500/30"
+                                onClick={() => handleReauction(player)}
+                                title="Put player back into the auction pool"
+                              >
+                                <RotateCcw className="w-3 h-3 mr-1" />
+                                Re-auction Player
                               </Button>
                             </div>
                           </div>
