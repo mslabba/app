@@ -248,6 +248,29 @@ const AuctionControl = () => {
       return true;
     }
   });
+  // Auto-start the countdown when a new player goes on the block (wheel or manual). Default OFF.
+  const autoStartKey = `pa_timer_autostart_${eventId}`;
+  const [autoStartTimer, setAutoStartTimer] = useState(() => {
+    try {
+      return localStorage.getItem(`pa_timer_autostart_${eventId}`) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const autoStartRef = useRef(autoStartTimer);
+  autoStartRef.current = autoStartTimer;
+  const toggleAutoStart = () => {
+    setAutoStartTimer((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(autoStartKey, String(next));
+      } catch {
+        /* ignore */
+      }
+      toast.message(next ? 'Timer will auto-start for each new player' : 'Timer starts only when you click Start timer');
+      return next;
+    });
+  };
   const [wheelSession, setWheelSession] = useState(null); // { winnerId, players, key }
   const wheelSessionRef = useRef(null);
 
@@ -418,6 +441,10 @@ const AuctionControl = () => {
     return () => clearInterval(id);
   }, [eventId, token, authLoading, currentUser]);
 
+  const timerPubRef = useRef({ active: null, seconds: null });
+  const bootLoadingRef = useRef(true);
+  bootLoadingRef.current = bootLoading;
+
   // When the on-block player changes, seed price and reset the local timer.
   const onBlockPlayerId = currentPlayer?.id;
   const lastSeededPlayerRef = useRef(null);
@@ -433,12 +460,24 @@ const AuctionControl = () => {
         ? String(auctionState.current_bid)
         : String(currentPlayer?.base_price || '');
     setSalePrice(seedPrice);
+    const start = !bootLoadingRef.current && autoStartRef.current;
     setTimerSeconds(defaultTimer);
-    setTimerActive(false);
+    setTimerActive(start);
+    // Always publish the fresh timer for a new player so the display never
+    // runs its own countdown (it waits for this shared state).
+    if (!bootLoadingRef.current && eventId) {
+      timerPubRef.current = { active: start, seconds: defaultTimer };
+      axios
+        .post(
+          `${API}/auction/timer/${eventId}`,
+          { running: start, remaining: defaultTimer, duration: defaultTimer },
+          { headers: authHeaders() }
+        )
+        .catch((err) => console.warn('Timer sync failed', err?.response?.status || err));
+    }
   }, [onBlockPlayerId, auctionState?.current_bid, currentPlayer?.base_price, defaultTimer]);
 
   // Publish the countdown (running / paused / reset) so the display board mirrors it.
-  const timerPubRef = useRef({ active: null, seconds: null });
   useEffect(() => {
     if (!eventId || bootLoading) return;
     const prev = timerPubRef.current;
@@ -1023,6 +1062,20 @@ const AuctionControl = () => {
             >
               Reset
             </Button>
+            <button
+              type="button"
+              onClick={toggleAutoStart}
+              aria-pressed={autoStartTimer}
+              title="Start the countdown automatically when a new player goes on the block (after the wheel or manual pick)"
+              className={cn(
+                'rounded-lg border-2 px-2.5 py-1 text-[11px] font-bold transition',
+                autoStartTimer
+                  ? 'border-emerald-400/70 bg-emerald-500/20 text-emerald-200'
+                  : 'border-white/15 bg-white/5 text-white/55'
+              )}
+            >
+              Auto-start: {autoStartTimer ? 'ON' : 'OFF'}
+            </button>
             {(auctionState?.status === 'not_started' || auctionState?.status === 'paused') && (
               <Button
                 size="sm"

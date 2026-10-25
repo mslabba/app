@@ -60,10 +60,15 @@ export function useBoardCountdown(state) {
   const startedAt = state?.timer_started_at;
   const tUpdated = timer?.updated_at ? new Date(timer.updated_at).getTime() : NaN;
   const sStarted = startedAt ? new Date(startedAt).getTime() : NaN;
-  const useTimer = timer && !Number.isNaN(tUpdated) && (Number.isNaN(sStarted) || tUpdated >= sStarted);
+  const hasMeta = Boolean(timer) && !Number.isNaN(tUpdated);
+  // Control has published newer state (pause/start/reset) than the last server event
+  const useTimer = hasMeta && (Number.isNaN(sStarted) || tUpdated >= sStarted);
+  // Control is publishing but hasn't caught up with a new player/bid yet:
+  // hold at full duration rather than running an independent countdown.
+  const waiting = hasMeta && !useTimer;
 
   const fallback = useAuctionCountdown(
-    useTimer ? null : startedAt,
+    hasMeta ? null : startedAt,
     state?.timer_duration || 60,
     null
   );
@@ -98,5 +103,9 @@ export function useBoardCountdown(state) {
   }, [useTimer, running, remaining, anchor]);
 
   if (useTimer) return { secondsLeft: left, paused: !running && remaining > 0, hasTimer: true };
+  if (waiting) {
+    const full = Number(timer.duration) || Number(state?.timer_duration) || 60;
+    return { secondsLeft: full, paused: false, hasTimer: true };
+  }
   return { secondsLeft: fallback, paused: false, hasTimer: !!startedAt };
 }
