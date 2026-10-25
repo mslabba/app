@@ -13,9 +13,10 @@ export default function BroadcastShell({
   footerRight,
 }) {
   const list = (sponsors || []).filter((s) => s && (s.logo_url || s.name));
-  // Prefer logos first, show up to 8 in strip
-  const withLogo = list.filter((s) => s.logo_url);
-  const strip = (withLogo.length ? withLogo : list).slice(0, 8);
+  // Repeat so the ticker track is always wider than the screen, then duplicate for a seamless loop
+  const reps = list.length ? Math.max(1, Math.ceil(8 / list.length)) : 0;
+  const base = Array.from({ length: reps }, () => list).flat();
+  const tickerSeconds = Math.max(20, base.length * 4);
 
   return (
     <div
@@ -39,9 +40,11 @@ export default function BroadcastShell({
               className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-white/20 sm:h-11 sm:w-11"
             />
           ) : (
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-600/30 text-sm font-black sm:h-11 sm:w-11 sm:text-base">
-              PA
-            </div>
+            <img
+              src="/images/sports/logo-final.png"
+              alt="PowerAuction"
+              className="h-9 w-9 shrink-0 rounded-lg bg-white/95 object-contain p-1 ring-1 ring-white/20 sm:h-11 sm:w-11"
+            />
           )}
           <div className="min-w-0">
             <p className="truncate text-base font-bold tracking-tight sm:text-xl">
@@ -53,38 +56,46 @@ export default function BroadcastShell({
           </div>
         </div>
 
-        {strip.length > 0 && (
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">
-            <span className="hidden shrink-0 text-[9px] font-semibold uppercase tracking-widest text-white/35 sm:inline">
-              Sponsors
-            </span>
-            <div className="flex max-w-[55vw] items-center justify-end gap-2 overflow-hidden sm:max-w-none sm:gap-3">
-              {strip.map((s) =>
-                s.logo_url ? (
-                  <div
-                    key={s.id || s.name}
-                    className="flex h-8 max-w-[5.5rem] items-center justify-center rounded-md bg-white/95 px-1.5 py-0.5 sm:h-9 sm:max-w-[7rem]"
-                    title={s.name || 'Sponsor'}
-                  >
+        <img
+          src="/images/sports/logo-final.png"
+          alt="PowerAuction"
+          title="PowerAuction"
+          className="h-7 w-auto shrink-0 opacity-90 sm:h-8"
+        />
+      </header>
+
+      {list.length > 0 && (
+        <div className="sponsor-ticker relative z-10 shrink-0 overflow-hidden border-b border-white/10 bg-black/30 py-1.5 sm:py-2">
+          <div
+            className="sponsor-ticker-track flex w-max items-center"
+            style={{ animationDuration: `${tickerSeconds}s` }}
+          >
+            {[0, 1].map((copy) =>
+              base.map((s, i) => (
+                <div
+                  key={`${copy}-${i}-${s.id || s.name}`}
+                  aria-hidden={copy === 1 ? true : undefined}
+                  className="mr-3 flex h-10 shrink-0 items-center gap-2 rounded-lg bg-white/95 sm:mr-4 px-3 shadow-md ring-1 ring-white/30 sm:h-12"
+                  title={s.name || 'Sponsor'}
+                >
+                  {s.logo_url && (
                     <img
                       src={s.logo_url}
                       alt={s.name || 'Sponsor'}
-                      className="max-h-full max-w-full object-contain"
+                      className="h-7 max-w-[7rem] object-contain sm:h-9 sm:max-w-[9rem]"
                     />
-                  </div>
-                ) : (
-                  <span
-                    key={s.id || s.name}
-                    className="rounded bg-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70"
-                  >
-                    {s.name}
-                  </span>
-                )
-              )}
-            </div>
+                  )}
+                  {(!s.logo_url || s.name) && (
+                    <span className="whitespace-nowrap text-xs font-bold uppercase tracking-wide text-gray-800 sm:text-sm">
+                      {s.name}
+                    </span>
+                  )}
+                </div>
+              ))
+            )}
           </div>
-        )}
-      </header>
+        </div>
+      )}
 
       {/* Main: fills remaining height, no page scroll */}
       <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-2 sm:px-6 sm:py-3 lg:px-8">
@@ -94,20 +105,6 @@ export default function BroadcastShell({
       {/* Compact footer; overflow sponsors can sit here if many */}
       <footer className="relative z-10 flex shrink-0 items-center justify-between gap-2 border-t border-white/10 px-4 py-1.5 text-[10px] text-white/40 sm:px-6">
         <span className="truncate">{footerLeft || 'PowerAuction'}</span>
-        {strip.length > 0 && (
-          <div className="flex items-center gap-2 sm:hidden">
-            {strip.slice(0, 3).map((s) =>
-              s.logo_url ? (
-                <img
-                  key={`f-${s.id || s.name}`}
-                  src={s.logo_url}
-                  alt=""
-                  className="h-5 max-w-[3.5rem] object-contain opacity-90"
-                />
-              ) : null
-            )}
-          </div>
-        )}
         <span className="shrink-0">{footerRight}</span>
       </footer>
     </div>

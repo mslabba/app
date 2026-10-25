@@ -349,6 +349,8 @@ class AuctionState(BaseModel):
     # Ephemeral broadcast UI (stored in raw_firestore / firestore doc)
     last_result: Optional[Dict[str, Any]] = None
     spin: Optional[Dict[str, Any]] = None
+    # Admin countdown control: {running, remaining, duration, updated_at}
+    timer: Optional[Dict[str, Any]] = None
 
 # Sponsor Models
 class SponsorCreate(BaseModel):
