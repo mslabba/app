@@ -41,7 +41,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { reauctionPlayers } from '@/lib/reauction';
 import {
+  RotateCcw,
   Play,
   Pause,
   Timer,
@@ -304,6 +306,22 @@ const AuctionControl = () => {
     [authHeaders]
   );
 
+  const [unsoldPlayers, setUnsoldPlayers] = useState([]);
+  const [reauctioning, setReauctioning] = useState(false);
+  const reauctionUnsold = async () => {
+    if (!unsoldPlayers.length) return;
+    if (!window.confirm(`Put all ${unsoldPlayers.length} unsold players back into the pool?`)) return;
+    setReauctioning(true);
+    try {
+      const { ok, failed } = await reauctionPlayers(unsoldPlayers, tokenRef.current);
+      if (ok) toast.success(`${ok} unsold player${ok === 1 ? '' : 's'} back in the pool`);
+      if (failed.length) toast.error(`${failed.length} could not be updated`);
+      await loadAvailablePlayers();
+    } finally {
+      setReauctioning(false);
+    }
+  };
+
   const loadAvailablePlayers = useCallback(async () => {
     if (!eventId || !tokenRef.current) return [];
     // Available + on_hold (skipped without sale) can be put back on the block
@@ -313,6 +331,15 @@ const AuctionControl = () => {
     });
     const list = Array.isArray(data) ? data : [];
     setAvailablePlayers(list);
+    axios
+      .get(`${API}/auctions/${eventId}/players`, {
+        headers: authHeaders(),
+        params: { status: 'unsold' },
+      })
+      .then(({ data: u }) =>
+        setUnsoldPlayers(Array.isArray(u) ? u.filter((p) => p.status === 'unsold') : [])
+      )
+      .catch(() => {});
     return list;
   }, [eventId, authHeaders]);
 
@@ -945,6 +972,19 @@ const AuctionControl = () => {
                 ? ` · showing ${filteredPlayers.length}${filteredPlayers.length >= MAX_SELECT_OPTIONS ? '+' : ''}`
                 : ''}
             </span>
+            {unsoldPlayers.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={reauctioning}
+                className="h-7 border-green-400/40 bg-green-500/15 text-green-300 hover:bg-green-500/25"
+                onClick={reauctionUnsold}
+                title="Put all unsold players back into the pool"
+              >
+                <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                Re-auction {unsoldPlayers.length} unsold
+              </Button>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <CountdownTimer

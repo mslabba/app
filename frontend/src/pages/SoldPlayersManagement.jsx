@@ -6,7 +6,8 @@ import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, Unlock, Trophy, DollarSign, RefreshCw } from 'lucide-react';
+import { Users, Unlock, Trophy, DollarSign, RefreshCw, RotateCcw } from 'lucide-react';
+import { reauctionPlayer, reauctionPlayers } from '@/lib/reauction';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 
@@ -19,6 +20,7 @@ const SoldPlayersManagement = () => {
   const [teams, setTeams] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [unsoldPlayers, setUnsoldPlayers] = useState([]);
 
   useEffect(() => {
     fetchData();
@@ -44,6 +46,7 @@ const SoldPlayersManagement = () => {
       const response = await axios.get(`${API}/auctions/${eventId}/players`);
       const soldPlayersData = response.data.filter(player => player.status === 'sold');
       setSoldPlayers(soldPlayersData);
+      setUnsoldPlayers(response.data.filter((player) => player.status === 'unsold'));
     } catch (error) {
       console.error('Failed to fetch sold players:', error);
       toast.error('Failed to load sold players');
@@ -82,6 +85,26 @@ const SoldPlayersManagement = () => {
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to release player');
     }
+  };
+
+  const handleReauction = async (player) => {
+    if (!confirm(`Put ${player.name} back into the auction? They will appear in the available pool again.`)) return;
+    try {
+      await reauctionPlayer(player.id, token);
+      toast.success(`${player.name} is back in the auction pool`);
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to re-auction player');
+    }
+  };
+
+  const handleReauctionAll = async () => {
+    if (!unsoldPlayers.length) return;
+    if (!confirm(`Put all ${unsoldPlayers.length} unsold players back into the auction pool?`)) return;
+    const { ok, failed } = await reauctionPlayers(unsoldPlayers, token);
+    if (ok) toast.success(`${ok} unsold player${ok === 1 ? '' : 's'} back in the auction pool`);
+    if (failed.length) toast.error(`${failed.length} could not be updated: ${failed.map((p) => p.name).join(', ')}`);
+    fetchData();
   };
 
   const getTeamName = (teamId) => {
@@ -196,6 +219,53 @@ const SoldPlayersManagement = () => {
             </CardContent>
           </Card>
         </div>
+
+        {unsoldPlayers.length > 0 && (
+          <Card className="glass border-white/20 mb-8">
+            <CardHeader>
+              <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-white">
+                <span>Unsold Players ({unsoldPlayers.length})</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="bg-green-500/20 border-green-400/40 text-green-300 hover:bg-green-500/30"
+                  onClick={handleReauctionAll}
+                >
+                  <RotateCcw className="w-3 h-3 mr-1" />
+                  Re-auction all unsold
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {unsoldPlayers.map((player) => (
+                  <div
+                    key={player.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-red-400/30 bg-red-500/10 p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-white">{player.name}</p>
+                      <p className="truncate text-xs text-white/60">
+                        {getCategoryName(player.category_id)}
+                        {player.base_price ? ` · Base ₹${Number(player.base_price).toLocaleString()}` : ''}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 bg-green-500/20 border-green-400/40 text-green-300 hover:bg-green-500/30"
+                      onClick={() => handleReauction(player)}
+                      title="Put player back into the auction pool"
+                    >
+                      <RotateCcw className="w-3 h-3 mr-1" />
+                      Re-auction
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Sold Players List */}
