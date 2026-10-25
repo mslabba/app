@@ -7,7 +7,8 @@ import axios from 'axios';
 import { Badge } from '@/components/ui/badge';
 import { Trophy, Target } from 'lucide-react';
 import { convertGoogleDriveUrl } from '@/utils/imageUtils';
-import { formatTimer, useAuctionCountdown } from '@/lib/auctionTimer';
+import { formatTimer, useBoardCountdown } from '@/lib/auctionTimer';
+import { describeExtraFields } from '@/lib/registrationFormConfig';
 import SoldOverlay from '@/components/broadcast/SoldOverlay';
 import BroadcastShell from '@/components/broadcast/BroadcastShell';
 import PlayerSpinner from '@/components/PlayerSpinner';
@@ -33,6 +34,7 @@ const AuctionDisplay = () => {
   const [currentPlayer, setCurrentPlayer] = useState(null);
   const [categories, setCategories] = useState([]);
   const [teamsSafeBidSummary, setTeamsSafeBidSummary] = useState(null);
+  const [teamLogos, setTeamLogos] = useState({});
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [soldFlash, setSoldFlash] = useState(null);
   const prevPlayerRef = useRef(null);
@@ -44,12 +46,13 @@ const AuctionDisplay = () => {
 
     const fetchAuctionData = async () => {
       try {
-        const [auctionResponse, catsResponse, eventResponse, sponsorsResponse] =
+        const [auctionResponse, catsResponse, eventResponse, sponsorsResponse, teamsResponse] =
           await Promise.all([
             axios.get(`${API}/auction/state/${eventId}`),
             axios.get(`${API}/auctions/${eventId}/categories`).catch(() => ({ data: [] })),
             axios.get(`${API}/auctions/${eventId}`).catch(() => ({ data: null })),
             axios.get(`${API}/sponsors/event/${eventId}`).catch(() => ({ data: [] })),
+            axios.get(`${API}/teams/event/${eventId}`).catch(() => ({ data: null })),
           ]);
         if (cancelled) return;
 
@@ -59,6 +62,17 @@ const AuctionDisplay = () => {
         if (eventResponse.data) setEvent(eventResponse.data);
         const sp = Array.isArray(sponsorsResponse.data) ? sponsorsResponse.data : [];
         setSponsors(sp.filter((s) => s.is_active !== false));
+        if (Array.isArray(teamsResponse.data)) {
+          const logos = {};
+          teamsResponse.data.forEach((t) => {
+            if (t?.logo_url) {
+              const url = convertGoogleDriveUrl(t.logo_url);
+              logos[t.id] = url;
+              if (t.name) logos[`name:${t.name}`] = url;
+            }
+          });
+          setTeamLogos(logos);
+        }
 
         const lr = state?.last_result;
         if (lr?.type && lr?.at) {
@@ -83,14 +97,6 @@ const AuctionDisplay = () => {
           setCurrentPlayer(playerResponse.data);
           prevPlayerRef.current = playerResponse.data;
 
-          try {
-            const safeBidResponse = await axios.get(
-              `${API}/auctions/${eventId}/teams-safe-bid-summary`
-            );
-            if (!cancelled) setTeamsSafeBidSummary(safeBidResponse.data);
-          } catch {
-            // optional
-          }
         } else {
           if (prevPlayerRef.current && !lr) {
             const p = prevPlayerRef.current;
@@ -106,6 +112,15 @@ const AuctionDisplay = () => {
             }
           }
           setCurrentPlayer(null);
+        }
+
+        try {
+          const safeBidResponse = await axios.get(
+            `${API}/auctions/${eventId}/teams-safe-bid-summary`
+          );
+          if (!cancelled) setTeamsSafeBidSummary(safeBidResponse.data);
+        } catch {
+          // optional
         }
 
         if (state.current_bid != null) {
@@ -148,17 +163,47 @@ const AuctionDisplay = () => {
     currentPlayer?.photo_url || currentPlayer?.image_url || soldFlash?.photoUrl
   );
 
-  const secondsLeft = useAuctionCountdown(
-    auctionState?.timer_started_at,
-    auctionState?.timer_duration || 60,
-    null
-  );
+  const { secondsLeft, paused: timerPaused, hasTimer } = useBoardCountdown(auctionState);
+  const auctionPaused = auctionState?.status === 'paused';
 
   const showTimer =
     currentPlayer &&
-    auctionState?.status === 'in_progress' &&
-    auctionState?.timer_started_at &&
+    (auctionState?.status === 'in_progress' || auctionPaused) &&
+    hasTimer &&
     secondsLeft != null;
+  const showPaused = Boolean(currentPlayer && (auctionPaused || timerPaused));
+
+  const logoFor = (teamId, teamName) =>
+    (teamId && teamLogos[teamId]) || (teamName && teamLogos[`name:${teamName}`]) || null;
+
+  const playerAttributes = useMemo(() => {
+    if (!currentPlayer) return [];
+    const out = [];
+    describeExtraFields(event, currentPlayer.extra_fields).forEach((f) => {
+      if (f.value === '' || /^https?:\/\//i.test(f.value)) return;
+      out.push({ key: `x-${f.key}`, label: f.label, value: f.value });
+    });
+    const st = currentPlayer.stats || {};
+    [
+      ['matches', 'Matches'],
+      ['runs', 'Runs'],
+      ['wickets', 'Wickets'],
+      ['goals', 'Goals'],
+      ['assists', 'Assists'],
+    ].forEach(([k, label]) => {
+      if (st[k] != null && st[k] !== '') out.push({ key: `s-${k}`, label, value: String(st[k]) });
+    });
+    if (st.custom && typeof st.custom === 'object') {
+      Object.entries(st.custom).forEach(([k, v]) => {
+        if (v == null || v === '' || typeof v === 'object') return;
+        out.push({ key: `c-${k}`, label: k.replace(/_/g, ' '), value: String(v) });
+      });
+    }
+    if (currentPlayer.previous_team) {
+      out.push({ key: 'prev', label: 'Previous team', value: currentPlayer.previous_team });
+    }
+    return out.slice(0, 8);
+  }, [currentPlayer, event]);
 
   const bidAmount =
     auctionState?.current_bid ?? currentPlayer?.base_price ?? currentPlayer?.current_price;
@@ -244,11 +289,18 @@ const AuctionDisplay = () => {
                     <Trophy className="mr-1.5 h-4 w-4 text-red-300" />
                     On the block
                   </span>
+                  {showPaused && (
+                    <span className="animate-pulse rounded-xl bg-amber-500/90 px-3 py-1 text-sm font-black uppercase tracking-widest text-black sm:text-base">
+                      ⏸ Paused
+                    </span>
+                  )}
                   {showTimer && (
                     <span
                       className={cn(
                         'rounded-xl px-3 py-1 font-mono text-xl font-bold tabular-nums ring-1 sm:text-2xl',
-                        secondsLeft <= 10
+                        showPaused
+                          ? 'bg-amber-500/20 text-amber-100 ring-amber-400/50'
+                          : secondsLeft <= 10
                           ? 'bg-red-600/40 text-red-100 ring-red-400/50'
                           : 'bg-white/10 text-white ring-white/20'
                       )}
@@ -306,6 +358,27 @@ const AuctionDisplay = () => {
                       Base {formatCurrency(currentPlayer.base_price)}
                     </p>
 
+                    {playerAttributes.length > 0 && (
+                      <div
+                        className="block-fade-up grid grid-cols-2 gap-1.5 sm:grid-cols-3"
+                        style={{ animationDelay: '0.27s' }}
+                      >
+                        {playerAttributes.map((a) => (
+                          <div
+                            key={a.key}
+                            className="min-w-0 rounded-lg border border-white/10 bg-white/5 px-2 py-1"
+                          >
+                            <p className="truncate text-[9px] font-semibold uppercase tracking-wider text-white/45">
+                              {a.label}
+                            </p>
+                            <p className="truncate text-sm font-bold text-white" title={a.value}>
+                              {a.value}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     <div
                       className="block-fade-up rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2.5 sm:px-4 sm:py-3"
                       style={{ animationDelay: '0.3s' }}
@@ -317,9 +390,21 @@ const AuctionDisplay = () => {
                         {formatCurrency(bidAmount)}
                       </p>
                       {auctionState.current_team_name && (
-                        <Badge className="mt-1.5 bg-emerald-600 text-white">
-                          Leading: {auctionState.current_team_name}
-                        </Badge>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          {logoFor(auctionState.current_team_id, auctionState.current_team_name) && (
+                            <img
+                              src={logoFor(auctionState.current_team_id, auctionState.current_team_name)}
+                              alt=""
+                              className="h-8 w-8 rounded-full bg-white object-contain p-0.5 ring-1 ring-white/30"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          )}
+                          <Badge className="bg-emerald-600 text-white">
+                            Leading: {auctionState.current_team_name}
+                          </Badge>
+                        </div>
                       )}
                     </div>
 
@@ -337,7 +422,16 @@ const AuctionDisplay = () => {
                               key={`${b.timestamp || i}-${b.amount}-${b.team_name}`}
                               className="flex justify-between gap-2 text-white/80"
                             >
-                              <span className="truncate">{b.team_name || 'Team'}</span>
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                {logoFor(b.team_id, b.team_name) && (
+                                  <img
+                                    src={logoFor(b.team_id, b.team_name)}
+                                    alt=""
+                                    className="h-5 w-5 shrink-0 rounded-full bg-white object-contain"
+                                  />
+                                )}
+                                <span className="truncate">{b.team_name || 'Team'}</span>
+                              </span>
                               <span className="shrink-0 font-bold tabular-nums text-amber-200">
                                 {formatCurrency(b.amount)}
                               </span>
@@ -377,8 +471,22 @@ const AuctionDisplay = () => {
                   )}
                 >
                   <div className="mb-0.5 flex justify-between gap-2">
-                    <h4 className="truncate text-xs font-semibold text-white">
-                      {team.team_name}
+                    <h4 className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-white">
+                      {(convertGoogleDriveUrl(team.logo_url) || logoFor(team.team_id, team.team_name)) ? (
+                        <img
+                          src={convertGoogleDriveUrl(team.logo_url) || logoFor(team.team_id, team.team_name)}
+                          alt=""
+                          className="h-6 w-6 shrink-0 rounded-full bg-white object-contain p-0.5"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/15 text-[10px] font-black">
+                          {(team.team_name || '?').charAt(0)}
+                        </span>
+                      )}
+                      <span className="truncate">{team.team_name}</span>
                     </h4>
                     <span className="shrink-0 text-[10px] text-white/45">
                       {team.risk_level || ''}

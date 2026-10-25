@@ -410,6 +410,28 @@ const AuctionControl = () => {
     setTimerActive(false);
   }, [onBlockPlayerId, auctionState?.current_bid, currentPlayer?.base_price, defaultTimer]);
 
+  // Publish the countdown (running / paused / reset) so the display board mirrors it.
+  const timerPubRef = useRef({ active: null, seconds: null });
+  useEffect(() => {
+    if (!eventId || bootLoading) return;
+    const prev = timerPubRef.current;
+    const changed =
+      prev.active !== timerActive ||
+      prev.seconds == null ||
+      timerSeconds > prev.seconds ||
+      timerSeconds === 0;
+    timerPubRef.current = { active: timerActive, seconds: timerSeconds };
+    if (!changed) return;
+    if (prev.active === timerActive && timerSeconds === 0 && prev.seconds === 0) return;
+    axios
+      .post(
+        `${API}/auction/timer/${eventId}`,
+        { running: timerActive && timerSeconds > 0, remaining: timerSeconds, duration: defaultTimer },
+        { headers: authHeaders() }
+      )
+      .catch((err) => console.warn('Timer sync failed', err?.response?.status || err));
+  }, [timerActive, timerSeconds, eventId, bootLoading, defaultTimer, authHeaders]);
+
   const filteredPlayers = useMemo(() => {
     let list = availablePlayers;
     if (categoryFilter !== 'all') {

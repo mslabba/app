@@ -128,3 +128,27 @@ code {
         border-bottom-color: inherit;
     }
 }
+
+/* Display board sponsor ticker */
+@keyframes sponsor-ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.sponsor-ticker-track {
+  animation: sponsor-ticker 30s linear infinite;
+}
+.sponsor-ticker::before,
+.sponsor-ticker::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3rem;
+  z-index: 1;
+  pointer-events: none;
+}
+.sponsor-ticker::before { left: 0; background: linear-gradient(90deg, #0a0809, transparent); }
+.sponsor-ticker::after { right: 0; background: linear-gradient(270deg, #0a0809, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .sponsor-ticker-track { animation-duration: 120s !important; }
+}

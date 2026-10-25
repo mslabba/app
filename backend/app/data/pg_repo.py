@@ -519,6 +519,24 @@ def set_spin_state(event_id: str, spin: Optional[dict[str, Any]]) -> dict[str, A
         return auction_state_to_dict(state)
 
 
+def set_timer_state(event_id: str, timer: Optional[dict[str, Any]]) -> dict[str, Any]:
+    """Publish the organizer's countdown (running/paused) for display boards."""
+    with _session() as s:
+        state = s.get(AuctionState, event_id)
+        if not state:
+            state = AuctionState(event_id=event_id, status="in_progress", timer_duration=60)
+            s.add(state)
+        meta = _meta_dict(state)
+        if timer is None:
+            meta.pop("timer", None)
+        else:
+            meta["timer"] = timer
+        state.raw_firestore = meta
+        s.commit()
+        s.refresh(state)
+        return auction_state_to_dict(state)
+
+
 def _set_last_result(state: AuctionState, result: dict[str, Any]) -> None:
     """Persist brief sold/unsold snapshot for public boards (12s UI window)."""
     meta = _meta_dict(state)

@@ -164,6 +164,7 @@ def auction_state_to_dict(a) -> dict[str, Any]:
         "bid_history": [],  # filled by get_auction_state from bids table
         "last_result": last_result,
         "spin": spin,
+        "timer": meta.get("timer") if isinstance(meta, dict) else None,
     }
 
 

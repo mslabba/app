@@ -3017,6 +3017,50 @@ async def pause_auction(event_id: str, current_user: dict = Depends(require_even
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@api_router.post("/auction/timer/{event_id}")
+async def set_auction_timer(
+    event_id: str,
+    payload: dict,
+    current_user: dict = Depends(require_event_organizer),
+):
+    """
+    Publish the organizer's countdown so display boards can mirror it.
+    Body: { running: bool, remaining: int (seconds), duration?: int }
+    """
+    try:
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only control auctions for events you created",
+            )
+        payload = payload or {}
+        try:
+            remaining = max(0, int(payload.get("remaining") or 0))
+            duration = int(payload.get("duration") or remaining or 60)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="remaining/duration must be numbers")
+        timer = {
+            "running": bool(payload.get("running")),
+            "remaining": remaining,
+            "duration": duration,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if _USE_POSTGRES and _pg:
+            _pg.set_timer_state(event_id, timer)
+            return {"message": "Timer updated", "timer": timer}
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        auction_state_id = f"auction_{event_id}"
+        db.collection("auction_state").document(auction_state_id).set(
+            {"timer": timer}, merge=True
+        )
+        return {"message": "Timer updated", "timer": timer}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @api_router.post("/auction/spin/{event_id}")
 async def start_player_spin(
     event_id: str,
@@ -3530,6 +3574,7 @@ async def get_all_teams_safe_bid_summary(event_id: str, player_category: str = N
                 summary.append({
                     'team_id': team_data['id'],
                     'team_name': team_data.get('name', 'Unknown Team'),
+                    'logo_url': team_data.get('logo_url'),
                     'budget': team_data.get('budget') or 0,
                     'total_budget': team_data.get('budget') or 0,
                     'spent': team_data.get('spent') or 0,
