@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How to Manage Unsold Players in a Player Auction | PowerAuction</title>
+  <meta name="description" content="What to do when nobody bids on a player: the common rules for unsold players, how to pick one for your tournament, and how to handle teams that end the auction short of a full squad.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://thepowerauction.com/blog/how-to-manage-unsold-players">
+  <meta property="og:title" content="How to Manage Unsold Players in a Sports Auction">
+  <meta property="og:description" content="What to do when nobody bids on a player: the common rules for unsold players, how to pick one for your tournament, and how to handle teams that end the auction short of a full squad.">
+  <meta property="og:image" content="https://thepowerauction.com/images/marketing/how-to-manage-unsold-players.jpg">
+  <meta property="og:url" content="https://thepowerauction.com/blog/how-to-manage-unsold-players">
+  <meta property="og:type" content="article">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="How to Manage Unsold Players in a Sports Auction">
+  <meta name="twitter:description" content="What to do when nobody bids on a player: the common rules for unsold players, how to pick one for your tournament, and how to handle teams that end the auction short of a full squad.">
+  <meta name="twitter:image" content="https://thepowerauction.com/images/marketing/how-to-manage-unsold-players.jpg">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "How to Manage Unsold Players in a Sports Auction",
+  "datePublished": "2026-10-29",
+  "author": {
+    "@type": "Organization",
+    "name": "PowerAuction Team"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "PowerAuction"
+  },
+  "image": "https://thepowerauction.com/images/marketing/how-to-manage-unsold-players.jpg",
+  "description": "What to do when nobody bids on a player: the common rules for unsold players, how to pick one for your tournament, and how to handle teams that end the auction short of a full squad.",
+  "mainEntityOfPage": "https://thepowerauction.com/blog/how-to-manage-unsold-players"
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "What does unsold mean in a player auction?", "acceptedAnswer": {"@type": "Answer", "text": "It means no team bid on the player when they came up. What happens next depends on the tournament's rules: a later round, a lower base price, a pick by a short team, or release."}},
+    {"@type": "Question", "name": "Can an unsold player be bought later?", "acceptedAnswer": {"@type": "Answer", "text": "Usually, yes. Most tournaments bring unsold players back in a second round or let teams that are short of a full squad pick them after the main auction. Check your tournament's written rules."}},
+    {"@type": "Question", "name": "Should unsold players get a lower base price?", "acceptedAnswer": {"@type": "Answer", "text": "It's a common rule when base prices were set too high. Decide the lower price before auction day and apply it to every unsold player the same way."}},
+    {"@type": "Question", "name": "How many times can a player go unsold?", "acceptedAnswer": {"@type": "Answer", "text": "That's up to the organiser. Many tournaments allow one or two rounds, then release the player or move them to a post-auction pick list."}},
+    {"@type": "Question", "name": "How do I make sure every team gets a full squad?", "acceptedAnswer": {"@type": "Answer", "text": "Give every team enough purse to buy a full squad at base prices, set a minimum squad size, and let short teams pick from the unsold list after the auction."}}
+  ]
+}
+  </script>
+  <link rel="icon" href="/images/favicon/favicon.ico" sizes="any">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+:root {
+  --pa-void: #060507;
+  --pa-navy-950: #0a0809;
+  --pa-navy-800: #1c1518;
+  --pa-gold: #e8b923;
+  --pa-white: #ffffff;
+  --pa-off: #f7f4f4;
+  --pa-slate-300: #c4b4b7;
+  --pa-slate-100: #efe8e9;
+  --pa-brand: #e11d2e;
+  --pa-border: rgba(255,255,255,0.1);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse 70% 40% at 50% 0%, rgba(225,29,46,0.14), transparent 60%),
+    var(--pa-void);
+  color: var(--pa-off);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--pa-gold); }
+img { max-width: 100%; }
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(10,8,9,0.92);
+  border-bottom: 1px solid var(--pa-border);
+  backdrop-filter: blur(12px);
+}
+.nav {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 0.85rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--pa-white);
+  text-decoration: none;
+}
+.logo img { width: 40px; height: 40px; display: block; }
+.logo-name {
+  font-family: Outfit, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.logo-name span { color: var(--pa-brand); }
+.logo-tag {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--pa-slate-300);
+  letter-spacing: 0.03em;
+}
+.nav-links { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
+.nav-links a {
+  color: var(--pa-slate-100);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+.nav-links a:hover, .nav-links a[aria-current="page"] { color: var(--pa-gold); }
+.column {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 3rem 1.25rem 4.5rem;
+}
+.eyebrow {
+  margin: 0;
+  color: var(--pa-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+}
+h1, h2, h3 {
+  font-family: Outfit, system-ui, sans-serif;
+  color: var(--pa-white);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-weight: 700;
+}
+h1 {
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  text-align: center;
+  margin: 0.65rem 0 0.35rem;
+}
+.meta {
+  text-align: center;
+  color: var(--pa-slate-300);
+  margin: 0 0 1.75rem;
+}
+.hero { margin: 0 0 2rem; }
+.hero img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 1rem;
+  border: 1px solid var(--pa-border);
+}
+.lead { font-size: 1.125rem; text-align: center; color: var(--pa-slate-100); }
+h2 { font-size: 1.55rem; margin: 2.25rem 0 0.65rem; }
+h3 { font-size: 1.15rem; margin: 1.6rem 0 0.35rem; color: var(--pa-gold); }
+p { margin: 0 0 1rem; }
+ol, ul { margin: 0 0 1rem; padding-left: 1.3rem; }
+li { margin: 0.35rem 0; }
+blockquote {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  border-left: 3px solid var(--pa-gold);
+  background: rgba(232,185,35,0.06);
+  border-radius: 0 0.75rem 0.75rem 0;
+  color: var(--pa-slate-100);
+}
+blockquote p { margin: 0; }
+.end-cta {
+  margin-top: 2.5rem;
+  padding: 1.75rem 1.5rem;
+  background: var(--pa-navy-800);
+  border: 1px solid rgba(232,185,35,0.35);
+  border-radius: 1rem;
+  text-align: center;
+}
+.end-cta p { margin: 0; font-size: 1.1rem; color: var(--pa-slate-100); }
+.end-cta .cta-links { margin-top: 0.9rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+.end-cta .cta-links a {
+  display: inline-block;
+  padding: 0.65rem 1.4rem;
+  border-radius: 0.6rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.end-cta .cta-links a.primary { background: var(--pa-brand); color: var(--pa-white); }
+.end-cta .cta-links a.secondary { border: 1px solid var(--pa-border); color: var(--pa-slate-100); }
+.site-footer {
+  border-top: 1px solid var(--pa-border);
+  color: var(--pa-slate-300);
+  text-align: center;
+  padding: 1.5rem 1rem 2rem;
+  font-size: 0.9rem;
+}
+.site-footer a { color: var(--pa-slate-100); text-decoration: none; }
+.site-footer a:hover { color: var(--pa-gold); }
+.card {
+  display: grid;
+  grid-template-columns: 16rem 1fr;
+  gap: 0;
+  background: var(--pa-navy-800);
+  border: 1px solid var(--pa-border);
+  border-radius: 1rem;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  margin-top: 2rem;
+}
+.card img { width: 100%; height: 100%; object-fit: cover; display: block; min-height: 10rem; }
+.card-body { padding: 1.15rem 1.25rem 1.35rem; }
+.card-body h2 { margin: 0.25rem 0 0.5rem; font-size: 1.35rem; }
+.card-body p { margin: 0; color: var(--pa-slate-100); }
+.card-body .meta { text-align: left; margin: 0; }
+.card:hover { border-color: rgba(232,185,35,0.45); }
+@media (max-width: 720px) {
+  .card { grid-template-columns: 1fr; }
+}
+table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.95rem; }
+th, td { border: 1px solid var(--pa-border); padding: 0.6rem 0.75rem; text-align: left; vertical-align: top; }
+th { color: var(--pa-white); background: rgba(255,255,255,0.04); }
+.table-wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+  <header class="site-header">
+  <div class="nav">
+    <a class="logo" href="/">
+      <img src="/images/sports/logo-final.png" alt="" width="40" height="40">
+      <span>
+        <span class="logo-name">Power<span>Auction</span></span>
+        <span class="logo-tag">Powered by Turgut</span>
+      </span>
+    </a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="/">Home</a>
+      <a href="/blog">Blog</a>
+    </nav>
+  </div>
+</header>
+  <main class="column">
+    <p class="eyebrow">Blog</p>
+    <h1>How to Manage Unsold Players in a Sports Auction</h1>
+    <p class="meta"><time datetime="2026-10-29">29 October 2026</time> · By PowerAuction Team</p>
+    <figure class="hero">
+      <img src="/images/marketing/how-to-manage-unsold-players.jpg" alt="Auction screen showing a player card marked unsold, with team tables in the background." width="1280" height="720">
+    </figure>
+    <article>
+      <p>An unsold player is one who gets no bids when their name comes up. The fix is a rule you decide before auction day: most tournaments either bring unsold players back in a later round, lower their base price for that round, let short teams pick them after the auction, or release them. Write the rule down, share it with every team owner, and apply it the same way to every player.</p>
+      <p>What goes wrong isn't that players go unsold. It always happens. It's that nobody agreed in advance what happens next, so the decision gets made in the room, under pressure, with owners arguing.</p>
+      <h2>Why do players go unsold?</h2>
+      <p>A player usually goes unsold for one of these reasons:</p>
+      <ul>
+      <li><strong>The base price is too high</strong> for what owners think the player is worth.</li>
+      <li><strong>Purses are running low</strong>, especially late in the auction.</li>
+      <li><strong>Squads are already full</strong> in that player's role or category.</li>
+      <li><strong>Owners don't know the player.</strong> New registrations with no stats or photo get passed over.</li>
+      <li><strong>Timing.</strong> A player who comes up early, before owners have settled, can be skipped and would have sold later.</li>
+      </ul>
+      <p>Knowing the reason helps you pick the right rule. If base prices are the problem, a re-auction at a lower base makes sense. If purses are empty, a lower base won't help, and a post-auction pick is fairer.</p>
+      <h2>What are the common rules for unsold players?</h2>
+      <p>There's no single standard. These are the options organisers use most, and you can combine them.</p>
+      <p><strong>1. A second round at the same base price.</strong> Unsold players go into a pool and come back after the main auction. Owners who held back purse get a second look. This is the simplest rule and works when lots of purse is still unspent.</p>
+      <p><strong>2. A second round at a lower base price.</strong> Same as above, but the base price drops for the repeat round. It helps when base prices were set too high. Decide the new base before the day, not on the spot.</p>
+      <p><strong>3. Picks by teams that are short.</strong> After the auction, teams below the minimum squad size pick from the unsold list, often at base price, in an order you set in advance (for example, the team with the most purse left picks last).</p>
+      <p><strong>4. Release.</strong> Unsold players are out for this season. It's clean, but it can feel harsh in a community league where everyone paid to register, so say so clearly at registration.</p>
+      <p><strong>5. A fixed number of rounds.</strong> Players get one or two chances. After that, they're released or go to the pick list.</p>
+      <h2>How do you choose the right rule for your tournament?</h2>
+      <p>Ask three questions:</p>
+      <ol>
+      <li><strong>Does every team have to field a full squad?</strong> If yes, you need a way to fill short squads, usually a second round plus picks.</li>
+      <li><strong>Did players pay to register?</strong> If they did, releasing them with no second chance will cause complaints. A second round is the least you should offer.</li>
+      <li><strong>How long can the auction run?</strong> A repeat round adds time. If the venue is booked for three hours, plan for it in the schedule.</li>
+      </ol>
+      <p>Whatever you choose, put it in your written auction rules alongside bid increments, purse limits and how disputes are settled. Our guide to <a href="/blog/sports-player-auction-rules/">sports player auction rules</a> covers what else belongs in that document.</p>
+      <h2>How do you keep the unsold round fair?</h2>
+      <ul>
+      <li><strong>Announce the rule before the first player.</strong> Read it out and show it on the big screen.</li>
+      <li><strong>Keep a visible unsold list.</strong> Owners should see who's in the pool, not just the operator.</li>
+      <li><strong>Use the same order logic every time.</strong> If you re-auction in random order, say so. In PowerAuction, spin-to-select picks from the full player pool, so it isn't limited to one category.</li>
+      <li><strong>Check purses before the repeat round.</strong> Owners can see their remaining purse on their private dashboard, which avoids bids that can't be paid.</li>
+      <li><strong>Pause if there's a dispute.</strong> Stop the auction, check the written rule, then carry on.</li>
+      </ul>
+      <p>In PowerAuction, players who get no bids are marked unsold. The operator can bring them back in a later round and, if the tournament rules call for it, reset the base price before they come up again.</p>
+      <h2>How do you stop players going unsold in the first place?</h2>
+      <p>You can't avoid it completely, but you can cut the numbers:</p>
+      <ul>
+      <li><strong>Set realistic base prices</strong> by category.</li>
+      <li><strong>Give every team enough purse</strong> to fill a full squad at base prices, with room to compete.</li>
+      <li><strong>Collect a photo and stats at registration</strong> so owners recognise every player.</li>
+      <li><strong>Confirm players before the day.</strong> In PowerAuction, players whose registration fee is still pending are kept out of the auction pool automatically, so owners only see confirmed players.</li>
+      <li><strong>Share the player list in advance</strong> so owners can plan instead of guessing in the room.</li>
+      </ul>
+      <h2>What happens after the auction?</h2>
+      <p>Before anyone leaves, read out each team's squad and remaining purse, run your unsold round or picks, and confirm who's released. Then share the final squads with owners and players. PowerAuction lets you share squads and save them as a PDF, so there's one record everyone agrees on.</p>
+      <p>For a step-by-step plan of the whole event, see <a href="/blog/how-to-organize-a-sports-player-auction/">how to organise a sports player auction</a>.</p>
+      <h2>Frequently asked questions</h2>
+      <h3>What does unsold mean in a player auction?</h3>
+      <p>It means no team bid on the player when they came up. What happens next depends on the tournament's rules: a later round, a lower base price, a pick by a short team, or release.</p>
+      <h3>Can an unsold player be bought later?</h3>
+      <p>Usually, yes. Most tournaments bring unsold players back in a second round or let teams that are short of a full squad pick them after the main auction. Check your tournament's written rules.</p>
+      <h3>Should unsold players get a lower base price?</h3>
+      <p>It's a common rule when base prices were set too high. Decide the lower price before auction day and apply it to every unsold player the same way.</p>
+      <h3>How many times can a player go unsold?</h3>
+      <p>That's up to the organiser. Many tournaments allow one or two rounds, then release the player or move them to a post-auction pick list.</p>
+      <h3>How do I make sure every team gets a full squad?</h3>
+      <p>Give every team enough purse to buy a full squad at base prices, set a minimum squad size, and let short teams pick from the unsold list after the auction.</p>
+      <h2>Plan your auction rules with PowerAuction</h2>
+      <p>Email <a href="mailto:powerauction@inraylabs.com">powerauction@inraylabs.com</a> with your sport, number of teams and players, and auction date. We'll help you plan an auction where every player gets a fair chance. New to auctions? Start with <a href="/blog/what-is-a-sports-player-auction/">What Is a Sports Player Auction?</a> or our <a href="/blog/how-to-conduct-cricket-player-auction/">cricket player auction guide</a>.</p>
+    </article>
+  </main>
+  <footer class="site-footer">
+  <p>© 2026 PowerAuction. <a href="/">Home</a> · <a href="/blog">Blog</a></p>
+</footer>
+</body>
+</html>
