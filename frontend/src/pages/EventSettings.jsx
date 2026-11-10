@@ -45,7 +45,9 @@ import {
   FIELD_TYPES,
   CONDITION_OPS_DATE,
   CONDITION_OPS_VALUE,
+  WHATSAPP_GROUP_LINK_ERROR,
   defaultRegistrationFormConfig,
+  isValidWhatsappGroupLink,
   newCustomField,
   resolveRegistrationFormConfig,
 } from '@/lib/registrationFormConfig';
@@ -258,6 +260,7 @@ const EventSettings = () => {
     setFormData((prev) => ({
       ...prev,
       registration_form_config: {
+        ...prev.registration_form_config,
         fields: (prev.registration_form_config?.fields || []).map((f) => {
           if (f.id !== id && f.key !== id) return f;
           if (f.locked) {
@@ -279,6 +282,7 @@ const EventSettings = () => {
     setFormData((prev) => ({
       ...prev,
       registration_form_config: {
+        ...prev.registration_form_config,
         fields: (prev.registration_form_config?.fields || []).filter(
           (f) => f.id !== id && f.key !== id
         ),
@@ -304,11 +308,24 @@ const EventSettings = () => {
     setFormData((prev) => ({
       ...prev,
       registration_form_config: {
+        ...prev.registration_form_config,
         fields: [...(prev.registration_form_config?.fields || []), field],
       },
     }));
     setCustomDraft(newCustomField());
     toast.success(`Added “${field.label}”`);
+  };
+
+  // WhatsApp group link — a setting on the form config, not a field
+  // players fill in. Spread the config so field edits never drop it.
+  const updateWhatsappGroupLink = (value) => {
+    setFormData((prev) => ({
+      ...prev,
+      registration_form_config: {
+        ...prev.registration_form_config,
+        whatsapp_group_link: value,
+      },
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -333,7 +350,16 @@ const EventSettings = () => {
       return;
     }
 
+    const whatsappGroupLink = (
+      formData.registration_form_config?.whatsapp_group_link || ''
+    ).trim();
+    if (!isValidWhatsappGroupLink(whatsappGroupLink)) {
+      toast.error(WHATSAPP_GROUP_LINK_ERROR);
+      return;
+    }
+
     const formConfig = {
+      whatsapp_group_link: whatsappGroupLink || null,
       fields: (formData.registration_form_config?.fields || []).map((f) => ({
         id: f.id,
         key: f.key,
@@ -1001,6 +1027,20 @@ const EventSettings = () => {
                   <Plus className="mr-1.5 h-4 w-4" />
                   Add field
                 </Button>
+              </div>
+
+              <div className="space-y-1.5 border-t border-white/10 pt-4">
+                <Label className="text-white/70">WhatsApp group link (optional)</Label>
+                <Input
+                  value={formData.registration_form_config?.whatsapp_group_link || ''}
+                  onChange={(e) => updateWhatsappGroupLink(e.target.value)}
+                  placeholder="https://chat.whatsapp.com/…"
+                  className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                />
+                <p className="text-xs text-white/45">
+                  Confirmed players will see a Join WhatsApp group button on their registration
+                  ticket. Leave empty for no group link.
+                </p>
               </div>
             </CardContent>
           </Card>

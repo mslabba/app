@@ -2,6 +2,25 @@
  * Registration form configuration helpers (shared by EventSettings + public form).
  */
 
+/** WhatsApp group invite links: the only URL shape accepted for the
+ * optional group link. Mirrors validate_whatsapp_group_link in
+ * backend/app/registration_form.py — keep the two in sync. */
+export const WHATSAPP_GROUP_LINK_PREFIX = 'https://chat.whatsapp.com/';
+
+export const WHATSAPP_GROUP_LINK_ERROR =
+  'Enter a WhatsApp group invite link, e.g. https://chat.whatsapp.com/…';
+
+/** True when the value is empty (optional) or a valid group-invite link. */
+export function isValidWhatsappGroupLink(value) {
+  if (value === null || value === undefined) return true;
+  const link = String(value).trim();
+  if (!link) return true;
+  return (
+    link.startsWith(WHATSAPP_GROUP_LINK_PREFIX) &&
+    link.length > WHATSAPP_GROUP_LINK_PREFIX.length
+  );
+}
+
 export const FIELD_TYPES = [
   { value: 'text', label: 'Short text' },
   { value: 'textarea', label: 'Long text' },
@@ -233,7 +252,7 @@ export function builtinCatalog() {
 
 /** New auctions / when organizer opens settings for the first time. */
 export function defaultRegistrationFormConfig() {
-  return { fields: builtinCatalog() };
+  return { fields: builtinCatalog(), whatsapp_group_link: null };
 }
 
 /**
@@ -265,7 +284,7 @@ export function legacyRegistrationFormConfig() {
       required: f.key === 'name' || f.key === 'contact_number' || f.key === 'photo_url',
     };
   });
-  return { fields };
+  return { fields, whatsapp_group_link: null };
 }
 
 export function resolveRegistrationFormConfig(eventOrConfig) {
@@ -300,7 +319,8 @@ export function resolveRegistrationFormConfig(eventOrConfig) {
         enabled: f.enabled !== false,
       });
     });
-    return { fields: merged };
+    // Preserve the organizer's WhatsApp group link (a setting, not a field).
+    return { fields: merged, whatsapp_group_link: cfg.whatsapp_group_link || null };
   }
   return legacyRegistrationFormConfig();
 }

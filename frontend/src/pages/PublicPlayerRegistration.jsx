@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Trophy, User, CheckCircle, ArrowLeft, CreditCard, Users, XCircle, Calendar, MapPin, Copy, Check } from 'lucide-react';
+import { Trophy, User, CheckCircle, ArrowLeft, CreditCard, Users, XCircle, Calendar, MapPin, Copy, Check, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import ImageUploadWithCrop from '@/components/ImageUploadWithCrop';
 import DocumentUpload from '@/components/DocumentUpload';
@@ -268,6 +268,11 @@ const RegistrationTicket = ({ ticket, event, eventId, onRegisterAnother }) => {
   // Free/unpaid registrations wait on approval: "Registration summary".
   const paid = isPaidRegistration(payment);
   const status = ticket.status === 'approved' ? 'approved' : paid ? 'submitted' : 'pending';
+  // WhatsApp group link — from the live event when available, else the
+  // ticket snapshot (restored ticket). Only confirmed players see it.
+  const whatsappGroupLink = ev.registration_form_config?.whatsapp_group_link || null;
+  const showWhatsappGroupLink =
+    !!whatsappGroupLink && (status === 'approved' || status === 'submitted');
   const [copied, setCopied] = useState(false);
 
   const copyReference = async () => {
@@ -418,6 +423,17 @@ const RegistrationTicket = ({ ticket, event, eventId, onRegisterAnother }) => {
 
       {/* Actions */}
       <div className="mt-6 flex flex-col items-center gap-3">
+        {showWhatsappGroupLink && (
+          <a
+            href={whatsappGroupLink}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center bg-red-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-700 transition-all duration-200"
+          >
+            <MessageCircle className="w-4 h-4 mr-2" />
+            Join WhatsApp group
+          </a>
+        )}
         <Link
           to={eventId ? `/auctions/${eventId}` : '/'}
           className="inline-flex items-center bg-neutral-950 text-white px-6 py-3 rounded-lg font-medium hover:bg-neutral-800 transition-all duration-200"
@@ -466,6 +482,9 @@ const PublicPlayerRegistration = () => {
     banner_url: event?.banner_url || null,
     organizer_name: event?.organizer_name || null,
     venue: event?.venue || null,
+    // WhatsApp group link, so a restored ticket still shows the join
+    // button for a confirmed player before the live event fetch completes.
+    whatsapp_group_link: event?.registration_form_config?.whatsapp_group_link || null,
   });
 
   const persistTicket = (nextTicket) => {

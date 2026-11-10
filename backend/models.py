@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
+from pydantic import BaseModel, Field, ConfigDict, BeforeValidator, field_validator
 from typing import List, Optional, Dict, Any, Union, Annotated
 from datetime import datetime, date
 from enum import Enum
@@ -95,6 +95,26 @@ class RegistrationFormField(BaseModel):
 
 class RegistrationFormConfig(BaseModel):
     fields: List[RegistrationFormField] = []
+    # Optional WhatsApp group invite link, set by the organizer in the
+    # Registration form settings. Shown to confirmed players only, as a
+    # "Join WhatsApp group" button on their registration ticket.
+    whatsapp_group_link: Optional[str] = None
+
+    @field_validator("whatsapp_group_link")
+    @classmethod
+    def _validate_whatsapp_group_link(cls, v):
+        # Imported here (not at module top): app.registration_form is
+        # stdlib-only, but keeping the import local avoids any import-order
+        # coupling between the models module and the app package.
+        from app.registration_form import (
+            normalize_whatsapp_group_link,
+            validate_whatsapp_group_link,
+        )
+
+        error = validate_whatsapp_group_link(v)
+        if error is not None:
+            raise ValueError(error)
+        return normalize_whatsapp_group_link(v)
 
 
 class EventCreate(BaseModel):
