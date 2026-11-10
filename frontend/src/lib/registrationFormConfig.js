@@ -14,6 +14,28 @@ export const FIELD_TYPES = [
   { value: 'file', label: 'File upload' },
 ];
 
+/**
+ * Kerala districts, offered as suggestions for the built-in district field.
+ * The field stays free text — these are datalist suggestions only, so
+ * non-Kerala leagues can still type any district.
+ */
+export const KERALA_DISTRICTS = [
+  'Thiruvananthapuram',
+  'Kollam',
+  'Pathanamthitta',
+  'Alappuzha',
+  'Kottayam',
+  'Idukki',
+  'Ernakulam',
+  'Thrissur',
+  'Palakkad',
+  'Malappuram',
+  'Kozhikode',
+  'Wayanad',
+  'Kannur',
+  'Kasaragod',
+];
+
 /** Keys stored on registration root columns (not extra_fields). */
 export const COLUMN_KEYS = new Set([
   'name',
