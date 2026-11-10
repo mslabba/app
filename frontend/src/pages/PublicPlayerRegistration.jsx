@@ -215,13 +215,12 @@ const buildTicket = ({ registrationId, playerValues, payment, eventSnapshot }) =
   };
 };
 
-// Ticket header brand — the organizer comes first: organizer logo →
-// event logo → PowerAuction logo. The title next to the logo is the
-// organizer name whenever an organizer/event logo is shown; only the pure
-// fallback (neither logo set) shows the PowerAuction logo + wordmark.
-// A logo that fails to load steps down to the next one in the chain.
+// Ticket header brand — the event name is the title, paired with the
+// event logo first: event logo → organizer logo → PowerAuction logo.
+// Only the pure fallback (neither logo set) shows the PowerAuction
+// logo + wordmark. A logo that fails to load steps down to the next one.
 const TicketHeaderBrand = ({ ev }) => {
-  const sources = [ev.organizer_logo_url, ev.logo_url, '/images/sports/logo-final.png'].filter(Boolean);
+  const sources = [ev.logo_url, ev.organizer_logo_url, '/images/sports/logo-final.png'].filter(Boolean);
   const [idx, setIdx] = useState(0);
   const src = sources[idx];
   if (!src) return null;
@@ -230,7 +229,7 @@ const TicketHeaderBrand = ({ ev }) => {
     <>
       <img
         src={src}
-        alt={isPowerAuction ? 'PowerAuction' : `${ev.organizer_name || 'Organizer'} logo`}
+        alt={isPowerAuction ? 'PowerAuction' : `${ev.name || 'Event'} logo`}
         className="h-8 w-auto max-w-[180px] object-contain"
         onError={() => setIdx((i) => i + 1)}
       />
@@ -240,7 +239,7 @@ const TicketHeaderBrand = ({ ev }) => {
         </span>
       ) : (
         <span className="text-lg font-bold text-white whitespace-nowrap truncate max-w-[220px]">
-          {ev.organizer_name || ev.name}
+          {ev.name || ev.organizer_name}
         </span>
       )}
     </>
@@ -308,7 +307,7 @@ const RegistrationTicket = ({ ticket, event, eventId, onRegisterAnother }) => {
         {/* Brand header — organizer first; PowerAuction only as the fallback */}
         <div className="bg-neutral-950 px-5 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <TicketHeaderBrand key={[ev.organizer_logo_url, ev.logo_url].join('|')} ev={ev} />
+            <TicketHeaderBrand key={[ev.logo_url, ev.organizer_logo_url].join('|')} ev={ev} />
           </div>
           <span className="text-[10px] font-bold tracking-[0.2em] text-white/60 uppercase whitespace-nowrap">
             {status === 'pending' ? 'Registration summary' : 'Auction ticket'}
