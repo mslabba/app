@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Trophy, User, CheckCircle, ArrowLeft, CreditCard, Users, XCircle, Calendar, Clock, MapPin } from 'lucide-react';
+import { Trophy, User, CheckCircle, ArrowLeft, CreditCard, Users, XCircle, Calendar, MapPin, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import ImageUploadWithCrop from '@/components/ImageUploadWithCrop';
 import DocumentUpload from '@/components/DocumentUpload';
@@ -103,9 +103,20 @@ const initialsFor = (name) => {
 
 const formatEventDate = (date) => {
   if (!date) return null;
-  const d = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return String(date);
-  return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const raw = String(date);
+  // Date-only strings parse as local midnight; a string that already
+  // carries a time parses as-is. Time is shown only when the stored
+  // string has one — there is no separate time field.
+  const hasTime = /T\d{1,2}:\d{2}|\s\d{1,2}:\d{2}/.test(raw);
+  const d = new Date(hasTime ? raw : `${raw}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return raw;
+  const opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
+  if (hasTime) {
+    opts.hour = 'numeric';
+    opts.minute = '2-digit';
+    return d.toLocaleString('en-IN', opts);
+  }
+  return d.toLocaleDateString('en-IN', opts);
 };
 
 // Player photo with an initials fallback — the photo is optional (and
@@ -127,6 +138,62 @@ const TicketPhoto = ({ photoUrl, name }) => {
       className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover shrink-0 border-2 border-red-100"
       onError={() => setFailed(true)}
     />
+  );
+};
+
+// Short, readable registration reference derived deterministically
+// from the registration UUID: the same UUID always gives the same
+// reference, so it survives refresh/restore with no backend change.
+// The full UUID never appears on screen — this is what the player
+// reads out to the organizer.
+const shortReference = (registrationId) => {
+  const hex = String(registrationId || '').replace(/[^0-9a-fA-F]/g, '');
+  if (hex.length < 6) return '—';
+  return `PA-${hex.slice(0, 6).toUpperCase()}`;
+};
+
+// A registration counts as paid when money changed hands: a Cashfree
+// payment, or a voucher that still left an amount due. A free
+// registration — or a voucher covering the full fee — is unpaid and
+// waits on organizer approval.
+const isPaidRegistration = (payment) =>
+  payment?.kind === 'paid' ||
+  (payment?.kind === 'voucher' && Number(payment?.amount) > 0);
+
+// Status-first header: the player's registration status is the first
+// thing on screen. The old green check + "Registration Successful!"
+// read as already being in the auction. Status is 'pending' (free /
+// unpaid), 'submitted' (paid + completed — no pending element anywhere)
+// or 'approved' (shown after the organizer approves; no screen
+// produces that state yet, but the variant exists so the ticket can
+// render it when one does). Compact by design: header + pending lines
+// fit in ~110px, so both are visible on a phone without scrolling.
+const RegistrationStatusHeader = ({ status, eventName }) => {
+  if (status === 'approved') {
+    return (
+      <div className="text-center mb-4 px-2">
+        <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-2">
+          <CheckCircle className="w-6 h-6 text-white" />
+        </div>
+        <h2 className="text-xl font-bold text-white">Registration approved</h2>
+      </div>
+    );
+  }
+  return (
+    <div className="text-center mb-4 px-2">
+      <h2 className="text-xl font-bold text-white">Registration submitted</h2>
+      {status === 'pending' && (
+        <>
+          <p className="mt-1.5 flex items-center justify-center gap-1.5 text-sm font-semibold text-orange-300">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-orange-400 shrink-0" />
+            Pending organizer approval
+          </p>
+          <p className="mt-0.5 text-xs text-white/70">
+            The organizer will review your registration{eventName ? ` for ${eventName}` : ''}.
+          </p>
+        </>
+      )}
+    </div>
   );
 };
 
@@ -190,14 +257,42 @@ const TicketHeaderBrand = ({ ev }) => {
   );
 };
 
-const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
+const RegistrationTicket = ({ ticket, event, eventId, onRegisterAnother }) => {
   // Prefer the live event (fresh fetch) over the snapshot stored with
   // the ticket — the snapshot is only a fallback for a restored ticket.
   const ev = event || ticket.event || {};
   const { player, payment } = ticket;
   const formattedDate = formatEventDate(ev.date);
+  // Paid registrations are treated as confirmed entry: header shows
+  // "Registration submitted" only, and the card is an "Auction ticket".
+  // Free/unpaid registrations wait on approval: "Registration summary".
+  const paid = isPaidRegistration(payment);
+  const status = ticket.status === 'approved' ? 'approved' : paid ? 'submitted' : 'pending';
+  const [copied, setCopied] = useState(false);
 
-  let paymentLabel = 'Free';
+  const copyReference = async () => {
+    const ref = shortReference(ticket.registrationId);
+    try {
+      await navigator.clipboard.writeText(ref);
+    } catch (e) {
+      // Clipboard API unavailable (insecure context) — fallback via a
+      // temporary textarea + execCommand.
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = ref;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch (e2) {
+        // Copy failed — the reference text itself stays selectable.
+      }
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  let paymentLabel = 'No payment required';
   if (payment.kind === 'paid') {
     paymentLabel = payment.amount != null
       ? `Paid ₹${Number(payment.amount).toLocaleString('en-IN')}`
@@ -210,14 +305,8 @@ const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
 
   return (
     <div className="max-w-md mx-auto">
-      {/* Success heading */}
-      <div className="text-center mb-5">
-        <div className="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-3">
-          <CheckCircle className="w-7 h-7 text-white" />
-        </div>
-        <h2 className="text-2xl font-bold text-white">Registration Successful!</h2>
-        <p className="text-white/80 text-sm mt-1">Your registration ticket is below.</p>
-      </div>
+      {/* Status-first header — replaces the old green check + "Registration Successful!" */}
+      <RegistrationStatusHeader status={status} eventName={ev.name} />
 
       {/* Ticket card */}
       <div className="bg-white rounded-3xl shadow-2xl overflow-hidden text-left">
@@ -227,7 +316,7 @@ const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
             <TicketHeaderBrand key={[ev.organizer_logo_url, ev.logo_url].join('|')} ev={ev} />
           </div>
           <span className="text-[10px] font-bold tracking-[0.2em] text-white/60 uppercase whitespace-nowrap">
-            Registration ticket
+            {status === 'pending' ? 'Registration summary' : 'Auction ticket'}
           </span>
         </div>
         <div className="h-1.5 bg-gradient-to-r from-red-600 via-red-500 to-red-700" />
@@ -259,7 +348,7 @@ const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
           <div className="flex items-start gap-2.5">
             <Trophy className="w-4 h-4 text-red-600 mt-1 shrink-0" />
             <div className="min-w-0">
-              <p className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Event</p>
+              <p className="text-[11px] font-bold tracking-wider text-gray-600 uppercase">Event</p>
               <p className="font-semibold text-gray-900 break-words">{ev.name || 'PowerAuction event'}</p>
             </div>
           </div>
@@ -267,7 +356,7 @@ const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
             <div className="flex items-start gap-2.5">
               <Calendar className="w-4 h-4 text-red-600 mt-1 shrink-0" />
               <div className="min-w-0">
-                <p className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Date</p>
+                <p className="text-[11px] font-bold tracking-wider text-gray-600 uppercase">Auction date</p>
                 <p className="font-semibold text-gray-900">{formattedDate}</p>
               </div>
             </div>
@@ -276,7 +365,7 @@ const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
             <div className="flex items-start gap-2.5">
               <User className="w-4 h-4 text-red-600 mt-1 shrink-0" />
               <div className="min-w-0">
-                <p className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Organizer</p>
+                <p className="text-[11px] font-bold tracking-wider text-gray-600 uppercase">Organizer</p>
                 <p className="font-semibold text-gray-900 break-words">{ev.organizer_name}</p>
               </div>
             </div>
@@ -285,7 +374,7 @@ const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
             <div className="flex items-start gap-2.5">
               <MapPin className="w-4 h-4 text-red-600 mt-1 shrink-0" />
               <div className="min-w-0">
-                <p className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Venue</p>
+                <p className="text-[11px] font-bold tracking-wider text-gray-600 uppercase">Venue</p>
                 <p className="font-semibold text-gray-900 break-words">{ev.venue}</p>
               </div>
             </div>
@@ -295,11 +384,22 @@ const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
         {/* Registration details */}
         <div className="mx-5 mb-1 grid grid-cols-2 gap-3 bg-gray-50 border border-gray-200 rounded-2xl p-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Registration ID</p>
-            <p className="font-mono text-xs text-gray-900 break-all mt-0.5">{ticket.registrationId || '—'}</p>
+            <p className="text-[11px] font-bold tracking-wider text-gray-600 uppercase">Registration ID</p>
+            <p className="mt-0.5 flex items-center gap-1.5 flex-wrap">
+              <span className="font-mono text-xs font-semibold text-gray-900">{shortReference(ticket.registrationId)}</span>
+              <button
+                type="button"
+                onClick={copyReference}
+                title="Copy reference"
+                className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-1.5 py-0.5 text-[11px] font-medium text-gray-600 hover:bg-gray-100"
+              >
+                {copied ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </p>
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Payment</p>
+            <p className="text-[11px] font-bold tracking-wider text-gray-600 uppercase">Payment</p>
             <p className="font-semibold text-gray-900 mt-0.5 break-words">{paymentLabel}</p>
           </div>
         </div>
@@ -316,25 +416,14 @@ const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
         </div>
       </div>
 
-      {/* Pending-approval note — a status message about the registration, not part of the ticket */}
-      <div className="mt-4">
-        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-2xl p-3">
-          <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-          <p className="text-sm text-amber-800">
-            <strong>Pending organizer approval.</strong> Your registration has been received — the
-            organizer will review your application and get back to you soon.
-          </p>
-        </div>
-      </div>
-
       {/* Actions */}
       <div className="mt-6 flex flex-col items-center gap-3">
         <Link
-          to="/"
-          className="inline-flex items-center bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
+          to={eventId ? `/auctions/${eventId}` : '/'}
+          className="inline-flex items-center bg-neutral-950 text-white px-6 py-3 rounded-lg font-medium hover:bg-neutral-800 transition-all duration-200"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Home
+          Back to event
         </Link>
         <button
           type="button"
@@ -958,27 +1047,27 @@ const PublicPlayerRegistration = () => {
 
   if (submitted) {
     // Defensive fallback: every completion path sets a ticket, but if one
-    // ever lands here without it, keep the plain success message rather
-    // than a blank screen.
+    // ever lands here without it, keep a plain message rather than a
+    // blank screen. It carries no ticket/payment data, so it uses the
+    // same "Registration submitted" heading (no green check — that read
+    // as already being in the auction) and the conservative
+    // organizer-review line.
     if (!ticket) {
       return (
         <div className="min-h-screen app-bg flex items-center justify-center">
           <div className="container mx-auto px-6 py-8">
             <Card className="max-w-md mx-auto bg-white/95 backdrop-blur-sm border-white/30 shadow-xl">
               <CardContent className="p-8 text-center">
-                <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle className="w-8 h-8 text-white" />
-                </div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-4">Registration Successful!</h2>
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">Registration submitted</h2>
                 <p className="text-gray-600 mb-6">
                   Thank you for registering! The organizer will review your application and get back to you soon.
                 </p>
                 <Link
-                  to="/"
-                  className="inline-flex items-center bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
+                  to={`/auctions/${eventId}`}
+                  className="inline-flex items-center bg-neutral-950 text-white px-6 py-3 rounded-lg font-medium hover:bg-neutral-800 transition-all duration-200"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back to Home
+                  Back to event
                 </Link>
               </CardContent>
             </Card>
@@ -989,7 +1078,7 @@ const PublicPlayerRegistration = () => {
     return (
       <div className="min-h-screen app-bg flex items-center justify-center">
         <div className="container mx-auto px-6 py-8">
-          <RegistrationTicket ticket={ticket} event={event} onRegisterAnother={handleRegisterAnother} />
+          <RegistrationTicket ticket={ticket} event={event} eventId={eventId} onRegisterAnother={handleRegisterAnother} />
         </div>
       </div>
     );
