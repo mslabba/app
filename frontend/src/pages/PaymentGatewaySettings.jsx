@@ -166,9 +166,8 @@ const PaymentGatewaySettings = () => {
                 <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
                   <h4 className="text-white font-medium mb-2">How it works:</h4>
                   <ul className="text-white/80 text-sm space-y-1 list-disc list-inside">
-                    <li>All player registration payments are collected via PowerAuction's Cashfree account</li>
-                    <li>Event organizers provide their bank details in Settings</li>
-                    <li>PowerAuction admin manually transfers funds to organizers after events</li>
+                    <li>Registration payments go to PowerAuction&apos;s Cashfree account unless an event has its own organizer Cashfree account configured</li>
+                    <li>When an event uses the platform account, organizers provide their bank details in Settings and PowerAuction admin manually transfers funds to organizers after events</li>
                     <li>This ensures secure payment handling and better control</li>
                   </ul>
                 </div>

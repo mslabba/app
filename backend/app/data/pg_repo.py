@@ -193,6 +193,43 @@ def update_event(event_id: str, fields: dict[str, Any]) -> None:
         s.commit()
 
 
+def get_event_cashfree_settings(event_id: str) -> Optional[dict[str, Any]]:
+    """Per-event organizer Cashfree credentials (issue #46), or None.
+
+    Read through this dedicated getter — never via event_to_dict — so the
+    secret key stays out of every Event API response.
+    """
+    with _session() as s:
+        e = s.get(Event, event_id)
+        if not e:
+            return None
+        app_id = getattr(e, "organizer_cashfree_app_id", None)
+        secret = getattr(e, "organizer_cashfree_secret_key", None)
+        if not app_id and not secret:
+            return None
+        return {
+            "cashfree_app_id": app_id,
+            "cashfree_secret_key": secret,
+            "cashfree_mode": getattr(e, "organizer_cashfree_mode", None) or "sandbox",
+        }
+
+
+def set_event_cashfree_settings(
+    event_id: str, settings: Optional[dict[str, Any]]
+) -> None:
+    """Store (or clear, when settings is None) the organizer Cashfree
+    credentials for an event."""
+    with _session() as s:
+        e = s.get(Event, event_id)
+        if not e:
+            raise ValueError("Event not found")
+        settings = settings or {}
+        e.organizer_cashfree_app_id = settings.get("cashfree_app_id")
+        e.organizer_cashfree_secret_key = settings.get("cashfree_secret_key")
+        e.organizer_cashfree_mode = settings.get("cashfree_mode") or "sandbox"
+        s.commit()
+
+
 def list_categories(event_id: str) -> list[dict[str, Any]]:
     with _session() as s:
         rows = s.scalars(select(Category).where(Category.event_id == event_id)).all()
@@ -1163,6 +1200,8 @@ def create_payment(data: dict[str, Any]) -> dict[str, Any]:
             voucher_code=data.get("voucher_code"),
             original_amount=data.get("original_amount"),
             discount_amount=data.get("discount_amount"),
+            gateway_source=data.get("gateway_source"),
+            cashfree_app_id=data.get("cashfree_app_id"),
             created_at=_parse_dt(data.get("created_at")) or datetime.now(timezone.utc),
         )
         s.add(p)

@@ -64,6 +64,12 @@ class Event(Base):
     )
     organizer_name: Mapped[Optional[str]] = mapped_column(String(255))
     organizer_mobile: Mapped[Optional[str]] = mapped_column(String(64))
+    # Per-event organizer Cashfree account (issue #46). Stored as plain
+    # columns — never exposed via event_to_dict / the Event API responses;
+    # reads go through the dedicated cashfree-settings endpoint, masked.
+    organizer_cashfree_app_id: Mapped[Optional[str]] = mapped_column(Text)
+    organizer_cashfree_secret_key: Mapped[Optional[str]] = mapped_column(Text)
+    organizer_cashfree_mode: Mapped[Optional[str]] = mapped_column(String(16))
     has_registration_limit: Mapped[bool] = mapped_column(Boolean, default=False)
     registration_limit: Mapped[Optional[int]] = mapped_column(Integer)
     registration_form_config: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
@@ -336,6 +342,12 @@ class PaymentOrder(Base):
     voucher_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     original_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     discount_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Which Cashfree account the order was created under (issue #46):
+    # 'organizer' or 'platform'. Recorded at order creation so the later
+    # webhook / verify / reconcile steps resolve the SAME credentials.
+    # cashfree_app_id is the public client id, not a secret.
+    gateway_source: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    cashfree_app_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
 

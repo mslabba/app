@@ -221,4 +221,6 @@ def payment_to_dict(p) -> dict[str, Any]:
         "voucher_code": getattr(p, "voucher_code", None),
         "original_amount": getattr(p, "original_amount", None),
         "discount_amount": getattr(p, "discount_amount", None),
+        "gateway_source": getattr(p, "gateway_source", None),
+        "cashfree_app_id": getattr(p, "cashfree_app_id", None),
     }

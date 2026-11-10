@@ -14,6 +14,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -23,6 +24,17 @@ const EventManagement = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
+  // Per-event organizer Cashfree account (issue #46). The secret is never
+  // returned by the server — only its last 4 characters — so an empty
+  // secret field means "keep the stored secret".
+  const [cashfreeSettings, setCashfreeSettings] = useState({
+    cashfree_app_id: '',
+    cashfree_secret_key: '',
+    cashfree_mode: 'sandbox',
+    configured: false,
+    secret_last4: null
+  });
+  const [cashfreeDirty, setCashfreeDirty] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     date: '',
@@ -63,21 +75,71 @@ const EventManagement = () => {
       toast.error('Failed to load auctions');
     }
   };
+  const fetchCashfreeSettings = async (eventId) => {
+    try {
+      const response = await axios.get(`${API}/auctions/${eventId}/cashfree-settings`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      setCashfreeSettings({
+        cashfree_app_id: response.data?.cashfree_app_id || '',
+        cashfree_secret_key: '',
+        cashfree_mode: response.data?.cashfree_mode || 'sandbox',
+        configured: !!response.data?.configured,
+        secret_last4: response.data?.secret_last4 || null
+      });
+    } catch (error) {
+      // No settings yet (or unreadable) — the form stays blank, which
+      // means "use the platform account".
+      setCashfreeSettings({
+        cashfree_app_id: '',
+        cashfree_secret_key: '',
+        cashfree_mode: 'sandbox',
+        configured: false,
+        secret_last4: null
+      });
+    }
+    setCashfreeDirty(false);
+  };
+
+  const saveCashfreeSettings = async (eventId) => {
+    try {
+      await axios.put(`${API}/auctions/${eventId}/cashfree-settings`, {
+        cashfree_app_id: cashfreeSettings.cashfree_app_id,
+        cashfree_secret_key: cashfreeSettings.cashfree_secret_key,
+        cashfree_mode: cashfreeSettings.cashfree_mode
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to save Cashfree settings');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
+      let eventId = editingEvent?.id;
       if (editingEvent) {
         await axios.put(`${API}/auctions/${editingEvent.id}`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
         toast.success('Auction updated successfully!');
       } else {
-        await axios.post(`${API}/auctions`, formData, {
+        const response = await axios.post(`${API}/auctions`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
+        eventId = response.data?.id;
         toast.success('Auction created successfully!');
+      }
+      // Organizer Cashfree settings live on their own endpoint (the secret
+      // never travels with the event payload). Save them only when the
+      // organizer touched them.
+      if (eventId && cashfreeDirty) {
+        await saveCashfreeSettings(eventId);
       }
       fetchEvents();
       resetForm();
@@ -105,12 +167,21 @@ const EventManagement = () => {
       has_registration_limit: event.has_registration_limit || false,
       registration_limit: event.registration_limit || null
     });
+    fetchCashfreeSettings(event.id);
     setIsDialogOpen(true);
   };
 
   const resetForm = () => {
     setEditingEvent(null);
     setIsDialogOpen(false);
+    setCashfreeSettings({
+      cashfree_app_id: '',
+      cashfree_secret_key: '',
+      cashfree_mode: 'sandbox',
+      configured: false,
+      secret_last4: null
+    });
+    setCashfreeDirty(false);
     setFormData({
       name: '',
       date: '',
@@ -322,6 +393,73 @@ const EventManagement = () => {
                         />
                         <p className="text-sm text-muted-foreground">
                           Players will be required to pay this amount during registration
+                        </p>
+                      </div>
+                    )}
+                    {formData.payment_settings.collect_payment && (
+                      <div className="space-y-3 border-t pt-4">
+                        <div>
+                          <Label>Organizer Cashfree account</Label>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            When set, registration payments for this event go directly to
+                            this Cashfree account instead of PowerAuction&apos;s. Leave both
+                            fields empty to use the platform&apos;s account.
+                          </p>
+                        </div>
+                        {cashfreeSettings.configured && (
+                          <p className="text-sm text-emerald-600">
+                            Organizer Cashfree account configured (App ID {cashfreeSettings.cashfree_app_id}).
+                          </p>
+                        )}
+                        <div className="space-y-2">
+                          <Label htmlFor="cashfree-app-id">Cashfree App ID</Label>
+                          <Input
+                            id="cashfree-app-id"
+                            placeholder="Your Cashfree App ID"
+                            value={cashfreeSettings.cashfree_app_id}
+                            onChange={(e) => {
+                              setCashfreeSettings({ ...cashfreeSettings, cashfree_app_id: e.target.value });
+                              setCashfreeDirty(true);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="cashfree-secret-key">Cashfree Secret Key</Label>
+                          <Input
+                            id="cashfree-secret-key"
+                            type="password"
+                            placeholder={cashfreeSettings.configured && cashfreeSettings.secret_last4
+                              ? `••••${cashfreeSettings.secret_last4} — leave blank to keep`
+                              : 'Your Cashfree Secret Key'}
+                            value={cashfreeSettings.cashfree_secret_key}
+                            onChange={(e) => {
+                              setCashfreeSettings({ ...cashfreeSettings, cashfree_secret_key: e.target.value });
+                              setCashfreeDirty(true);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="cashfree-mode">Environment Mode</Label>
+                          <Select
+                            value={cashfreeSettings.cashfree_mode}
+                            onValueChange={(value) => {
+                              setCashfreeSettings({ ...cashfreeSettings, cashfree_mode: value });
+                              setCashfreeDirty(true);
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select mode" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="sandbox">Sandbox (Testing)</SelectItem>
+                              <SelectItem value="production">Production (Live)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          In your Cashfree dashboard, set the webhook URL to{' '}
+                          <span className="font-mono break-all">{API}/payments/webhook</span>{' '}
+                          so payment confirmations reach PowerAuction.
                         </p>
                       </div>
                     )}
