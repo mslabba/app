@@ -20,6 +20,11 @@ from firebase_admin import firestore
 from models import *
 from auth_middleware import verify_token, get_current_user, require_super_admin, require_team_admin, require_event_organizer
 from app.registration_form import validate_registration_payload
+from app.cashfree import (
+    masked_read,
+    normalize_organizer_settings,
+    resolve_cashfree_settings,
+)
 from app.vouchers import (
     REASON_EXPIRED,
     REASON_FULLY_USED,
@@ -5522,6 +5527,105 @@ def _load_cashfree_settings() -> dict:
     return settings_doc.to_dict()
 
 
+# ---------------------------------------------------------------------------
+# Per-event organizer Cashfree settings (issue #46).
+#
+# The organizer credentials live on the event as `organizer_cashfree` —
+# deliberately NOT a field of the Event model, so the secret can never
+# leak through the Event responses (GET /auctions and GET /auctions/{id}
+# return the full Event). All reads go through the dedicated endpoint
+# below, which returns the masked read model only.
+# ---------------------------------------------------------------------------
+
+def _get_event_cashfree_settings(event_id: str):
+    """Organizer Cashfree credentials stored on the event, or None."""
+    if _USE_POSTGRES and _pg:
+        return _pg.get_event_cashfree_settings(event_id)
+    if not db:
+        return None
+    doc = db.collection('events').document(event_id).get()
+    if not doc.exists:
+        return None
+    settings = (doc.to_dict() or {}).get('organizer_cashfree')
+    return settings if isinstance(settings, dict) else None
+
+
+def _set_event_cashfree_settings(event_id: str, settings):
+    """Store organizer Cashfree credentials on the event (None clears)."""
+    if _USE_POSTGRES and _pg:
+        _pg.set_event_cashfree_settings(event_id, settings)
+        return
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    db.collection('events').document(event_id).update({'organizer_cashfree': settings})
+
+
+def _resolve_cashfree_settings(event_id: str) -> dict:
+    """Credentials for a NEW order on an event: organizer settings if
+    configured, platform default otherwise. A half-configured organizer
+    entry is refused, never silently downgraded to the platform account.
+    Returns the credentials plus `gateway_source` ('organizer'/'platform')."""
+    organizer = _get_event_cashfree_settings(event_id)
+    platform = {}
+    if not ((organizer or {}).get('cashfree_app_id') or (organizer or {}).get('cashfree_secret_key')):
+        # Only consult the platform account when the event has none of
+        # its own — an organizer-configured event must work even if the
+        # platform credentials are absent.
+        platform = _load_cashfree_settings()
+    try:
+        return resolve_cashfree_settings(organizer, platform)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+def _resolve_cashfree_settings_for_payment(payment: dict) -> dict:
+    """Credentials for an EXISTING order: the SAME ones that created it.
+
+    The payment records `gateway_source` at creation. An organizer order
+    is verified against the event's organizer credentials; a platform
+    order against the platform account. Never fall back across accounts.
+    """
+    if (payment or {}).get('gateway_source') == 'organizer':
+        organizer = _get_event_cashfree_settings(payment.get('event_id'))
+        try:
+            return resolve_cashfree_settings(organizer, {})
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    platform = _load_cashfree_settings()
+    return {
+        'cashfree_app_id': platform.get('cashfree_app_id'),
+        'cashfree_secret_key': platform.get('cashfree_secret_key'),
+        'cashfree_mode': platform.get('cashfree_mode', 'sandbox'),
+        'gateway_source': 'platform',
+    }
+
+
+@api_router.get("/auctions/{event_id}/cashfree-settings", response_model=OrganizerCashfreeSettingsRead)
+async def get_organizer_cashfree_settings(event_id: str, current_user: dict = Depends(require_event_organizer)):
+    """Organizer Cashfree settings for an event — owner or super admin.
+    The secret is never returned; only its last 4 characters."""
+    if not await check_event_ownership(event_id, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only access events you created")
+    return OrganizerCashfreeSettingsRead(**masked_read(_get_event_cashfree_settings(event_id)))
+
+
+@api_router.put("/auctions/{event_id}/cashfree-settings", response_model=OrganizerCashfreeSettingsRead)
+async def update_organizer_cashfree_settings(event_id: str, settings_data: OrganizerCashfreeSettings, current_user: dict = Depends(require_event_organizer)):
+    """Save organizer Cashfree settings for an event — owner or super admin.
+    App ID and secret key are required together; both blank clears the
+    settings (the event falls back to the platform account). A blank
+    secret with existing settings keeps the stored secret."""
+    if not await check_event_ownership(event_id, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only access events you created")
+    try:
+        stored = normalize_organizer_settings(
+            settings_data.model_dump(), _get_event_cashfree_settings(event_id))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    _set_event_cashfree_settings(event_id, stored)
+    return OrganizerCashfreeSettingsRead(**masked_read(stored))
+
+
 def _normalize_in_phone(raw_phone: str) -> str:
     phone = ''.join(filter(str.isdigit, (raw_phone or '').strip()))
     if len(phone) == 11 and phone.startswith('91'):
@@ -5771,8 +5875,15 @@ def _complete_paid_registration(order_id: str):
 
 
 def _fetch_cashfree_order(order_id: str):
-    """Fetch an order from Cashfree. Returns (order_status, cf_order_id)."""
-    settings_data = _load_cashfree_settings()
+    """Fetch an order from Cashfree. Returns (order_status, cf_order_id).
+
+    Resolves credentials from the payment order itself, so an organizer
+    order is looked up under the organizer's account, not the platform's.
+    """
+    payment = _load_payment(order_id)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment order not found")
+    settings_data = _resolve_cashfree_settings_for_payment(payment)
     cashfree_app_id = settings_data.get('cashfree_app_id')
     cashfree_secret_key = settings_data.get('cashfree_secret_key')
     cashfree_mode = settings_data.get('cashfree_mode', 'sandbox')
@@ -5828,7 +5939,7 @@ async def create_payment_order(order_data: PaymentOrderCreate):
             if form_errors:
                 raise HTTPException(status_code=400, detail=form_errors[0])
         
-        settings_data = _load_cashfree_settings()
+        settings_data = _resolve_cashfree_settings(order_data.event_id)
         cashfree_app_id = settings_data.get('cashfree_app_id')
         cashfree_secret_key = settings_data.get('cashfree_secret_key')
         cashfree_mode = settings_data.get('cashfree_mode', 'sandbox')
@@ -5928,6 +6039,9 @@ async def create_payment_order(order_data: PaymentOrderCreate):
         # Store payment order in active backend. amount is what is actually
         # charged; original_amount is the event fee and discount_amount the
         # rupees saved by the voucher (both None without a voucher).
+        # gateway_source records which Cashfree account created this order,
+        # so the webhook / verify / reconcile steps resolve the SAME
+        # credentials later (issue #46).
         payment_doc = {
             'order_id': order_id,
             'event_id': order_data.event_id,
@@ -5941,6 +6055,8 @@ async def create_payment_order(order_data: PaymentOrderCreate):
             'voucher_code': voucher_code,
             'original_amount': int(registration_fee),
             'discount_amount': discount,
+            'gateway_source': settings_data.get('gateway_source', 'platform'),
+            'cashfree_app_id': cashfree_app_id,
             'created_at': datetime.now(timezone.utc).isoformat()
         }
         if _USE_POSTGRES and _pg:
@@ -6032,15 +6148,11 @@ async def cashfree_webhook(request: Request):
     raw_body = await request.body()
     signature = request.headers.get('x-webhook-signature')
     timestamp = request.headers.get('x-webhook-timestamp')
-    try:
-        settings_data = _load_cashfree_settings()
-    except HTTPException:
-        logger.error("Cashfree webhook: gateway settings missing, cannot verify signature")
-        raise HTTPException(status_code=400, detail="Payment gateway not configured")
-    if not _verify_cashfree_webhook_signature(
-            timestamp, raw_body, signature, settings_data.get('cashfree_secret_key')):
-        logger.warning("Cashfree webhook: invalid signature")
-        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+    # Parse first (untrusted) to find the order, so the signature is
+    # verified against the SAME credentials that created it: an organizer
+    # order against the organizer's secret, a platform order against the
+    # platform's (issue #46). The signature check below still gates every
+    # state change — parsing here trusts nothing.
     try:
         payload = json.loads(raw_body.decode('utf-8'))
     except Exception:
@@ -6048,11 +6160,26 @@ async def cashfree_webhook(request: Request):
     data = payload.get('data') or {}
     order_data = data.get('order') or {}
     order_id = order_data.get('order_id') or data.get('order_id')
+    payment = _load_payment(order_id) if order_id else None
+    try:
+        if payment:
+            settings_data = _resolve_cashfree_settings_for_payment(payment)
+        else:
+            # Unknown order: no per-order credentials exist, so verify
+            # against the platform account exactly as before.
+            settings_data = _load_cashfree_settings()
+    except HTTPException:
+        logger.error("Cashfree webhook: gateway settings missing, cannot verify signature")
+        raise HTTPException(status_code=400, detail="Payment gateway not configured")
+    if not _verify_cashfree_webhook_signature(
+            timestamp, raw_body, signature, settings_data.get('cashfree_secret_key')):
+        logger.warning("Cashfree webhook: invalid signature")
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
     order_status = order_data.get('order_status') or data.get('order_status')
     if not order_id or not order_status:
         logger.warning(f"Cashfree webhook: missing order id/status (type={payload.get('type')})")
         return {"status": "OK"}
-    if not _load_payment(order_id):
+    if not payment:
         logger.warning(f"Cashfree webhook: unknown order {order_id}")
         return {"status": "OK"}
     if order_status in ('PAID', 'SUCCESS'):

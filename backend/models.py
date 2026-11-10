@@ -187,6 +187,23 @@ class PaymentGatewaySettings(BaseModel):
     updated_at: str
     updated_by: str  # Super admin who updated
 
+# Per-event organizer Cashfree settings (issue #46). Stored on the event
+# document as `organizer_cashfree` — deliberately NOT a field of the Event
+# model, so the secret can never leak through the Event responses
+# (GET /auctions and GET /auctions/{id} return the full Event). Reads go
+# through the dedicated cashfree-settings endpoint below, which returns
+# the masked read model only.
+class OrganizerCashfreeSettings(BaseModel):
+    cashfree_app_id: Optional[str] = None
+    cashfree_secret_key: Optional[str] = None
+    cashfree_mode: str = "sandbox"  # sandbox or production
+
+class OrganizerCashfreeSettingsRead(BaseModel):
+    configured: bool
+    cashfree_app_id: Optional[str] = None
+    cashfree_mode: str = "sandbox"
+    secret_last4: Optional[str] = None  # masked — never the secret itself
+
 # Payment Models
 class PaymentOrderCreate(BaseModel):
     event_id: str
