@@ -5998,13 +5998,21 @@ async def verify_payment(verification_data: PaymentVerificationRequest):
         if order_status in ('PAID', 'SUCCESS'):
             completion = _complete_paid_registration(verification_data.order_id)
 
+        # Return the saved registration payload so the success screen can
+        # render the registration ticket after a gateway return (a fresh
+        # page load holds no form state). Already stored on the payment
+        # order — nothing new is read or written here.
+        form_data = _get_payment_form_data(verification_data.order_id, payment_data)
+
         return PaymentVerificationResponse(
             payment_status=order_status,
             order_id=verification_data.order_id,
             order_amount=payment_data.get('amount'),
             transaction_id=transaction_id,
             registration_completed=completion['completed'],
-            registration_id=completion['registration_id']
+            registration_id=completion['registration_id'],
+            form_data=form_data,
+            voucher_code=payment_data.get('voucher_code')
         )
     except HTTPException:
         raise

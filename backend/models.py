@@ -316,6 +316,14 @@ class PaymentVerificationResponse(BaseModel):
     # organizer follow-up, not another payment.
     registration_completed: bool = False
     registration_id: Optional[str] = None
+    # Saved registration payload from order creation (already stored on the
+    # payment order). Returned so the public success screen can render the
+    # registration ticket after a gateway return, when the browser holds no
+    # form state. None for orders created before the payload was saved.
+    form_data: Optional[Dict[str, Any]] = None
+    # Voucher code recorded on the payment order, if a voucher was used.
+    # Returned for the same reason — the ticket labels voucher payments.
+    voucher_code: Optional[str] = None
 
 # Team Models
 class TeamCreate(BaseModel):
