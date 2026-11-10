@@ -273,4 +273,3 @@ def validate_registration_payload(
         if error:
             errors.append(error)
     return errors
-
