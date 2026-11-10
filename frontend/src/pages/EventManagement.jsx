@@ -28,6 +28,7 @@ const EventManagement = () => {
     date: '',
     description: '',
     logo_url: '',
+    organizer_logo_url: '',
     banner_url: '',
     rules: {
       min_squad_size: 11,
@@ -94,6 +95,7 @@ const EventManagement = () => {
       date: event.date,
       description: event.description || '',
       logo_url: event.logo_url || '',
+      organizer_logo_url: event.organizer_logo_url || '',
       banner_url: event.banner_url || '',
       rules: event.rules,
       payment_settings: event.payment_settings || {
@@ -114,6 +116,7 @@ const EventManagement = () => {
       date: '',
       description: '',
       logo_url: '',
+      organizer_logo_url: '',
       banner_url: '',
       rules: {
         min_squad_size: 11,
@@ -207,6 +210,14 @@ const EventManagement = () => {
                       onChange={(url) => setFormData({ ...formData, logo_url: url })}
                       placeholder="Upload auction logo or enter URL"
                       sampleType={{ type: 'events', subtype: 'logos' }}
+                    />
+                    <ImageUpload
+                      label="Organizer Logo"
+                      value={formData.organizer_logo_url}
+                      onChange={(url) => setFormData({ ...formData, organizer_logo_url: url })}
+                      placeholder="Upload organizer logo or enter URL"
+                      sampleType={{ type: 'events', subtype: 'organizer-logos' }}
+                      showSample={false}
                     />
                     <ImageUpload
                       label="Auction Banner"

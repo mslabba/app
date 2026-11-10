@@ -56,6 +56,7 @@ class Event(Base):
     payment_settings: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     description: Mapped[Optional[str]] = mapped_column(Text)
     logo_url: Mapped[Optional[str]] = mapped_column(Text)
+    organizer_logo_url: Mapped[Optional[str]] = mapped_column(Text)
     banner_url: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[Optional[str]] = mapped_column(
