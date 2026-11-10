@@ -158,6 +158,38 @@ const buildTicket = ({ registrationId, playerValues, payment, eventSnapshot }) =
   };
 };
 
+// Ticket header brand — the organizer comes first: organizer logo →
+// event logo → PowerAuction logo. The title next to the logo is the
+// organizer name whenever an organizer/event logo is shown; only the pure
+// fallback (neither logo set) shows the PowerAuction logo + wordmark.
+// A logo that fails to load steps down to the next one in the chain.
+const TicketHeaderBrand = ({ ev }) => {
+  const sources = [ev.organizer_logo_url, ev.logo_url, '/images/sports/logo-final.png'].filter(Boolean);
+  const [idx, setIdx] = useState(0);
+  const src = sources[idx];
+  if (!src) return null;
+  const isPowerAuction = src === '/images/sports/logo-final.png';
+  return (
+    <>
+      <img
+        src={src}
+        alt={isPowerAuction ? 'PowerAuction' : `${ev.organizer_name || 'Organizer'} logo`}
+        className="h-8 w-auto max-w-[180px] object-contain"
+        onError={() => setIdx((i) => i + 1)}
+      />
+      {isPowerAuction ? (
+        <span className="text-lg font-bold text-white whitespace-nowrap">
+          Power<span className="text-red-500">Auction</span>
+        </span>
+      ) : (
+        <span className="text-lg font-bold text-white whitespace-nowrap truncate max-w-[220px]">
+          {ev.organizer_name || ev.name}
+        </span>
+      )}
+    </>
+  );
+};
+
 const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
   // Prefer the live event (fresh fetch) over the snapshot stored with
   // the ticket — the snapshot is only a fallback for a restored ticket.
@@ -189,18 +221,10 @@ const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
 
       {/* Ticket card */}
       <div className="bg-white rounded-3xl shadow-2xl overflow-hidden text-left">
-        {/* Brand header — same logo + Power white / Auction red as the Navbar */}
+        {/* Brand header — organizer first; PowerAuction only as the fallback */}
         <div className="bg-neutral-950 px-5 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <img
-              src="/images/sports/logo-final.png"
-              alt="PowerAuction"
-              className="h-8 w-auto"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-            <span className="text-lg font-bold text-white whitespace-nowrap">
-              Power<span className="text-red-500">Auction</span>
-            </span>
+            <TicketHeaderBrand key={[ev.organizer_logo_url, ev.logo_url].join('|')} ev={ev} />
           </div>
           <span className="text-[10px] font-bold tracking-[0.2em] text-white/60 uppercase whitespace-nowrap">
             Registration ticket
@@ -280,15 +304,26 @@ const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
           </div>
         </div>
 
-        {/* Pending-approval note — the ticket is a receipt, not confirmed entry */}
-        <div className="px-5 py-4">
-          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-2xl p-3">
-            <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-            <p className="text-sm text-amber-800">
-              <strong>Pending organizer approval.</strong> Your registration has been received — the
-              organizer will review your application and get back to you soon.
-            </p>
-          </div>
+        {/* Powered-by footer — the ticket is the organizer's; PowerAuction is the technology provider */}
+        <div className="mt-4 border-t border-gray-200 px-5 py-3 flex items-center justify-center gap-2">
+          <img
+            src="/images/sports/logo-final.png"
+            alt="PowerAuction"
+            className="h-4 w-auto"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+          <span className="text-xs text-gray-500">Powered by PowerAuction</span>
+        </div>
+      </div>
+
+      {/* Pending-approval note — a status message about the registration, not part of the ticket */}
+      <div className="mt-4">
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-2xl p-3">
+          <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+          <p className="text-sm text-amber-800">
+            <strong>Pending organizer approval.</strong> Your registration has been received — the
+            organizer will review your application and get back to you soon.
+          </p>
         </div>
       </div>
 
@@ -338,6 +373,7 @@ const PublicPlayerRegistration = () => {
     name: event?.name || null,
     date: event?.date || null,
     logo_url: event?.logo_url || null,
+    organizer_logo_url: event?.organizer_logo_url || null,
     banner_url: event?.banner_url || null,
     organizer_name: event?.organizer_name || null,
     venue: event?.venue || null,

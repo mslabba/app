@@ -103,6 +103,7 @@ class EventCreate(BaseModel):
     rules: EventRules
     description: Optional[str] = None
     logo_url: Optional[str] = None
+    organizer_logo_url: Optional[str] = None
     banner_url: Optional[str] = None
     payment_settings: Optional[PaymentSettings] = PaymentSettings()
     has_registration_limit: bool = False
@@ -117,6 +118,7 @@ class Event(BaseModel):
     rules: EventRules
     description: Optional[str] = None
     logo_url: Optional[str] = None
+    organizer_logo_url: Optional[str] = None
     banner_url: Optional[str] = None
     created_at: str
     created_by: str

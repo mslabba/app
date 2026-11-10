@@ -36,6 +36,7 @@ def event_to_dict(e) -> dict[str, Any]:
         or {"collect_payment": False, "registration_fee": None},
         "description": e.description,
         "logo_url": e.logo_url,
+        "organizer_logo_url": e.organizer_logo_url,
         "banner_url": e.banner_url,
         "created_at": _iso(e.created_at),
         "created_by": e.created_by,

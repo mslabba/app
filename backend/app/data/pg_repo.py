@@ -166,6 +166,7 @@ def create_event(data: dict[str, Any]) -> dict[str, Any]:
             or {"collect_payment": False, "registration_fee": None},
             description=data.get("description"),
             logo_url=data.get("logo_url"),
+            organizer_logo_url=data.get("organizer_logo_url"),
             banner_url=data.get("banner_url"),
             created_at=datetime.now(timezone.utc),
             created_by=data.get("created_by"),
