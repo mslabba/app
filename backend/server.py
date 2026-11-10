@@ -19,6 +19,18 @@ from firebase_config import db, firebase_auth
 from firebase_admin import firestore
 from models import *
 from auth_middleware import verify_token, get_current_user, require_super_admin, require_team_admin, require_event_organizer
+from app.registration_form import validate_registration_payload
+from app.vouchers import (
+    REASON_EXPIRED,
+    REASON_FULLY_USED,
+    compute_amount_due,
+    discount_amount,
+    generate_code,
+    is_valid_custom_code,
+    normalize_code,
+    validate_voucher,
+    validate_voucher_definition,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -104,6 +116,126 @@ async def require_event_access(event_id: str, current_user: dict = Depends(requi
             detail="You can only access events you created"
         )
     return current_user
+
+
+# ---------------------------------------------------------------------------
+# Voucher helpers (issue #40). Vouchers are scoped to ONE event; every
+# discount is computed server-side from the event fee + the stored voucher
+# — the client-sent amount is never trusted (same rule as the fee itself).
+# ---------------------------------------------------------------------------
+
+def _load_event_dict(event_id: str):
+    """Event as a plain dict from the active backend, or None."""
+    if _USE_POSTGRES and _pg:
+        return _pg.get_event(event_id)
+    if not db:
+        return None
+    doc = db.collection('events').document(event_id).get()
+    return doc.to_dict() if doc.exists else None
+
+
+def _load_voucher_by_code(event_id: str, code: str):
+    """Voucher dict for (event, code), or None. Codes are stored upper-cased."""
+    code = normalize_code(code)
+    if not code:
+        return None
+    if _USE_POSTGRES and _pg:
+        return _pg.get_voucher_by_code(event_id, code)
+    if not db:
+        return None
+    docs = db.collection('vouchers').where('event_id', '==', event_id).stream()
+    for d in docs:
+        data = d.to_dict()
+        if (data.get('code') or '') == code:
+            return data
+    return None
+
+
+def _load_voucher_by_id(event_id: str, voucher_id: str):
+    """Voucher dict by id, or None (also None when it belongs to another event)."""
+    if _USE_POSTGRES and _pg:
+        v = _pg.get_voucher(voucher_id)
+    elif db:
+        doc = db.collection('vouchers').document(voucher_id).get()
+        v = doc.to_dict() if doc.exists else None
+    else:
+        return None
+    if not v or v.get('event_id') != event_id:
+        return None
+    return v
+
+
+def _voucher_to_response(v: dict) -> dict:
+    """Normalise a stored voucher dict to the API shape (ISO strings)."""
+    def _iso(value):
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
+    return {
+        'id': v.get('id'),
+        'event_id': v.get('event_id'),
+        'code': v.get('code'),
+        'type': v.get('type'),
+        'value': v.get('value'),
+        'max_uses': v.get('max_uses'),
+        'used_count': v.get('used_count') or 0,
+        'active': v.get('active', True),
+        'expires_at': _iso(v.get('expires_at')),
+        'created_by': v.get('created_by'),
+        'created_at': _iso(v.get('created_at')),
+        'label': v.get('label'),
+    }
+
+
+def _voucher_error_detail(reason: str) -> str:
+    """User-facing message for a voucher failure reason. Existence of a
+    code is never confirmed: not-found / wrong-event / inactive all read
+    as the same generic message."""
+    if reason == REASON_EXPIRED:
+        return "Voucher code has expired"
+    if reason == REASON_FULLY_USED:
+        return "Voucher code has been fully used"
+    return "Invalid voucher code"
+
+
+def _validate_voucher_for_redemption(event_id: str, raw_code: str, fee: int):
+    """Load + validate a voucher for server-side redemption. Raises
+    HTTPException(400) on any failure. Returns (voucher, amount_due,
+    discount_amount)."""
+    voucher = _load_voucher_by_code(event_id, raw_code)
+    valid, reason = validate_voucher(voucher, event_id)
+    if not valid:
+        raise HTTPException(status_code=400, detail=_voucher_error_detail(reason))
+    fee = int(fee or 0)
+    amount_due = compute_amount_due(fee, voucher['type'], voucher.get('value'))
+    return voucher, amount_due, discount_amount(fee, voucher['type'], voucher.get('value'))
+
+
+# In-memory rate limit for the public validate endpoint: 10 attempts per
+# minute per IP. Best-effort (single process); the generic error message
+# is the real enumeration defence, this just slows guessing.
+_VOUCHER_VALIDATE_ATTEMPTS: dict = {}
+_VOUCHER_VALIDATE_LIMIT = 10
+_VOUCHER_VALIDATE_WINDOW_S = 60.0
+
+
+def _voucher_validate_rate_limited(client_ip: str) -> bool:
+    now = time.monotonic()
+    # Keep the table bounded: drop fully-expired entries once it grows.
+    if len(_VOUCHER_VALIDATE_ATTEMPTS) > 1000:
+        for ip in [k for k, v in _VOUCHER_VALIDATE_ATTEMPTS.items()
+                   if not any(now - t < _VOUCHER_VALIDATE_WINDOW_S for t in v)]:
+            del _VOUCHER_VALIDATE_ATTEMPTS[ip]
+    attempts = [t for t in _VOUCHER_VALIDATE_ATTEMPTS.get(client_ip, [])
+                if now - t < _VOUCHER_VALIDATE_WINDOW_S]
+    if len(attempts) >= _VOUCHER_VALIDATE_LIMIT:
+        _VOUCHER_VALIDATE_ATTEMPTS[client_ip] = attempts
+        return True
+    attempts.append(now)
+    _VOUCHER_VALIDATE_ATTEMPTS[client_ip] = attempts
+    return False
 
 def upload_google_drive_image_to_cloudinary(google_drive_url: str) -> Optional[str]:
     """
@@ -2092,7 +2224,69 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
                         status_code=400,
                         detail=f"Registration limit reached. Maximum {registration_limit} registrations allowed."
                     )
+            # Server-side enforcement of the event's registration form
+            # config (required fields + conditions). The public form checks
+            # these client-side, but the API must not trust that.
+            form_errors = validate_registration_payload(event_data, player_data.model_dump())
+            if form_errors:
+                raise HTTPException(status_code=400, detail=form_errors[0])
+            if player_data.voucher_code and not payment_settings.get('collect_payment'):
+                raise HTTPException(status_code=400, detail="Voucher codes can only be used for events that collect a registration fee")
             if payment_settings.get('collect_payment'):
+                registration_fee = int(payment_settings.get('registration_fee') or 0)
+                # Full-voucher path: no Cashfree order. Re-validate the code
+                # server-side, then atomically consume one use + create the
+                # registration + a zero-amount VOUCHER payment row.
+                if player_data.voucher_code and not player_data.payment_order_id:
+                    voucher, amount_due, discount = _validate_voucher_for_redemption(
+                        event_id, player_data.voucher_code, registration_fee)
+                    if amount_due > 0:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="This voucher does not cover the full fee — please complete payment first")
+                    if player_data.contact_number:
+                        existing = _find_payment_for_customer(event_id, player_data.contact_number)
+                        if existing and existing.get('status') in ('PAID', 'SUCCESS', 'VOUCHER'):
+                            raise HTTPException(
+                                status_code=400,
+                                detail="This number is already registered for this event.")
+                    registration_id = str(uuid.uuid4())
+                    voucher_order_id = f"voucher_{event_id[:8]}_{str(uuid.uuid4())[:8]}"
+                    registration_doc = {
+                        'id': registration_id,
+                        'event_id': event_id,
+                        'status': 'pending_approval',
+                        'payment_order_id': voucher_order_id,
+                        **player_data.model_dump(exclude={'payment_order_id', 'voucher_code'}),
+                        'voucher_code': normalize_code(player_data.voucher_code),
+                        'amount_paid': 0,
+                        'discount_amount': discount,
+                        'original_amount': registration_fee,
+                    }
+                    if registration_doc.get('stats') and hasattr(registration_doc['stats'], 'model_dump'):
+                        registration_doc['stats'] = registration_doc['stats'].model_dump()
+                    payment_doc = {
+                        'order_id': voucher_order_id,
+                        'event_id': event_id,
+                        'customer_name': player_data.name,
+                        'customer_email': player_data.email,
+                        'customer_phone': _normalize_in_phone(player_data.contact_number) if player_data.contact_number else None,
+                        'amount': 0,
+                        'currency': 'INR',
+                        'status': 'VOUCHER',
+                        'voucher_code': normalize_code(player_data.voucher_code),
+                        'original_amount': registration_fee,
+                        'discount_amount': discount,
+                    }
+                    try:
+                        _pg.consume_voucher_and_create_registration(
+                            voucher['id'], registration_doc, payment_doc)
+                    except ValueError as e:
+                        raise HTTPException(status_code=400, detail=_voucher_error_detail(str(e)) if str(e) in ('not_found', 'wrong_event', 'inactive', 'expired', 'fully_used') else str(e))
+                    return {
+                        "message": "Registration submitted successfully! The organizer will review and approve your registration.",
+                        "registration_id": registration_id
+                    }
                 if not player_data.payment_order_id:
                     raise HTTPException(status_code=400, detail="Payment is required for registration")
                 payment_data = _pg.get_payment(player_data.payment_order_id)
@@ -2114,6 +2308,15 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
             }
             if registration_doc.get('stats') and hasattr(registration_doc['stats'], 'model_dump'):
                 registration_doc['stats'] = registration_doc['stats'].model_dump()
+            # Paid path: copy the voucher / charged amounts from the payment
+            # order (server truth) onto the registration.
+            if payment_settings.get('collect_payment') and player_data.payment_order_id:
+                payment_data = _pg.get_payment(player_data.payment_order_id)
+                if payment_data:
+                    registration_doc['voucher_code'] = payment_data.get('voucher_code')
+                    registration_doc['amount_paid'] = payment_data.get('amount')
+                    registration_doc['discount_amount'] = payment_data.get('discount_amount')
+                    registration_doc['original_amount'] = payment_data.get('original_amount')
             _pg.create_registration(registration_doc)
             return {
                 "message": "Registration submitted successfully! The organizer will review and approve your registration.",
@@ -2130,8 +2333,15 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
         
         event_data = event_doc.to_dict()
         payment_settings = event_data.get('payment_settings', {})
-        
-        # Check registration limit
+
+        # Server-side enforcement of the event's registration form config
+        # (required fields + conditions) — see the Postgres branch above.
+        form_errors = validate_registration_payload(event_data, player_data.model_dump())
+        if form_errors:
+            raise HTTPException(status_code=400, detail=form_errors[0])
+        if player_data.voucher_code and not payment_settings.get('collect_payment'):
+            raise HTTPException(status_code=400, detail="Voucher codes can only be used for events that collect a registration fee")
+
         if event_data.get('has_registration_limit') and event_data.get('registration_limit'):
             registration_limit = event_data.get('registration_limit')
             
@@ -2158,6 +2368,78 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
         
         # Check if payment is required
         if payment_settings.get('collect_payment'):
+            registration_fee = int(payment_settings.get('registration_fee') or 0)
+            # Full-voucher path: no Cashfree order. Re-validate the code
+            # server-side, then atomically consume one use + create the
+            # registration + a zero-amount VOUCHER payment row.
+            if player_data.voucher_code and not player_data.payment_order_id:
+                voucher, amount_due, discount = _validate_voucher_for_redemption(
+                    event_id, player_data.voucher_code, registration_fee)
+                if amount_due > 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="This voucher does not cover the full fee — please complete payment first")
+                if player_data.contact_number:
+                    existing = _find_payment_for_customer(event_id, player_data.contact_number)
+                    if existing and existing.get('status') in ('PAID', 'SUCCESS', 'VOUCHER'):
+                        raise HTTPException(
+                            status_code=400,
+                            detail="This number is already registered for this event.")
+                registration_id = str(uuid.uuid4())
+                voucher_order_id = f"voucher_{event_id[:8]}_{str(uuid.uuid4())[:8]}"
+                registration_doc = {
+                    'id': registration_id,
+                    'event_id': event_id,
+                    'status': 'pending_approval',
+                    'registered_at': datetime.now(timezone.utc).isoformat(),
+                    'payment_order_id': voucher_order_id,
+                    **player_data.model_dump(exclude={'payment_order_id', 'voucher_code'}),
+                    'voucher_code': normalize_code(player_data.voucher_code),
+                    'amount_paid': 0,
+                    'discount_amount': discount,
+                    'original_amount': registration_fee,
+                }
+                payment_doc = {
+                    'order_id': voucher_order_id,
+                    'event_id': event_id,
+                    'customer_name': player_data.name,
+                    'customer_email': player_data.email,
+                    'customer_phone': _normalize_in_phone(player_data.contact_number) if player_data.contact_number else None,
+                    'amount': 0,
+                    'currency': 'INR',
+                    'status': 'VOUCHER',
+                    'voucher_code': normalize_code(player_data.voucher_code),
+                    'original_amount': registration_fee,
+                    'discount_amount': discount,
+                    'registration_completed': True,
+                    'registration_id': registration_id,
+                    'created_at': datetime.now(timezone.utc).isoformat(),
+                }
+                voucher_ref = db.collection('vouchers').document(voucher['id'])
+                registration_ref = db.collection('player_registrations').document(registration_id)
+                payment_ref = db.collection('payment_orders').document(voucher_order_id)
+                transaction = db.transaction()
+
+                @firestore.transactional
+                def _redeem_full_voucher(transaction):
+                    snap = transaction.get(voucher_ref)
+                    if not snap.exists:
+                        raise ValueError('not_found')
+                    valid, reason = validate_voucher(snap.to_dict(), event_id)
+                    if not valid:
+                        raise ValueError(reason)
+                    transaction.update(voucher_ref, {'used_count': firestore.Increment(1)})
+                    transaction.set(registration_ref, registration_doc)
+                    transaction.set(payment_ref, payment_doc)
+
+                try:
+                    _redeem_full_voucher(transaction)
+                except ValueError as e:
+                    raise HTTPException(status_code=400, detail=_voucher_error_detail(str(e)))
+                return {
+                    "message": "Registration submitted successfully! The organizer will review and approve your registration.",
+                    "registration_id": registration_id
+                }
             if not player_data.payment_order_id:
                 raise HTTPException(status_code=400, detail="Payment is required for registration")
             
@@ -2187,6 +2469,15 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
             'payment_order_id': player_data.payment_order_id,
             **player_data.model_dump(exclude={'payment_order_id'})
         }
+        # Paid path: copy the voucher / charged amounts from the payment
+        # order (server truth) onto the registration.
+        if payment_settings.get('collect_payment') and player_data.payment_order_id:
+            _paid = db.collection('payment_orders').document(player_data.payment_order_id).get().to_dict()
+            if _paid:
+                registration_doc['voucher_code'] = _paid.get('voucher_code')
+                registration_doc['amount_paid'] = _paid.get('amount')
+                registration_doc['discount_amount'] = _paid.get('discount_amount')
+                registration_doc['original_amount'] = _paid.get('original_amount')
         
         # Store in a separate collection for pending registrations
         db.collection('player_registrations').document(registration_id).set(registration_doc)
@@ -2207,6 +2498,174 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
     except Exception as e:
         logger.error(f"Registration error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+
+# ============= VOUCHER ROUTES (issue #40) =============
+
+@api_router.post("/auctions/{event_id}/vouchers/validate", response_model=VoucherValidateResponse)
+async def validate_voucher_code(event_id: str, payload: VoucherValidateRequest, request: Request):
+    """Public preview: is this code usable for this event, and what would
+    still be payable? Read-only — never consumes a use. Rate-limited per
+    IP, and failures always return the same generic message so codes
+    cannot be enumerated (no 'expired' vs 'unknown' distinction)."""
+    client_ip = request.client.host if request.client else "unknown"
+    if _voucher_validate_rate_limited(client_ip):
+        raise HTTPException(status_code=429, detail="Too many voucher attempts. Please try again later.")
+    event_data = _load_event_dict(event_id)
+    if not event_data:
+        raise HTTPException(status_code=404, detail="Event not found")
+    fee = int((event_data.get('payment_settings') or {}).get('registration_fee') or 0)
+    voucher = _load_voucher_by_code(event_id, payload.code)
+    valid, _reason = validate_voucher(voucher, event_id)
+    if not valid:
+        return VoucherValidateResponse(valid=False, amount_due=fee, message="Invalid voucher code")
+    amount_due = compute_amount_due(fee, voucher['type'], voucher.get('value'))
+    return VoucherValidateResponse(
+        valid=True,
+        type=voucher['type'],
+        value=voucher.get('value'),
+        amount_due=amount_due,
+        discount_amount=discount_amount(fee, voucher['type'], voucher.get('value')),
+        message="Voucher applied",
+    )
+
+
+@api_router.get("/auctions/{event_id}/vouchers")
+async def list_event_vouchers(event_id: str, current_user: dict = Depends(require_event_access)):
+    """List voucher codes + usage for an event (organizer only)."""
+    if _USE_POSTGRES and _pg:
+        return [_voucher_to_response(v) for v in _pg.list_vouchers(event_id)]
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    docs = db.collection('vouchers').where('event_id', '==', event_id).stream()
+    vouchers = [_voucher_to_response(d.to_dict()) for d in docs]
+    vouchers.sort(key=lambda v: v.get('created_at') or '', reverse=True)
+    return vouchers
+
+
+@api_router.post("/auctions/{event_id}/vouchers", status_code=201)
+async def create_event_voucher(event_id: str, voucher_data: VoucherCreate, current_user: dict = Depends(require_event_access)):
+    """Create one voucher code for an event (organizer only). The server
+    generates an 8-char Crockford code unless the organizer supplies a
+    custom one (4-20 chars A-Z 0-9 + '-'). 409 on a code clash per event."""
+    event_data = _load_event_dict(event_id)
+    if not event_data:
+        raise HTTPException(status_code=404, detail="Event not found")
+    error = validate_voucher_definition(voucher_data.type, voucher_data.value, voucher_data.max_uses)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    if voucher_data.code:
+        code = normalize_code(voucher_data.code)
+        if not is_valid_custom_code(code):
+            raise HTTPException(status_code=400, detail="Code must be 4-20 characters, letters, digits and '-' only")
+    else:
+        code = None  # generated below, retrying on clash
+    expires_at = voucher_data.expires_at.isoformat() if voucher_data.expires_at else None
+    voucher_id = str(uuid.uuid4())
+    base = {
+        'id': voucher_id,
+        'event_id': event_id,
+        'type': voucher_data.type,
+        'value': voucher_data.value if voucher_data.type != 'full' else None,
+        'max_uses': voucher_data.max_uses,
+        'used_count': 0,
+        'active': True,
+        'expires_at': expires_at,
+        'created_by': current_user.get('uid'),
+        'created_at': datetime.now(timezone.utc).isoformat(),
+        'label': voucher_data.label,
+    }
+    if code:
+        if _load_voucher_by_code(event_id, code):
+            raise HTTPException(status_code=409, detail="Voucher code already exists for this event")
+        if _USE_POSTGRES and _pg:
+            try:
+                return _voucher_to_response(_pg.create_voucher({**base, 'code': code}))
+            except ValueError as e:
+                raise HTTPException(status_code=409, detail=str(e))
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        db.collection('vouchers').document(voucher_id).set({**base, 'code': code})
+        return _voucher_to_response({**base, 'code': code})
+    # Generated code: retry a few times on the (unlikely) clash.
+    for _ in range(10):
+        code = generate_code()
+        if _load_voucher_by_code(event_id, code):
+            continue
+        if _USE_POSTGRES and _pg:
+            try:
+                return _voucher_to_response(_pg.create_voucher({**base, 'code': code}))
+            except ValueError:
+                continue
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        db.collection('vouchers').document(voucher_id).set({**base, 'code': code})
+        return _voucher_to_response({**base, 'code': code})
+    raise HTTPException(status_code=500, detail="Could not generate a unique voucher code")
+
+
+@api_router.patch("/auctions/{event_id}/vouchers/{voucher_id}")
+async def update_event_voucher(event_id: str, voucher_id: str, patch: VoucherUpdate, current_user: dict = Depends(require_event_access)):
+    """Edit a voucher (organizer only): toggle active, edit max_uses /
+    expires_at / label. type/value may NEVER change after the first use
+    (400) — rewriting them would rewrite redemption history."""
+    voucher = _load_voucher_by_id(event_id, voucher_id)
+    if not voucher:
+        raise HTTPException(status_code=404, detail="Voucher not found")
+    used_count = voucher.get('used_count') or 0
+    if used_count > 0 and (patch.type is not None or patch.value is not None):
+        raise HTTPException(status_code=400, detail="Voucher type and value cannot be changed after first use")
+    if patch.type is not None and patch.type != voucher.get('type'):
+        effective_value = patch.value  # new type: value comes from the patch (None = no value)
+    else:
+        effective_value = patch.value if patch.value is not None else voucher.get('value')
+    effective_type = patch.type if patch.type is not None else voucher.get('type')
+    effective_max_uses = patch.max_uses if patch.max_uses is not None else voucher.get('max_uses')
+    error = validate_voucher_definition(effective_type, effective_value, effective_max_uses)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    if effective_max_uses is not None and effective_max_uses < used_count:
+        raise HTTPException(status_code=400, detail="max_uses cannot be below the number of uses already made")
+    updates: dict = {}
+    if patch.active is not None:
+        updates['active'] = patch.active
+    if patch.max_uses is not None:
+        updates['max_uses'] = patch.max_uses
+    if patch.expires_at is not None:
+        updates['expires_at'] = patch.expires_at.isoformat()
+    if patch.label is not None:
+        updates['label'] = patch.label
+    if patch.type is not None:
+        updates['type'] = patch.type
+        updates['value'] = effective_value
+    elif patch.value is not None:
+        updates['value'] = patch.value
+    if not updates:
+        return _voucher_to_response(voucher)
+    if _USE_POSTGRES and _pg:
+        return _voucher_to_response(_pg.update_voucher(voucher_id, updates))
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    db.collection('vouchers').document(voucher_id).update(updates)
+    return _voucher_to_response({**voucher, **updates})
+
+
+@api_router.delete("/auctions/{event_id}/vouchers/{voucher_id}")
+async def delete_event_voucher(event_id: str, voucher_id: str, current_user: dict = Depends(require_event_access)):
+    """Delete a voucher (organizer only) — only while it has never been
+    used, so redemptions keep their audit trail. Deactivate instead."""
+    voucher = _load_voucher_by_id(event_id, voucher_id)
+    if not voucher:
+        raise HTTPException(status_code=404, detail="Voucher not found")
+    if (voucher.get('used_count') or 0) > 0:
+        raise HTTPException(status_code=400, detail="Voucher has already been used — deactivate it instead of deleting")
+    if _USE_POSTGRES and _pg:
+        _pg.delete_voucher(voucher_id)
+    elif db:
+        db.collection('vouchers').document(voucher_id).delete()
+    else:
+        raise HTTPException(status_code=503, detail="Database not available")
+    return {"message": "Voucher deleted"}
+
 
 @api_router.get("/auctions/{event_id}/registrations")
 async def get_auction_registrations(event_id: str, current_user: dict = Depends(require_event_organizer)):
@@ -5137,7 +5596,14 @@ def _update_payment_status(order_id: str, status_value: str, transaction_id=None
 
 
 def _find_payment_for_customer(event_id: str, customer_phone: str):
-    """Most recent payment order for a phone number in an event, if any."""
+    """Most recent payment order for a phone number in an event, if any.
+
+    A completed PAID/SUCCESS order — or a VOUCHER redemption, which is
+    created already-completed — wins over a newer abandoned PENDING order:
+    the caller is the already-paid check, and a player who already paid
+    (or registered free with a voucher) must get already-registered
+    handling, not a second charge or a duplicate free registration.
+    """
     phone = _normalize_in_phone(customer_phone)
     if _USE_POSTGRES and _pg:
         matches = [p for p in (_pg.list_payments(event_id) or [])
@@ -5152,6 +5618,11 @@ def _find_payment_for_customer(event_id: str, customer_phone: str):
     # created_at is an ISO string in both backends, so lexicographic order
     # is chronological order.
     matches.sort(key=lambda p: p.get('created_at') or '')
+    completed = [p for p in matches
+                 if p.get('status') in ('PAID', 'SUCCESS', 'VOUCHER')
+                 and p.get('registration_completed')]
+    if completed:
+        return completed[-1]
     return matches[-1] if matches else None
 
 
@@ -5160,8 +5631,20 @@ def _create_registration_for_payment(event_id: str, order_id: str, form_data: di
     Mirrors register_player_public's record shape. The registration-limit
     check is deliberately skipped here: payment is already captured, and
     registrations still need organizer approval, so the organizer remains
-    the gate — silently dropping a paid registration would be worse."""
+    the gate — silently dropping a paid registration would be worse.
+
+    The payload is NOT re-validated against the registration form config
+    here: it was already validated at intake (create-order), and blocking
+    completion would strand paid orders if the organizer changed the
+    config after payment. The voucher use, however, IS consumed here —
+    at registration completion, not order creation — atomically with the
+    registration insert, so a player who abandons checkout burns no use.
+    If the voucher's cap was hit by an earlier completion, this raises
+    and _complete_paid_registration reports creation_failed (organizer
+    follow-up, same class as today's needs_followup edge: money taken,
+    registration not created)."""
     player_data = PublicPlayerRegistration(**{**form_data, 'payment_order_id': order_id})
+    payment = _load_payment(order_id)
     if _USE_POSTGRES and _pg:
         event_data = _pg.get_event(event_id)
         if not event_data:
@@ -5176,8 +5659,31 @@ def _create_registration_for_payment(event_id: str, order_id: str, form_data: di
         }
         if registration_doc.get('stats') and hasattr(registration_doc['stats'], 'model_dump'):
             registration_doc['stats'] = registration_doc['stats'].model_dump()
-        # Also marks the payment registration_completed + registration_id.
-        _pg.create_registration(registration_doc)
+        # Copy the voucher / charged amounts from the payment order
+        # (server truth) onto the registration.
+        if payment:
+            registration_doc['voucher_code'] = payment.get('voucher_code')
+            registration_doc['amount_paid'] = payment.get('amount')
+            registration_doc['discount_amount'] = payment.get('discount_amount')
+            registration_doc['original_amount'] = payment.get('original_amount')
+        voucher_id = None
+        if payment and payment.get('voucher_code'):
+            voucher = _pg.get_voucher_by_code(event_id, payment['voucher_code'])
+            if voucher:
+                voucher_id = voucher['id']
+            else:
+                # Organizer deleted the code after the order was created
+                # (deletion is only allowed while unused): the money was
+                # already taken, so complete the registration anyway.
+                logger.warning(
+                    f"Voucher {payment['voucher_code']} for order {order_id} no longer "
+                    f"exists at completion; completing without consuming a use")
+        if voucher_id:
+            # Also marks the payment registration_completed + registration_id.
+            _pg.create_registration_with_voucher_consume(registration_doc, voucher_id)
+        else:
+            # Also marks the payment registration_completed + registration_id.
+            _pg.create_registration(registration_doc)
         return registration_id
     if not db:
         raise ValueError("Database not available")
@@ -5193,6 +5699,40 @@ def _create_registration_for_payment(event_id: str, order_id: str, form_data: di
         'payment_order_id': order_id,
         **player_data.model_dump(exclude={'payment_order_id'})
     }
+    if payment:
+        registration_doc['voucher_code'] = payment.get('voucher_code')
+        registration_doc['amount_paid'] = payment.get('amount')
+        registration_doc['discount_amount'] = payment.get('discount_amount')
+        registration_doc['original_amount'] = payment.get('original_amount')
+    if payment and payment.get('voucher_code'):
+        voucher = _load_voucher_by_code(event_id, payment['voucher_code'])
+        if voucher:
+            voucher_ref = db.collection('vouchers').document(voucher['id'])
+            registration_ref = db.collection('player_registrations').document(registration_id)
+            payment_ref = db.collection('payment_orders').document(order_id)
+            transaction = db.transaction()
+
+            @firestore.transactional
+            def _complete_with_voucher_consume(transaction):
+                snap = transaction.get(voucher_ref)
+                if snap.exists:
+                    valid, reason = validate_voucher(snap.to_dict(), event_id)
+                    if not valid:
+                        raise ValueError(reason)
+                    transaction.update(voucher_ref, {'used_count': firestore.Increment(1)})
+                # If the voucher was deleted after the order was created,
+                # complete the registration anyway (money already taken).
+                transaction.set(registration_ref, registration_doc)
+                transaction.update(payment_ref, {
+                    'registration_completed': True,
+                    'registration_id': registration_id
+                })
+
+            try:
+                _complete_with_voucher_consume(transaction)
+            except ValueError as e:
+                raise ValueError(_voucher_error_detail(str(e)))
+            return registration_id
     db.collection('player_registrations').document(registration_id).set(registration_doc)
     db.collection('payment_orders').document(order_id).update({
         'registration_completed': True,
@@ -5203,7 +5743,11 @@ def _create_registration_for_payment(event_id: str, order_id: str, form_data: di
 
 def _complete_paid_registration(order_id: str):
     """Idempotently complete the registration for a PAID order.
-    Returns {'completed': bool, 'registration_id': str|None, 'reason': str|None}."""
+    Returns {'completed': bool, 'registration_id': str|None, 'reason': str|None}.
+
+    Only PAID/SUCCESS orders complete here — VOUCHER rows (zero-amount
+    full-voucher redemptions) are created already-completed alongside
+    their registration, so they never pass through this function."""
     payment = _load_payment(order_id)
     if not payment:
         return {'completed': False, 'registration_id': None, 'reason': 'not_found'}
@@ -5272,6 +5816,15 @@ async def create_payment_order(order_data: PaymentOrderCreate):
         registration_fee = payment_settings.get('registration_fee')
         if not registration_fee:
             raise HTTPException(status_code=400, detail="Registration fee not set")
+
+        # Server-side enforcement of the event's registration form config
+        # (required fields + conditions) on the payload saved with the
+        # order — completion later trusts this saved payload, so it is
+        # validated here, at intake.
+        if order_data.form_data:
+            form_errors = validate_registration_payload(event_data, order_data.form_data)
+            if form_errors:
+                raise HTTPException(status_code=400, detail=form_errors[0])
         
         settings_data = _load_cashfree_settings()
         cashfree_app_id = settings_data.get('cashfree_app_id')
@@ -5283,10 +5836,17 @@ async def create_payment_order(order_data: PaymentOrderCreate):
 
         # Never create a second charge for a player who already paid for
         # this event (e.g. paid in the UPI app, never returned, then retries).
+        # A VOUCHER redemption counts like a paid one: re-submit means
+        # already registered, not a second registration.
         existing = _find_payment_for_customer(order_data.event_id, order_data.customer_phone)
-        if existing and existing.get('status') in ('PAID', 'SUCCESS'):
+        if existing and existing.get('status') in ('PAID', 'SUCCESS', 'VOUCHER'):
             if existing.get('registration_completed'):
                 raise HTTPException(status_code=400, detail="This number is already registered for this event.")
+            if existing.get('status') == 'VOUCHER':
+                # Defensive only: VOUCHER rows are created completed.
+                raise HTTPException(
+                    status_code=400,
+                    detail="Payment already received for this event. Your registration is being confirmed — please contact the organizer if it is not visible.")
             result = _complete_paid_registration(existing['order_id'])
             if result['completed']:
                 return PaymentOrderResponse(
@@ -5301,6 +5861,25 @@ async def create_payment_order(order_data: PaymentOrderCreate):
                 status_code=400,
                 detail="Payment already received for this event. Your registration is being confirmed — please contact the organizer if it is not visible.")
 
+        # Partial voucher: re-validate the code and compute the amount due
+        # server-side from the event fee + the stored voucher — never the
+        # client-sent amount. The use is NOT consumed here; it is consumed
+        # at registration completion (_create_registration_for_payment),
+        # so a player who abandons checkout burns no use. A code that
+        # covers the whole fee (amount_due == 0) has no Cashfree order to
+        # create — it registers directly via register-player instead.
+        voucher_code = None
+        amount_due = int(registration_fee)
+        discount = 0
+        if order_data.voucher_code:
+            _voucher, amount_due, discount = _validate_voucher_for_redemption(
+                order_data.event_id, order_data.voucher_code, int(registration_fee))
+            voucher_code = normalize_code(order_data.voucher_code)
+            if amount_due == 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="This voucher covers the full fee — register directly with the voucher code instead of paying.")
+
         # Create unique order ID
         order_id = f"order_{order_data.event_id[:8]}_{str(uuid.uuid4())[:8]}"
         
@@ -5309,10 +5888,11 @@ async def create_payment_order(order_data: PaymentOrderCreate):
         
         phone = _normalize_in_phone(order_data.customer_phone)
         
-        # Prepare order data for Cashfree
+        # Prepare order data for Cashfree — order_amount is the server-computed
+        # amount_due (fee minus voucher discount), never the client-sent amount.
         cashfree_order_data = {
             "order_id": order_id,
-            "order_amount": registration_fee,
+            "order_amount": amount_due,
             "order_currency": "INR",
             "customer_details": {
                 "customer_id": order_id,
@@ -5343,17 +5923,22 @@ async def create_payment_order(order_data: PaymentOrderCreate):
         
         cashfree_response = response.json()
         
-        # Store payment order in active backend
+        # Store payment order in active backend. amount is what is actually
+        # charged; original_amount is the event fee and discount_amount the
+        # rupees saved by the voucher (both None without a voucher).
         payment_doc = {
             'order_id': order_id,
             'event_id': order_data.event_id,
             'customer_name': order_data.customer_name,
             'customer_email': order_data.customer_email,
             'customer_phone': phone,
-            'amount': int(registration_fee),
+            'amount': int(amount_due),
             'currency': 'INR',
             'status': 'PENDING',
             'payment_session_id': cashfree_response.get('payment_session_id'),
+            'voucher_code': voucher_code,
+            'original_amount': int(registration_fee),
+            'discount_amount': discount,
             'created_at': datetime.now(timezone.utc).isoformat()
         }
         if _USE_POSTGRES and _pg:
@@ -5374,7 +5959,7 @@ async def create_payment_order(order_data: PaymentOrderCreate):
         return PaymentOrderResponse(
             order_id=order_id,
             payment_session_id=cashfree_response.get('payment_session_id'),
-            order_amount=registration_fee,
+            order_amount=amount_due,
             order_currency='INR'
         )
     except HTTPException:
@@ -5506,6 +6091,10 @@ async def reconcile_event_payments(event_id: str, current_user: dict = Depends(g
         summary = {'event_id': event_id, 'checked': 0, 'confirmed': [],
                    'still_pending': 0, 'failed': [], 'needs_followup': [], 'errors': []}
         for payment in payments_raw:
+            # Only PENDING orders are re-checked against Cashfree. VOUCHER
+            # rows (zero-amount full-voucher redemptions) are never PENDING
+            # and have no Cashfree order — they must never reach the lookup
+            # below.
             if payment.get('status') != 'PENDING':
                 continue
             created_at = payment.get('created_at')
@@ -5566,15 +6155,20 @@ async def get_event_payments(event_id: str, current_user: dict = Depends(get_cur
             successful_payments = 0
             pending_payments = 0
             failed_payments = 0
+            voucher_payments = 0
             for payment_data in payments_raw:
                 payment_data = dict(payment_data)
                 payment_data['id'] = payment_data.get('order_id')
                 payments.append(payment_data)
                 status = payment_data.get('status', 'PENDING')
                 amount = payment_data.get('amount') or 0
-                if status in ['PAID', 'SUCCESS']:
+                if status in ['PAID', 'SUCCESS', 'VOUCHER']:
+                    # VOUCHER rows are successful registrations at ₹0: they
+                    # count as successful (adding ₹0 to revenue), not failed.
                     successful_payments += 1
                     total_amount += amount
+                    if status == 'VOUCHER':
+                        voucher_payments += 1
                 elif status == 'PENDING':
                     pending_payments += 1
                 else:
@@ -5590,6 +6184,7 @@ async def get_event_payments(event_id: str, current_user: dict = Depends(get_cur
                     'successful_payments': successful_payments,
                     'pending_payments': pending_payments,
                     'failed_payments': failed_payments,
+                    'voucher_payments': voucher_payments,
                     'registration_fee': (event_data.get('payment_settings') or {}).get('registration_fee', 0)
                 }
             }
@@ -5616,6 +6211,7 @@ async def get_event_payments(event_id: str, current_user: dict = Depends(get_cur
         successful_payments = 0
         pending_payments = 0
         failed_payments = 0
+        voucher_payments = 0
         
         for payment_doc in payments_query:
             payment_data = payment_doc.to_dict()
@@ -5626,9 +6222,13 @@ async def get_event_payments(event_id: str, current_user: dict = Depends(get_cur
             status = payment_data.get('status', 'PENDING')
             amount = payment_data.get('amount', 0)
             
-            if status in ['PAID', 'SUCCESS']:
+            if status in ['PAID', 'SUCCESS', 'VOUCHER']:
+                # VOUCHER rows are successful registrations at ₹0: they
+                # count as successful (adding ₹0 to revenue), not failed.
                 successful_payments += 1
                 total_amount += amount
+                if status == 'VOUCHER':
+                    voucher_payments += 1
             elif status == 'PENDING':
                 pending_payments += 1
             else:
@@ -5647,6 +6247,7 @@ async def get_event_payments(event_id: str, current_user: dict = Depends(get_cur
                 'successful_payments': successful_payments,
                 'pending_payments': pending_payments,
                 'failed_payments': failed_payments,
+                'voucher_payments': voucher_payments,
                 'registration_fee': event_data.get('payment_settings', {}).get('registration_fee', 0)
             }
         }

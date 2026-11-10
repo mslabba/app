@@ -17,6 +17,7 @@ from app.models.entities import (
     Sponsor,
     Team,
     User,
+    Voucher,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "PaymentGatewaySettings",
     "MigrationRun",
     "MigrationQuarantine",
+    "Voucher",
 ]

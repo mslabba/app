@@ -179,6 +179,41 @@ class PlayerRegistration(Base):
     identity_proof_url: Mapped[Optional[str]] = mapped_column(Text)
     stats: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
     extra_fields: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    # Voucher redemption (nullable — most registrations have none).
+    voucher_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    amount_paid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    discount_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    original_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+
+class Voucher(Base):
+    """One voucher code, scoped to a single event (see issue #40).
+
+    ``code`` is unique per event, stored upper-cased. ``used_count`` is
+    only incremented on successful registration, atomically with it
+    (Firestore transaction / SELECT ... FOR UPDATE in pg_repo) — never at
+    preview or order creation.
+    """
+
+    __tablename__ = "vouchers"
+    __table_args__ = (
+        Index("ix_vouchers_event_id", "event_id"),
+        UniqueConstraint("event_id", "code", name="uq_vouchers_event_code"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(64), ForeignKey("events.id"), nullable=False)
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    type: Mapped[str] = mapped_column(String(16), nullable=False)  # full | percent | fixed
+    value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    max_uses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
 
@@ -292,6 +327,14 @@ class PaymentOrder(Base):
     registration_id: Mapped[Optional[str]] = mapped_column(String(64))
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # Voucher redemption (nullable — most orders have none). ``amount`` is
+    # always what was actually charged; ``original_amount`` is the event
+    # fee before the voucher, ``discount_amount`` the rupees saved.
+    # A zero-amount row with status='VOUCHER' records a full-voucher
+    # registration (no Cashfree order exists for it).
+    voucher_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    original_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    discount_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
 
