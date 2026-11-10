@@ -25,10 +25,14 @@ import {
   Upload,
   FileSpreadsheet,
   Trash2,
-  FileText
+  FileText,
+  Copy,
+  Check,
+  Search
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
+import { shortReference } from '@/lib/registrationReference';
 import { generateRegistrationsPDF } from '@/utils/pdfGenerator';
 import { convertGoogleDriveUrl } from '@/utils/imageUtils';
 import { describeExtraFields } from '@/lib/registrationFormConfig';
@@ -50,6 +54,8 @@ const PlayerRegistrationManagement = () => {
   const [viewingRegistration, setViewingRegistration] = useState(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('pending');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [copiedRefId, setCopiedRefId] = useState(null);
   const [isBulkUploadDialogOpen, setIsBulkUploadDialogOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -405,6 +411,77 @@ const PlayerRegistrationManagement = () => {
   const approvedRegistrations = registrations.filter(reg => reg.status === 'approved');
   const rejectedRegistrations = registrations.filter(reg => reg.status === 'rejected');
 
+  // Search the active tab's registrations client-side: player name
+  // (case-insensitive substring), mobile (spaces ignored on both
+  // sides), or Registration ID — the short PA-XXXXXX reference
+  // (case-insensitive) or the full UUID, so pasting either finds it.
+  const matchesSearch = (reg) => {
+    const q = searchQuery.trim();
+    if (!q) return true;
+    const lower = q.toLowerCase();
+    if ((reg.name || '').toLowerCase().includes(lower)) return true;
+    const digits = (s) => String(s || '').replace(/\s+/g, '');
+    if (digits(reg.contact_number).includes(digits(q))) return true;
+    if (shortReference(reg.id).toLowerCase().includes(lower)) return true;
+    if (String(reg.id || '').toLowerCase().includes(lower)) return true;
+    return false;
+  };
+
+  const filteredPending = pendingRegistrations.filter(matchesSearch);
+  const filteredApproved = approvedRegistrations.filter(matchesSearch);
+  const filteredRejected = rejectedRegistrations.filter(matchesSearch);
+
+  // Copy a registration's short reference (same value as the player's
+  // ticket). Clipboard API with a textarea fallback, like the ticket.
+  const copyReference = async (registrationId) => {
+    const ref = shortReference(registrationId);
+    try {
+      await navigator.clipboard.writeText(ref);
+    } catch (e) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = ref;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch (e2) {
+        // Copy failed — the reference text itself stays selectable.
+      }
+    }
+    setCopiedRefId(registrationId);
+    setTimeout(() => setCopiedRefId(null), 1500);
+  };
+
+  // Registration ID row, shared by all three registration tabs and the
+  // View dialog. Same short reference as the player's ticket, with a
+  // Copy button. `dark` matches the approved/rejected card theme.
+  const RegistrationIdRow = ({ registrationId, dark }) => {
+    const ref = shortReference(registrationId);
+    const isCopied = copiedRefId === registrationId;
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className={`text-[11px] font-bold tracking-wider uppercase ${dark ? 'text-white/60' : 'text-gray-500'}`}>
+          Reg ID
+        </span>
+        <span className={`font-mono text-xs font-semibold ${dark ? 'text-white' : 'text-gray-900'}`}>{ref}</span>
+        <button
+          type="button"
+          onClick={() => copyReference(registrationId)}
+          title="Copy Registration ID"
+          className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${
+            dark
+              ? 'border-white/30 bg-white/10 text-white hover:bg-white/20'
+              : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          {isCopied ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+          {isCopied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <AppShell title="Registrations" subtitle="Review applications and approved players">
       <div className="container mx-auto px-4 py-8 sm:px-6">
@@ -454,6 +531,30 @@ const PlayerRegistrationManagement = () => {
               Rejected ({rejectedRegistrations.length})
             </TabsTrigger>
           </TabsList>
+
+          {/* Search the active registration tab by name, mobile or Registration ID */}
+          {activeTab !== 'players' && (
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+              <Input
+                type="text"
+                placeholder="Search by name, mobile or Registration ID (PA-XXXXXX)…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-9 bg-white/10 border-white/20 text-white placeholder:text-white/50"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  title="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-white/60 hover:text-white text-lg leading-none px-1"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Pending Registrations Tab */}
           <TabsContent value="pending">
@@ -538,7 +639,7 @@ const PlayerRegistrationManagement = () => {
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {pendingRegistrations.map((registration) => (
+                  {filteredPending.map((registration) => (
                     <Card key={registration.id} className="bg-white/95 backdrop-blur-sm border-white/30">
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between mb-3">
@@ -587,6 +688,7 @@ const PlayerRegistrationManagement = () => {
                                 +{Object.keys(registration.extra_fields).length - 4} more fields
                               </div>
                             )}
+                          <RegistrationIdRow registrationId={registration.id} />
                         </div>
 
                         <div className="flex space-x-2">
@@ -612,10 +714,10 @@ const PlayerRegistrationManagement = () => {
                   ))}
                 </div>
 
-                {pendingRegistrations.length === 0 && (
+                {filteredPending.length === 0 && (
                   <div className="text-center py-8 text-white/60">
                     <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No pending registrations</p>
+                    <p>{searchQuery.trim() ? `No registrations match "${searchQuery.trim()}"` : 'No pending registrations'}</p>
                   </div>
                 )}
               </CardContent>
@@ -657,7 +759,7 @@ const PlayerRegistrationManagement = () => {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {approvedRegistrations.map((registration) => (
+                  {filteredApproved.map((registration) => (
                     <Card key={registration.id} className="bg-white/10 border-white/20">
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between mb-3">
@@ -693,6 +795,7 @@ const PlayerRegistrationManagement = () => {
                                   <span>{f.label}</span>: {f.value}
                                 </div>
                               ))}
+                          <RegistrationIdRow registrationId={registration.id} dark />
                         </div>
 
                         <Button
@@ -709,10 +812,10 @@ const PlayerRegistrationManagement = () => {
                   ))}
                 </div>
 
-                {approvedRegistrations.length === 0 && (
+                {filteredApproved.length === 0 && (
                   <div className="text-center py-8 text-white/60">
                     <CheckCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No approved registrations</p>
+                    <p>{searchQuery.trim() ? `No registrations match "${searchQuery.trim()}"` : 'No approved registrations'}</p>
                   </div>
                 )}
               </CardContent>
@@ -1052,7 +1155,7 @@ const PlayerRegistrationManagement = () => {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {rejectedRegistrations.map((registration) => (
+                  {filteredRejected.map((registration) => (
                     <Card key={registration.id} className="bg-white/10 border-white/20">
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between mb-3">
@@ -1063,6 +1166,10 @@ const PlayerRegistrationManagement = () => {
                             </p>
                           </div>
                           {getStatusBadge(registration.status)}
+                        </div>
+
+                        <div className="mb-3">
+                          <RegistrationIdRow registrationId={registration.id} dark />
                         </div>
 
                         <Button
@@ -1079,10 +1186,10 @@ const PlayerRegistrationManagement = () => {
                   ))}
                 </div>
 
-                {rejectedRegistrations.length === 0 && (
+                {filteredRejected.length === 0 && (
                   <div className="text-center py-8 text-white/60">
                     <XCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No rejected registrations</p>
+                    <p>{searchQuery.trim() ? `No registrations match "${searchQuery.trim()}"` : 'No rejected registrations'}</p>
                   </div>
                 )}
               </CardContent>
@@ -1117,6 +1224,11 @@ const PlayerRegistrationManagement = () => {
                     </p>
                     {getStatusBadge(viewingRegistration.status)}
                   </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-sm border-b pb-3">
+                  <span className="font-semibold text-gray-600">Registration ID:</span>
+                  <RegistrationIdRow registrationId={viewingRegistration.id} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

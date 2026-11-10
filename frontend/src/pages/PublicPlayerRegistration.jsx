@@ -29,6 +29,7 @@ import {
   KERALA_DISTRICTS,
   STATS_KEYS,
 } from '@/lib/registrationFormConfig';
+import { shortReference } from '@/lib/registrationReference';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -139,17 +140,6 @@ const TicketPhoto = ({ photoUrl, name }) => {
       onError={() => setFailed(true)}
     />
   );
-};
-
-// Short, readable registration reference derived deterministically
-// from the registration UUID: the same UUID always gives the same
-// reference, so it survives refresh/restore with no backend change.
-// The full UUID never appears on screen — this is what the player
-// reads out to the organizer.
-const shortReference = (registrationId) => {
-  const hex = String(registrationId || '').replace(/[^0-9a-fA-F]/g, '');
-  if (hex.length < 6) return '—';
-  return `PA-${hex.slice(0, 6).toUpperCase()}`;
 };
 
 // A registration counts as paid when money changed hands: a Cashfree
