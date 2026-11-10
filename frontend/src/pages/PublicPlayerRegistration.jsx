@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Trophy, User, CheckCircle, ArrowLeft, CreditCard, Users, XCircle } from 'lucide-react';
+import { Trophy, User, CheckCircle, ArrowLeft, CreditCard, Users, XCircle, Calendar, Clock, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import ImageUploadWithCrop from '@/components/ImageUploadWithCrop';
 import DocumentUpload from '@/components/DocumentUpload';
@@ -87,6 +87,232 @@ const RichDescription = ({ text }) => {
   );
 };
 
+// ---- Registration ticket (success screen) ----
+
+// sessionStorage key for the ticket snapshot, so a page refresh after
+// payment returns still shows the ticket. Display-only: the snapshot
+// holds the player's own submitted details + registration id; it never
+// authorises anything.
+const ticketStorageKey = (eventId) => `powerauction:ticket:${eventId}`;
+
+const initialsFor = (name) => {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'PA';
+  return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+};
+
+const formatEventDate = (date) => {
+  if (!date) return null;
+  const d = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return String(date);
+  return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+// Player photo with an initials fallback — the photo is optional (and
+// form-config dependent), so a missing or broken URL must never render
+// a broken image.
+const TicketPhoto = ({ photoUrl, name }) => {
+  const [failed, setFailed] = useState(false);
+  if (!photoUrl || failed) {
+    return (
+      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center shrink-0">
+        <span className="text-2xl sm:text-3xl font-bold text-white">{initialsFor(name)}</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={photoUrl}
+      alt={`${name || 'Player'} photo`}
+      className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover shrink-0 border-2 border-red-100"
+      onError={() => setFailed(true)}
+    />
+  );
+};
+
+// Normalise a ticket from whatever the completion path hands us.
+// playerValues is either the in-memory form values (same-session paths)
+// or the payload the server saved at order creation (gateway return).
+// payment.kind is 'free' | 'paid' | 'voucher' — 'voucher' only when the
+// data actually carries a voucher code (a later voucher feature); it is
+// never invented here.
+const buildTicket = ({ registrationId, playerValues, payment, eventSnapshot }) => {
+  const values = playerValues || {};
+  const voucherCode = values.voucher_code || payment?.voucherCode || null;
+  return {
+    registrationId: registrationId || null,
+    player: {
+      name: values.name || '',
+      photo_url: values.photo_url || null,
+      position: values.position || null,
+      district: values.district || null,
+      contact_number: values.contact_number || null,
+    },
+    payment: {
+      kind: voucherCode ? 'voucher' : payment?.kind || 'free',
+      amount: payment?.amount ?? null,
+      voucherCode,
+      orderId: payment?.orderId || null,
+    },
+    event: eventSnapshot || null,
+  };
+};
+
+const RegistrationTicket = ({ ticket, event, onRegisterAnother }) => {
+  // Prefer the live event (fresh fetch) over the snapshot stored with
+  // the ticket — the snapshot is only a fallback for a restored ticket.
+  const ev = event || ticket.event || {};
+  const { player, payment } = ticket;
+  const formattedDate = formatEventDate(ev.date);
+
+  let paymentLabel = 'Free';
+  if (payment.kind === 'paid') {
+    paymentLabel = payment.amount != null
+      ? `Paid ₹${Number(payment.amount).toLocaleString('en-IN')}`
+      : 'Paid';
+  } else if (payment.kind === 'voucher') {
+    paymentLabel = payment.amount != null && Number(payment.amount) > 0
+      ? `Paid ₹${Number(payment.amount).toLocaleString('en-IN')} (Voucher)`
+      : 'Free with voucher';
+  }
+
+  return (
+    <div className="max-w-md mx-auto">
+      {/* Success heading */}
+      <div className="text-center mb-5">
+        <div className="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-3">
+          <CheckCircle className="w-7 h-7 text-white" />
+        </div>
+        <h2 className="text-2xl font-bold text-white">Registration Successful!</h2>
+        <p className="text-white/80 text-sm mt-1">Your registration ticket is below.</p>
+      </div>
+
+      {/* Ticket card */}
+      <div className="bg-white rounded-3xl shadow-2xl overflow-hidden text-left">
+        {/* Brand header — same logo + Power white / Auction red as the Navbar */}
+        <div className="bg-neutral-950 px-5 py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <img
+              src="/images/sports/logo-final.png"
+              alt="PowerAuction"
+              className="h-8 w-auto"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+            <span className="text-lg font-bold text-white whitespace-nowrap">
+              Power<span className="text-red-500">Auction</span>
+            </span>
+          </div>
+          <span className="text-[10px] font-bold tracking-[0.2em] text-white/60 uppercase whitespace-nowrap">
+            Registration ticket
+          </span>
+        </div>
+        <div className="h-1.5 bg-gradient-to-r from-red-600 via-red-500 to-red-700" />
+
+        {/* Event banner */}
+        {ev.banner_url && (
+          <img src={ev.banner_url} alt="" className="w-full h-28 object-cover" />
+        )}
+
+        {/* Player section */}
+        <div className="px-5 pt-5 pb-4 flex gap-4 items-center">
+          <TicketPhoto photoUrl={player.photo_url} name={player.name} />
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold tracking-[0.2em] text-red-700 uppercase">Player</p>
+            <h3 className="text-xl font-bold text-gray-900 truncate">{player.name || 'Player'}</h3>
+            <p className="text-sm text-gray-600 mt-0.5 break-words">
+              {[player.position, player.district].filter(Boolean).join(' · ') || 'Registered player'}
+            </p>
+          </div>
+        </div>
+
+        {/* Perforation divider */}
+        <div className="px-5">
+          <div className="border-t-2 border-dashed border-gray-300" />
+        </div>
+
+        {/* Event section */}
+        <div className="px-5 py-4 space-y-3">
+          <div className="flex items-start gap-2.5">
+            <Trophy className="w-4 h-4 text-red-600 mt-1 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Event</p>
+              <p className="font-semibold text-gray-900 break-words">{ev.name || 'PowerAuction event'}</p>
+            </div>
+          </div>
+          {formattedDate && (
+            <div className="flex items-start gap-2.5">
+              <Calendar className="w-4 h-4 text-red-600 mt-1 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Date</p>
+                <p className="font-semibold text-gray-900">{formattedDate}</p>
+              </div>
+            </div>
+          )}
+          {ev.organizer_name && (
+            <div className="flex items-start gap-2.5">
+              <User className="w-4 h-4 text-red-600 mt-1 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Organizer</p>
+                <p className="font-semibold text-gray-900 break-words">{ev.organizer_name}</p>
+              </div>
+            </div>
+          )}
+          {ev.venue && (
+            <div className="flex items-start gap-2.5">
+              <MapPin className="w-4 h-4 text-red-600 mt-1 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Venue</p>
+                <p className="font-semibold text-gray-900 break-words">{ev.venue}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Registration details */}
+        <div className="mx-5 mb-1 grid grid-cols-2 gap-3 bg-gray-50 border border-gray-200 rounded-2xl p-4">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Registration ID</p>
+            <p className="font-mono text-xs text-gray-900 break-all mt-0.5">{ticket.registrationId || '—'}</p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Payment</p>
+            <p className="font-semibold text-gray-900 mt-0.5 break-words">{paymentLabel}</p>
+          </div>
+        </div>
+
+        {/* Pending-approval note — the ticket is a receipt, not confirmed entry */}
+        <div className="px-5 py-4">
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-2xl p-3">
+            <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-sm text-amber-800">
+              <strong>Pending organizer approval.</strong> Your registration has been received — the
+              organizer will review your application and get back to you soon.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="mt-6 flex flex-col items-center gap-3">
+        <Link
+          to="/"
+          className="inline-flex items-center bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Home
+        </Link>
+        <button
+          type="button"
+          onClick={onRegisterAnother}
+          className="text-white/80 hover:text-white text-sm font-medium underline underline-offset-4"
+        >
+          Register another player
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const PublicPlayerRegistration = () => {
   const { eventId } = useParams();
   const [event, setEvent] = useState(null);
@@ -103,7 +329,40 @@ const PublicPlayerRegistration = () => {
   const [voucher, setVoucher] = useState(null); // { code, type, value, amount_due, message } | null
   const [voucherApplying, setVoucherApplying] = useState(false);
   const [voucherError, setVoucherError] = useState('');
+  const [ticket, setTicket] = useState(null);
   const [formData, setFormData] = useState(() => emptyFormValues(resolveRegistrationFormConfig(null)));
+
+  // Event details embedded in the ticket snapshot, so a restored ticket
+  // still names the event even before the live event fetch completes.
+  const eventSnapshot = () => ({
+    name: event?.name || null,
+    date: event?.date || null,
+    logo_url: event?.logo_url || null,
+    banner_url: event?.banner_url || null,
+    organizer_name: event?.organizer_name || null,
+    venue: event?.venue || null,
+  });
+
+  const persistTicket = (nextTicket) => {
+    try {
+      sessionStorage.setItem(ticketStorageKey(eventId), JSON.stringify(nextTicket));
+    } catch (e) {
+      // Storage unavailable (private mode, quota) — the ticket still shows
+      // for this session; only a refresh loses it.
+    }
+  };
+
+  const handleRegisterAnother = () => {
+    try {
+      sessionStorage.removeItem(ticketStorageKey(eventId));
+    } catch (e) {
+      // Ignore storage errors — the form resets regardless.
+    }
+    setTicket(null);
+    setSubmitted(false);
+    setPaymentOrderId(null);
+    setFormData(emptyFormValues(formConfig || resolveRegistrationFormConfig(event)));
+  };
 
   useEffect(() => {
     // Log environment info for debugging
@@ -117,6 +376,21 @@ const PublicPlayerRegistration = () => {
     });
 
     fetchEvent();
+
+    // Restore a completed ticket after a refresh (display-only snapshot).
+    // A payment return below overwrites it with fresh server data.
+    try {
+      const saved = sessionStorage.getItem(ticketStorageKey(eventId));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.registrationId) {
+          setTicket(parsed);
+          setSubmitted(true);
+        }
+      }
+    } catch (e) {
+      // Corrupted snapshot — ignore and show the form.
+    }
 
     // Check if returning from payment
     const urlParams = new URLSearchParams(window.location.search);
@@ -471,6 +745,19 @@ const PublicPlayerRegistration = () => {
       // the server completed the registration from the saved payload.
       if (orderResponse.data.already_paid) {
         window.history.replaceState({}, document.title, window.location.pathname);
+        const nextTicket = buildTicket({
+          registrationId: orderResponse.data.registration_id,
+          playerValues: formData,
+          payment: {
+            kind: 'paid',
+            amount: orderResponse.data.order_amount ?? event.payment_settings.registration_fee,
+            orderId: orderResponse.data.order_id,
+            voucherCode: appliedVoucher?.code || null,
+          },
+          eventSnapshot: eventSnapshot(),
+        });
+        setTicket(nextTicket);
+        persistTicket(nextTicket);
         toast.success('Registration completed successfully!');
         setSubmitted(true);
         setPaymentLoading(false);
@@ -528,7 +815,7 @@ const PublicPlayerRegistration = () => {
         event_id: eventId
       });
 
-      const { payment_status, registration_completed } = verifyResponse.data;
+      const { payment_status, registration_completed, registration_id, order_amount, form_data, voucher_code } = verifyResponse.data;
 
       // Clear URL parameters
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -542,6 +829,22 @@ const PublicPlayerRegistration = () => {
       }
 
       if (registration_completed) {
+        // A fresh page load holds no form state, so the player details for
+        // the ticket come from the payload the server saved at order
+        // creation (returned by /payments/verify).
+        const nextTicket = buildTicket({
+          registrationId: registration_id,
+          playerValues: form_data || {},
+          payment: {
+            kind: 'paid',
+            amount: order_amount,
+            orderId: orderId,
+            voucherCode: voucher_code || form_data?.voucher_code || null,
+          },
+          eventSnapshot: eventSnapshot(),
+        });
+        setTicket(nextTicket);
+        persistTicket(nextTicket);
         toast.success('Registration completed successfully!');
         setSubmitted(true);
       } else {
@@ -570,8 +873,18 @@ const PublicPlayerRegistration = () => {
       if (voucherCodeToSend) registrationData.voucher_code = voucherCodeToSend;
 
       console.log('Sending direct registration request:', registrationData);
-      await axios.post(`${API}/auctions/${eventId}/register-player`, registrationData);
+      const registerResponse = await axios.post(`${API}/auctions/${eventId}/register-player`, registrationData);
 
+      const nextTicket = buildTicket({
+        registrationId: registerResponse.data?.registration_id,
+        playerValues: formData,
+        payment: voucherCodeToSend
+          ? { kind: 'voucher', amount: 0, voucherCode: voucherCodeToSend }
+          : { kind: 'free', amount: 0 },
+        eventSnapshot: eventSnapshot(),
+      });
+      setTicket(nextTicket);
+      persistTicket(nextTicket);
       toast.success('Registration submitted successfully!');
       setSubmitted(true);
     } catch (error) {
@@ -608,27 +921,39 @@ const PublicPlayerRegistration = () => {
   };
 
   if (submitted) {
+    // Defensive fallback: every completion path sets a ticket, but if one
+    // ever lands here without it, keep the plain success message rather
+    // than a blank screen.
+    if (!ticket) {
+      return (
+        <div className="min-h-screen app-bg flex items-center justify-center">
+          <div className="container mx-auto px-6 py-8">
+            <Card className="max-w-md mx-auto bg-white/95 backdrop-blur-sm border-white/30 shadow-xl">
+              <CardContent className="p-8 text-center">
+                <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-8 h-8 text-white" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">Registration Successful!</h2>
+                <p className="text-gray-600 mb-6">
+                  Thank you for registering! The organizer will review your application and get back to you soon.
+                </p>
+                <Link
+                  to="/"
+                  className="inline-flex items-center bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Home
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen app-bg flex items-center justify-center">
         <div className="container mx-auto px-6 py-8">
-          <Card className="max-w-md mx-auto bg-white/95 backdrop-blur-sm border-white/30 shadow-xl">
-            <CardContent className="p-8 text-center">
-              <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="w-8 h-8 text-white" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Registration Successful!</h2>
-              <p className="text-gray-600 mb-6">
-                Thank you for registering! The organizer will review your application and get back to you soon.
-              </p>
-              <Link
-                to="/"
-                className="inline-flex items-center bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Home
-              </Link>
-            </CardContent>
-          </Card>
+          <RegistrationTicket ticket={ticket} event={event} onRegisterAnother={handleRegisterAnother} />
         </div>
       </div>
     );
