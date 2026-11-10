@@ -259,10 +259,10 @@ const RegistrationTicket = ({ ticket, event, eventId, onRegisterAnother }) => {
   const paid = isPaidRegistration(payment);
   const status = ticket.status === 'approved' ? 'approved' : paid ? 'submitted' : 'pending';
   // WhatsApp group link — from the live event when available, else the
-  // ticket snapshot (restored ticket). Only confirmed players see it.
+  // ticket snapshot (restored ticket). Shown to everyone who completed
+  // registration, whatever their approval/payment status.
   const whatsappGroupLink = ev.registration_form_config?.whatsapp_group_link || null;
-  const showWhatsappGroupLink =
-    !!whatsappGroupLink && (status === 'approved' || status === 'submitted');
+  const showWhatsappGroupLink = !!whatsappGroupLink;
   const [copied, setCopied] = useState(false);
 
   const copyReference = async () => {
