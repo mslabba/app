@@ -24,6 +24,7 @@ from app.data.serializers import (
     sponsor_to_dict,
     team_to_dict,
     user_to_dict,
+    voucher_to_dict,
 )
 from app.db.session import get_session_factory
 from app.models import (
@@ -41,6 +42,7 @@ from app.models import (
     Sponsor,
     Team,
     User,
+    Voucher,
 )
 
 
@@ -742,28 +744,54 @@ def get_registration(registration_id: str) -> Optional[dict[str, Any]]:
         return registration_to_dict(r) if r else None
 
 
+def _parse_dt(value: Any) -> Optional[datetime]:
+    """Accept a datetime or ISO-8601 string (as stored by Firestore-style
+    dicts); anything else is None."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    return None
+
+
+def _new_registration(data: dict[str, Any]) -> PlayerRegistration:
+    return PlayerRegistration(
+        id=data["id"],
+        event_id=data["event_id"],
+        status=data.get("status") or "pending_approval",
+        registered_at=_parse_dt(data.get("registered_at")) or datetime.now(timezone.utc),
+        payment_order_id=data.get("payment_order_id"),
+        name=data.get("name"),
+        age=data.get("age"),
+        position=data.get("position"),
+        specialty=data.get("specialty"),
+        previous_team=data.get("previous_team"),
+        cricheroes_link=data.get("cricheroes_link"),
+        contact_number=data.get("contact_number"),
+        email=data.get("email"),
+        photo_url=data.get("photo_url"),
+        district=data.get("district"),
+        identity_proof_url=data.get("identity_proof_url"),
+        stats=data.get("stats"),
+        extra_fields=data.get("extra_fields"),
+        voucher_code=data.get("voucher_code"),
+        amount_paid=data.get("amount_paid"),
+        discount_amount=data.get("discount_amount"),
+        original_amount=data.get("original_amount"),
+    )
+
+
 def create_registration(data: dict[str, Any]) -> dict[str, Any]:
     with _session() as s:
-        r = PlayerRegistration(
-            id=data["id"],
-            event_id=data["event_id"],
-            status=data.get("status") or "pending_approval",
-            registered_at=datetime.now(timezone.utc),
-            payment_order_id=data.get("payment_order_id"),
-            name=data.get("name"),
-            age=data.get("age"),
-            position=data.get("position"),
-            specialty=data.get("specialty"),
-            previous_team=data.get("previous_team"),
-            cricheroes_link=data.get("cricheroes_link"),
-            contact_number=data.get("contact_number"),
-            email=data.get("email"),
-            photo_url=data.get("photo_url"),
-            district=data.get("district"),
-            identity_proof_url=data.get("identity_proof_url"),
-            stats=data.get("stats"),
-            extra_fields=data.get("extra_fields"),
-        )
+        r = _new_registration(data)
         s.add(r)
         if data.get("payment_order_id"):
             po = s.get(PaymentOrder, data["payment_order_id"])
@@ -1128,7 +1156,13 @@ def create_payment(data: dict[str, Any]) -> dict[str, Any]:
             currency=data.get("currency") or "INR",
             status=data.get("status") or "PENDING",
             payment_session_id=data.get("payment_session_id"),
-            created_at=datetime.now(timezone.utc),
+            transaction_id=data.get("transaction_id"),
+            registration_completed=bool(data.get("registration_completed")),
+            registration_id=data.get("registration_id"),
+            voucher_code=data.get("voucher_code"),
+            original_amount=data.get("original_amount"),
+            discount_amount=data.get("discount_amount"),
+            created_at=_parse_dt(data.get("created_at")) or datetime.now(timezone.utc),
         )
         s.add(p)
         s.commit()
@@ -1178,6 +1212,195 @@ def list_payments(event_id: str) -> list[dict[str, Any]]:
             select(PaymentOrder).where(PaymentOrder.event_id == event_id)
         ).all()
         return [payment_to_dict(p) for p in rows]
+
+
+# ---------------------------------------------------------------------------
+# Vouchers (issue #40). Codes are scoped to one event and stored upper-cased.
+# ---------------------------------------------------------------------------
+
+
+def create_voucher(data: dict[str, Any]) -> dict[str, Any]:
+    """Insert one voucher. Raises ValueError on a code clash for the event
+    (the DB unique constraint is the backstop — callers map it to 409)."""
+    with _session() as s:
+        code = (data.get("code") or "").strip().upper()
+        clash = s.scalars(
+            select(Voucher).where(
+                Voucher.event_id == data["event_id"], Voucher.code == code
+            )
+        ).first()
+        if clash:
+            raise ValueError("Voucher code already exists for this event")
+        v = Voucher(
+            id=data.get("id") or str(uuid.uuid4()),
+            event_id=data["event_id"],
+            code=code,
+            type=data["type"],
+            value=data.get("value"),
+            max_uses=data.get("max_uses"),
+            used_count=0,
+            active=data.get("active", True),
+            expires_at=_parse_dt(data.get("expires_at")),
+            created_by=data.get("created_by"),
+            created_at=datetime.now(timezone.utc),
+            label=data.get("label"),
+        )
+        s.add(v)
+        s.commit()
+        s.refresh(v)
+        return voucher_to_dict(v)
+
+
+def get_voucher(voucher_id: str) -> Optional[dict[str, Any]]:
+    with _session() as s:
+        v = s.get(Voucher, voucher_id)
+        return voucher_to_dict(v) if v else None
+
+
+def get_voucher_by_code(event_id: str, code: str) -> Optional[dict[str, Any]]:
+    with _session() as s:
+        v = s.scalars(
+            select(Voucher).where(
+                Voucher.event_id == event_id,
+                Voucher.code == (code or "").strip().upper(),
+            )
+        ).first()
+        return voucher_to_dict(v) if v else None
+
+
+def list_vouchers(event_id: str) -> list[dict[str, Any]]:
+    with _session() as s:
+        rows = s.scalars(
+            select(Voucher)
+            .where(Voucher.event_id == event_id)
+            .order_by(Voucher.created_at.desc().nullslast())
+        ).all()
+        return [voucher_to_dict(v) for v in rows]
+
+
+def update_voucher(voucher_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+    allowed = {"active", "max_uses", "expires_at", "label", "type", "value"}
+    with _session() as s:
+        v = s.get(Voucher, voucher_id)
+        if not v:
+            raise ValueError("Voucher not found")
+        for k, val in fields.items():
+            if k not in allowed or k == "id":
+                continue
+            if k == "expires_at":
+                val = _parse_dt(val)
+            setattr(v, k, val)
+        s.commit()
+        s.refresh(v)
+        return voucher_to_dict(v)
+
+
+def delete_voucher(voucher_id: str) -> None:
+    with _session() as s:
+        v = s.get(Voucher, voucher_id)
+        if not v:
+            raise ValueError("Voucher not found")
+        s.delete(v)
+        s.commit()
+
+
+def _check_voucher_usable_locked(v: Voucher, event_id: str) -> None:
+    """Re-validate a row-locked voucher inside a transaction. Raises
+    ValueError with the failure reason; the cap is enforced here, under
+    the row lock, so two concurrent redemptions cannot both pass."""
+    if v.event_id != event_id:
+        raise ValueError("Voucher does not belong to this event")
+    if v.active is False:
+        raise ValueError("Voucher is inactive")
+    if v.expires_at is not None:
+        expires = v.expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) >= expires:
+            raise ValueError("Voucher code has expired")
+    if v.max_uses is not None and v.used_count >= v.max_uses:
+        raise ValueError("Voucher fully used")
+
+
+def consume_voucher_and_create_registration(
+    voucher_id: str, registration_data: dict[str, Any], payment_data: dict[str, Any]
+) -> dict[str, Any]:
+    """Full-voucher redemption, atomic: lock the voucher row, re-check the
+    cap, increment used_count, insert the registration AND the zero-amount
+    VOUCHER payment row in one transaction. Raises ValueError if the
+    voucher is missing, invalid, expired or fully used — nothing is
+    written in that case."""
+    with _session() as s:
+        v = s.execute(
+            select(Voucher).where(Voucher.id == voucher_id).with_for_update()
+        ).scalar_one_or_none()
+        if not v:
+            raise ValueError("Voucher not found")
+        _check_voucher_usable_locked(v, registration_data["event_id"])
+        v.used_count += 1
+        reg = _new_registration(registration_data)
+        s.add(reg)
+        pay = PaymentOrder(
+            order_id=payment_data["order_id"],
+            event_id=payment_data["event_id"],
+            customer_name=payment_data.get("customer_name"),
+            customer_email=payment_data.get("customer_email"),
+            customer_phone=payment_data.get("customer_phone"),
+            amount=payment_data.get("amount") or 0,
+            currency=payment_data.get("currency") or "INR",
+            status=payment_data.get("status") or "VOUCHER",
+            registration_completed=True,
+            registration_id=reg.id,
+            voucher_code=payment_data.get("voucher_code"),
+            original_amount=payment_data.get("original_amount"),
+            discount_amount=payment_data.get("discount_amount"),
+            created_at=datetime.now(timezone.utc),
+        )
+        s.add(pay)
+        s.commit()
+        s.refresh(reg)
+        s.refresh(pay)
+        s.refresh(v)
+        return {
+            "registration": registration_to_dict(reg),
+            "payment": payment_to_dict(pay),
+            "voucher": voucher_to_dict(v),
+        }
+
+
+def create_registration_with_voucher_consume(
+    registration_data: dict[str, Any], voucher_id: Optional[str]
+) -> dict[str, Any]:
+    """Partial-voucher completion, atomic: insert the registration (and
+    mark its payment order completed) in the same transaction that
+    consumes one voucher use. The use is consumed at registration
+    completion, not at order creation — a player who abandons checkout
+    must not burn a use.
+
+    If the voucher row is gone (the organizer deleted it after the order
+    was created — deletion is only allowed while unused), the registration
+    still completes: the money was already taken, and stranding a paid
+    player would be worse than a missing consume. A cap hit, however,
+    raises ValueError("Voucher fully used") and nothing is written.
+    """
+    with _session() as s:
+        reg = _new_registration(registration_data)
+        s.add(reg)
+        if registration_data.get("payment_order_id"):
+            po = s.get(PaymentOrder, registration_data["payment_order_id"])
+            if po:
+                po.registration_completed = True
+                po.registration_id = reg.id
+        if voucher_id:
+            v = s.execute(
+                select(Voucher).where(Voucher.id == voucher_id).with_for_update()
+            ).scalar_one_or_none()
+            if v is not None:
+                _check_voucher_usable_locked(v, registration_data["event_id"])
+                v.used_count += 1
+        s.commit()
+        s.refresh(reg)
+        return registration_to_dict(reg)
 
 
 def validate_public_token(team_id: str, token: str) -> bool:

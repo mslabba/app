@@ -26,6 +26,7 @@ import {
   resolveRegistrationFormConfig,
   validateRegistrationValues,
   COLUMN_KEYS,
+  KERALA_DISTRICTS,
   STATS_KEYS,
 } from '@/lib/registrationFormConfig';
 
@@ -95,6 +96,13 @@ const PublicPlayerRegistration = () => {
   const [paymentOrderId, setPaymentOrderId] = useState(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [registrationInfo, setRegistrationInfo] = useState(null);
+  // Voucher code applied by the player (validated server-side; the discount
+  // is never trusted from the client — the server re-validates the code and
+  // computes the amount at submit time).
+  const [voucherCode, setVoucherCode] = useState('');
+  const [voucher, setVoucher] = useState(null); // { code, type, value, amount_due, message } | null
+  const [voucherApplying, setVoucherApplying] = useState(false);
+  const [voucherError, setVoucherError] = useState('');
   const [formData, setFormData] = useState(() => emptyFormValues(resolveRegistrationFormConfig(null)));
 
   useEffect(() => {
@@ -313,6 +321,35 @@ const PublicPlayerRegistration = () => {
       );
     }
 
+    // District is a combobox: Kerala districts as suggestions, free text
+    // still allowed so non-Kerala leagues are not blocked. The stored
+    // value stays a plain district string.
+    if (field.key === 'district') {
+      const hints = fieldConditions(field).map((c) => describeCondition(field, c));
+      return (
+        <div key={field.id}>
+          <Label className="text-gray-700">{label}</Label>
+          <Input
+            type="text"
+            list="kerala-districts"
+            value={value}
+            onChange={(e) => handleChange(field.key, e.target.value)}
+            placeholder={field.placeholder || 'District'}
+            required={!!field.required}
+            className={commonClass}
+          />
+          <datalist id="kerala-districts">
+            {KERALA_DISTRICTS.map((d) => (
+              <option key={d} value={d} />
+            ))}
+          </datalist>
+          {hints.length > 0 && (
+            <p className="mt-1 text-xs text-gray-500">{hints.join(' · ')}</p>
+          )}
+        </div>
+      );
+    }
+
     const inputType =
       field.type === 'number'
         ? 'number'
@@ -344,6 +381,58 @@ const PublicPlayerRegistration = () => {
     );
   };
 
+  const registrationFee = Number(event?.payment_settings?.registration_fee || 0);
+  // Server-validated voucher preview: amount_due comes from the server.
+  // The code is always re-sent at submit time and the server decides the
+  // amount — a preview is never trusted to skip payment.
+  const appliedVoucher = voucher?.valid ? voucher : null;
+  const amountDue = appliedVoucher
+    ? Number(appliedVoucher.amount_due ?? registrationFee)
+    : registrationFee;
+  const isFreeWithVoucher = !!appliedVoucher && amountDue === 0;
+
+  const applyVoucher = async () => {
+    const code = voucherCode.trim().toUpperCase();
+    if (!code) {
+      setVoucherError('Enter a voucher code first.');
+      return;
+    }
+    setVoucherApplying(true);
+    setVoucherError('');
+    try {
+      const { data } = await axios.post(`${API}/auctions/${eventId}/vouchers/validate`, {
+        code,
+      });
+      if (data?.valid) {
+        setVoucher({ ...data, code });
+        setVoucherCode(code);
+        toast.success(
+          Number(data.amount_due) === 0
+            ? 'Voucher applied — registration is free.'
+            : `Voucher applied — you pay ₹${Number(data.amount_due).toLocaleString('en-IN')} instead of ₹${registrationFee.toLocaleString('en-IN')}.`
+        );
+      } else {
+        setVoucher(null);
+        setVoucherError(data?.message || 'This voucher code is not valid for this event.');
+      }
+    } catch (error) {
+      setVoucher(null);
+      setVoucherError(
+        error.response?.data?.message ||
+          error.response?.data?.detail ||
+          'Could not check this voucher code. You can still pay the full fee.'
+      );
+    } finally {
+      setVoucherApplying(false);
+    }
+  };
+
+  const clearVoucher = () => {
+    setVoucher(null);
+    setVoucherCode('');
+    setVoucherError('');
+  };
+
   const initiateCashfreePayment = async () => {
     try {
       setPaymentLoading(true);
@@ -365,12 +454,16 @@ const PublicPlayerRegistration = () => {
       // complete the registration even if the player never returns from the
       // gateway (UPI app-switch is the common case).
       const registrationPayload = buildRegistrationPayload(formData, cfg);
+      // The client-sent amount is ignored server-side (the fee is read from
+      // the event); likewise the voucher discount is computed server-side
+      // from the stored voucher — the code is sent, never a client amount.
       const orderResponse = await axios.post(`${API}/payments/create-order`, {
         event_id: eventId,
         customer_name: formData.name.trim(),
         customer_email: emailForPayment,
         customer_phone: formData.contact_number.trim(),
         amount: event.payment_settings.registration_fee,
+        ...(appliedVoucher ? { voucher_code: appliedVoucher.code } : {}),
         form_data: registrationPayload
       });
 
@@ -465,6 +558,30 @@ const PublicPlayerRegistration = () => {
     }
   };
 
+  // Direct registration with no Cashfree step: used when no payment is
+  // collected, and when a full voucher makes the amount due ₹0. The
+  // voucher code (if any) is sent so the server can re-validate it and
+  // consume one use atomically with the registration.
+  const submitDirectRegistration = async (voucherCodeToSend) => {
+    try {
+      setLoading(true);
+
+      const registrationData = buildRegistrationPayload(formData, formConfig || resolveRegistrationFormConfig(event));
+      if (voucherCodeToSend) registrationData.voucher_code = voucherCodeToSend;
+
+      console.log('Sending direct registration request:', registrationData);
+      await axios.post(`${API}/auctions/${eventId}/register-player`, registrationData);
+
+      toast.success('Registration submitted successfully!');
+      setSubmitted(true);
+    } catch (error) {
+      console.error('Registration failed:', error);
+      toast.error(error.response?.data?.detail || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -477,26 +594,16 @@ const PublicPlayerRegistration = () => {
 
     // Check if payment is required
     if (event?.payment_settings?.collect_payment) {
-      // Initiate payment - form data will be saved and restored after payment
+      if (isFreeWithVoucher) {
+        // Full voucher: nothing to pay — register directly, no Cashfree step.
+        await submitDirectRegistration(appliedVoucher.code);
+        return;
+      }
+      // Partial voucher (or none): pay the discounted amount via Cashfree.
       await initiateCashfreePayment();
     } else {
       // No payment required - direct registration
-      try {
-        setLoading(true);
-
-        const registrationData = buildRegistrationPayload(formData, cfg);
-
-        console.log('Sending non-payment registration request:', registrationData);
-        await axios.post(`${API}/auctions/${eventId}/register-player`, registrationData);
-
-        toast.success('Registration submitted successfully!');
-        setSubmitted(true);
-      } catch (error) {
-        console.error('Registration failed:', error);
-        toast.error(error.response?.data?.detail || 'Registration failed. Please try again.');
-      } finally {
-        setLoading(false);
-      }
+      await submitDirectRegistration(null);
     }
   };
 
@@ -656,10 +763,35 @@ const PublicPlayerRegistration = () => {
                       </div>
                     </div>
                     <div className="flex-shrink-0 text-center sm:text-right border-t border-green-200 sm:border-0 pt-3 sm:pt-0">
-                      <div className="text-3xl font-bold text-green-600">
-                        ₹{Number(event.payment_settings.registration_fee || 0).toLocaleString('en-IN')}
-                      </div>
-                      <p className="text-xs text-gray-600 mt-1">One-time payment</p>
+                      {appliedVoucher ? (
+                        <>
+                          <div className="text-lg font-semibold text-gray-500 line-through">
+                            ₹{registrationFee.toLocaleString('en-IN')}
+                          </div>
+                          {isFreeWithVoucher ? (
+                            <div className="text-3xl font-bold text-green-600">Free with voucher</div>
+                          ) : (
+                            <div className="text-3xl font-bold text-green-600">
+                              ₹{amountDue.toLocaleString('en-IN')}
+                            </div>
+                          )}
+                          <p className="text-xs text-gray-600 mt-1">
+                            Voucher {appliedVoucher.code} applied
+                            {appliedVoucher.type === 'percent' && appliedVoucher.value != null
+                              ? ` (${appliedVoucher.value}% off)`
+                              : appliedVoucher.type === 'fixed' && appliedVoucher.value != null
+                                ? ` (₹${Number(appliedVoucher.value).toLocaleString('en-IN')} off)`
+                                : ''}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-3xl font-bold text-green-600">
+                            ₹{registrationFee.toLocaleString('en-IN')}
+                          </div>
+                          <p className="text-xs text-gray-600 mt-1">One-time payment</p>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="mt-3 bg-blue-100 border border-blue-300 rounded p-3">
@@ -667,6 +799,61 @@ const PublicPlayerRegistration = () => {
                       💳 <strong>Secure Payment:</strong> Payment will be processed securely via Cashfree Payment Gateway.
                       You'll be redirected to complete the payment after filling the form.
                     </p>
+                  </div>
+                  {/* Voucher code — preview only; the server re-validates the
+                      code and computes the amount when the form is submitted. */}
+                  <div className="mt-3">
+                    {appliedVoucher ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm text-green-700">
+                          ✓ Voucher <span className="font-mono font-semibold">{appliedVoucher.code}</span> applied
+                          {isFreeWithVoucher
+                            ? ' — no payment needed.'
+                            : ` — you pay ₹${amountDue.toLocaleString('en-IN')}.`}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={clearVoucher}
+                          className="text-sm font-medium text-gray-600 underline hover:text-gray-800"
+                        >
+                          Remove voucher
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Input
+                            value={voucherCode}
+                            onChange={(e) => {
+                              setVoucherCode(e.target.value.toUpperCase());
+                              setVoucherError('');
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                applyVoucher();
+                              }
+                            }}
+                            placeholder="Have a voucher code? Enter it here"
+                            className="bg-white border-gray-300 text-gray-900 placeholder-gray-500 uppercase"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={applyVoucher}
+                            disabled={voucherApplying || !voucherCode.trim()}
+                            className="shrink-0 border-green-600 text-green-700 hover:bg-green-50"
+                          >
+                            {voucherApplying ? 'Checking…' : 'Apply'}
+                          </Button>
+                        </div>
+                        {voucherError && (
+                          <p className="mt-2 text-sm text-red-600">
+                            {voucherError} You can still pay the full fee of ₹{registrationFee.toLocaleString('en-IN')}.
+                          </p>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -689,14 +876,16 @@ const PublicPlayerRegistration = () => {
                     {loading ? 'Submitting...' :
                       paymentLoading ? 'Processing Payment...' :
                         event?.payment_settings?.collect_payment ?
-                          `Proceed to Pay ₹${event.payment_settings.registration_fee}` :
+                          isFreeWithVoucher ?
+                            'Submit Registration' :
+                            `Proceed to Pay ₹${amountDue.toLocaleString('en-IN')}` :
                           'Submit Registration'}
                   </Button>
                 </div>
 
                 <p className="text-sm text-gray-500 text-center">
                   * Required fields. Your registration will be reviewed by the organizer.
-                  {event?.payment_settings?.collect_payment && (
+                  {event?.payment_settings?.collect_payment && !isFreeWithVoucher && (
                     <><br />You will be redirected to a secure payment gateway to complete the registration fee.</>
                   )}
                 </p>

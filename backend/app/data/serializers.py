@@ -125,8 +125,29 @@ def registration_to_dict(r) -> dict[str, Any]:
         "identity_proof_url": r.identity_proof_url,
         "stats": r.stats,
         "extra_fields": r.extra_fields,
+        "voucher_code": getattr(r, "voucher_code", None),
+        "amount_paid": getattr(r, "amount_paid", None),
+        "discount_amount": getattr(r, "discount_amount", None),
+        "original_amount": getattr(r, "original_amount", None),
     }
     return d
+
+
+def voucher_to_dict(v) -> dict[str, Any]:
+    return {
+        "id": v.id,
+        "event_id": v.event_id,
+        "code": v.code,
+        "type": v.type,
+        "value": v.value,
+        "max_uses": v.max_uses,
+        "used_count": v.used_count or 0,
+        "active": bool(v.active),
+        "expires_at": _iso(v.expires_at),
+        "created_by": v.created_by,
+        "created_at": _iso(v.created_at),
+        "label": v.label,
+    }
 
 
 def sponsor_to_dict(s) -> dict[str, Any]:
@@ -196,4 +217,7 @@ def payment_to_dict(p) -> dict[str, Any]:
         "registration_id": p.registration_id,
         "created_at": _iso(p.created_at),
         "verified_at": _iso(p.verified_at),
+        "voucher_code": getattr(p, "voucher_code", None),
+        "original_amount": getattr(p, "original_amount", None),
+        "discount_amount": getattr(p, "discount_amount", None),
     }

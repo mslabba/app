@@ -27,6 +27,7 @@ import {
   resolveRegistrationFormConfig,
   validateRegistrationValues,
   COLUMN_KEYS,
+  KERALA_DISTRICTS,
   STATS_KEYS,
 } from '@/lib/registrationFormConfig';
 
@@ -343,6 +344,29 @@ const PlayerManagement = () => {
               ))}
             </SelectContent>
           </Select>
+        </div>
+      );
+    }
+
+    // District is a combobox: Kerala districts as suggestions, free text
+    // still allowed. Stored value stays a plain district string.
+    if (field.key === 'district') {
+      return (
+        <div key={field.id}>
+          <Label>{label}</Label>
+          <Input
+            type="text"
+            list="kerala-districts-admin"
+            value={value}
+            onChange={(e) => handleChange(field.key, e.target.value)}
+            placeholder={field.placeholder || 'District'}
+            required={!!field.required}
+          />
+          <datalist id="kerala-districts-admin">
+            {KERALA_DISTRICTS.map((d) => (
+              <option key={d} value={d} />
+            ))}
+          </datalist>
         </div>
       );
     }

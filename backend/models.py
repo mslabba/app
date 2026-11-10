@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional, Dict, Any, Union
-from datetime import datetime
+from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
+from typing import List, Optional, Dict, Any, Union, Annotated
+from datetime import datetime, date
 from enum import Enum
 
 class UserRole(str, Enum):
@@ -196,6 +196,100 @@ class PaymentOrderCreate(BaseModel):
     # complete the registration even if the player never returns from the
     # payment gateway (see _complete_paid_registration in server.py).
     form_data: Optional[Dict[str, Any]] = None
+    # Optional voucher code. The discount is always computed server-side
+    # from the stored voucher + the event fee; the client-sent amount is
+    # ignored (as it already was for the fee itself).
+    voucher_code: Optional[str] = None
+
+
+# Voucher Models
+def _expires_at_end_of_day(value):
+    """Normalize a voucher expiry before pydantic parses it.
+
+    The frontend sends expires_at as a date-only string (YYYY-MM-DD, from
+    a date input). A bare date means the END of that day: a voucher
+    expiring 2026-12-01 is usable throughout 1 Dec, not just until
+    midnight at its start. The end of day is 23:59:59.999999 UTC — the
+    server compares expiries in UTC (see app/vouchers._parse_expires_at,
+    which applies the same rule to stored date-only strings). Full ISO
+    datetimes pass through unchanged; unparseable values are left for
+    pydantic to reject with a 422.
+    """
+    if isinstance(value, str):
+        text = value.strip()
+        if len(text) == 10:
+            try:
+                day = date.fromisoformat(text)
+            except ValueError:
+                return value
+            return datetime(day.year, day.month, day.day, 23, 59, 59, 999999)
+    return value
+
+
+# A voucher expiry: full ISO datetime, or a bare YYYY-MM-DD date (end of day).
+ExpiresAt = Annotated[datetime, BeforeValidator(_expires_at_end_of_day)]
+
+
+class VoucherCreate(BaseModel):
+    """Organizer creates one voucher code for one event.
+
+    type: "full" (free entry, value must be empty) | "percent" (value 1-99)
+    | "fixed" (value >= 1 rupee off). code: optional organizer-chosen code
+    (4-20 chars A-Z 0-9 + "-"); when omitted the server generates an
+    8-char Crockford base32 code. max_uses: null = unlimited.
+    expires_at: full ISO datetime, or a bare YYYY-MM-DD date (see
+    _expires_at_end_of_day — a date means the end of that day, UTC).
+    """
+
+    type: str
+    value: Optional[int] = None
+    max_uses: Optional[int] = None
+    expires_at: Optional[ExpiresAt] = None
+    code: Optional[str] = None
+    label: Optional[str] = None
+
+
+class VoucherUpdate(BaseModel):
+    """Organizer edits a voucher. type/value may only change while the
+    voucher has never been used (used_count == 0) — the route enforces
+    that; this model only carries the fields. expires_at follows the same
+    date-only-means-end-of-day rule as VoucherCreate. Note: there is no
+    way to clear an expiry via PATCH (null means 'not provided')."""
+
+    active: Optional[bool] = None
+    max_uses: Optional[int] = None
+    expires_at: Optional[ExpiresAt] = None
+    label: Optional[str] = None
+    type: Optional[str] = None
+    value: Optional[int] = None
+
+
+class VoucherResponse(BaseModel):
+    id: str
+    event_id: str
+    code: str
+    type: str
+    value: Optional[int] = None
+    max_uses: Optional[int] = None
+    used_count: int = 0
+    active: bool = True
+    expires_at: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: Optional[str] = None
+    label: Optional[str] = None
+
+
+class VoucherValidateRequest(BaseModel):
+    code: str
+
+
+class VoucherValidateResponse(BaseModel):
+    valid: bool
+    type: Optional[str] = None
+    value: Optional[int] = None
+    amount_due: int
+    discount_amount: int = 0
+    message: str
 
 class PaymentOrderResponse(BaseModel):
     order_id: str
@@ -311,6 +405,14 @@ class PublicPlayerRegistration(BaseModel):
     identity_proof_url: Optional[str] = None
     stats: Optional[PlayerStats] = None
     payment_order_id: Optional[str] = None  # For paid registrations
+    # Optional voucher code. Full vouchers (amount due 0) register directly
+    # through this endpoint; partial vouchers go through create-order and
+    # arrive here with payment_order_id instead.
+    voucher_code: Optional[str] = None
+    # Server-set from the payment order / voucher at registration time.
+    amount_paid: Optional[int] = None
+    discount_amount: Optional[int] = None
+    original_amount: Optional[int] = None
     # Custom + non-column fields (date_of_birth, state, organizer-defined fields)
     extra_fields: Optional[Dict[str, Any]] = None
 
