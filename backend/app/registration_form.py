@@ -53,6 +53,7 @@ def _field(
 def default_registration_form_config() -> dict[str, Any]:
     """Minimal default for new auctions: name + mobile only."""
     return {
+        "whatsapp_group_link": None,
         "fields": [
             _field("name", "Full name", "text", enabled=True, required=True, locked=True, placeholder="Enter your full name"),
             _field("contact_number", "Mobile number", "tel", enabled=True, required=True, locked=True, placeholder="+91 …"),
@@ -108,6 +109,49 @@ def resolve_registration_form_config(event_data: dict[str, Any] | None) -> dict[
     if isinstance(cfg, dict) and cfg.get("fields"):
         return cfg
     return legacy_registration_form_config()
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp group link (optional, organizer-set).
+#
+# Shown to confirmed players only, as a "Join WhatsApp group" button on
+# their registration ticket. It is a setting on the form config, not a
+# field players fill in — so it lives beside "fields", not inside it.
+# ---------------------------------------------------------------------------
+
+WHATSAPP_GROUP_LINK_PREFIX = "https://chat.whatsapp.com/"
+
+WHATSAPP_GROUP_LINK_ERROR = (
+    "Enter a WhatsApp group invite link, e.g. https://chat.whatsapp.com/…"
+)
+
+
+def validate_whatsapp_group_link(value: Any) -> str | None:
+    """Validate an organizer-set WhatsApp group invite link.
+
+    Returns an error message, or None when the value is acceptable.
+    Empty / missing is fine — the link is optional.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return WHATSAPP_GROUP_LINK_ERROR
+    link = value.strip()
+    if not link:
+        return None
+    if not link.startswith(WHATSAPP_GROUP_LINK_PREFIX):
+        return WHATSAPP_GROUP_LINK_ERROR
+    if len(link) <= len(WHATSAPP_GROUP_LINK_PREFIX):
+        return WHATSAPP_GROUP_LINK_ERROR
+    return None
+
+
+def normalize_whatsapp_group_link(value: Any) -> str | None:
+    """Trim the link; empty becomes None so a cleared link is removed."""
+    if value is None or not isinstance(value, str):
+        return None
+    link = value.strip()
+    return link or None
 
 
 # ---------------------------------------------------------------------------
