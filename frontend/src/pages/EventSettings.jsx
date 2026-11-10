@@ -36,6 +36,7 @@ import {
   MonitorPlay,
   Copy,
   ExternalLink,
+  TicketPercent,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
@@ -192,6 +193,22 @@ const EventSettings = () => {
   const [customDraft, setCustomDraft] = useState(() => newCustomField());
   const [broadcastLinks, setBroadcastLinks] = useState(null);
   const [broadcastLoading, setBroadcastLoading] = useState(false);
+  // Vouchers — managed through their own endpoints, not the settings PUT.
+  const [vouchers, setVouchers] = useState([]);
+  const [vouchersLoading, setVouchersLoading] = useState(false);
+  const [vouchersUnavailable, setVouchersUnavailable] = useState(false);
+  const [voucherDraft, setVoucherDraft] = useState({
+    type: 'full',
+    value: '',
+    max_uses: '',
+    expires_at: '',
+    code: '',
+    label: '',
+  });
+  const [creatingVoucher, setCreatingVoucher] = useState(false);
+  const [editingVoucherId, setEditingVoucherId] = useState(null);
+  const [editDraft, setEditDraft] = useState({ max_uses: '', expires_at: '', label: '' });
+  const [voucherBusyId, setVoucherBusyId] = useState(null);
 
   useEffect(() => {
     if (!eventId || !token) return;
@@ -416,6 +433,164 @@ const EventSettings = () => {
       () => toast.success(`${label} copied`),
       () => toast.error('Could not copy')
     );
+  };
+
+  /* ---------------- Vouchers ---------------- */
+
+  const fetchVouchers = async () => {
+    if (!eventId || !token) return;
+    setVouchersLoading(true);
+    try {
+      const { data } = await axios.get(`${API}/auctions/${eventId}/vouchers`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setVouchersUnavailable(false);
+      setVouchers(Array.isArray(data) ? data : data.vouchers || []);
+    } catch (err) {
+      // A 404 means the voucher endpoints are not served yet (backend still
+      // being built) — show a note in the section instead of an error toast.
+      if (err.response?.status === 404) {
+        setVouchersUnavailable(true);
+        setVouchers([]);
+      } else {
+        toast.error(err.response?.data?.detail || 'Failed to load vouchers');
+      }
+    } finally {
+      setVouchersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVouchers();
+  }, [eventId, token]);
+
+  const describeVoucher = (v) => {
+    if (v.type === 'full') return 'Free';
+    if (v.type === 'percent') return `${v.value}% off`;
+    if (v.type === 'fixed') return `₹${Number(v.value || 0).toLocaleString('en-IN')} off`;
+    return v.type || '';
+  };
+
+  const createVoucher = async () => {
+    const type = voucherDraft.type;
+    let value = null;
+    if (type === 'percent') {
+      value = parseInt(voucherDraft.value, 10);
+      if (!value || value < 1 || value > 99) {
+        toast.error('Enter a percent between 1 and 99');
+        return;
+      }
+    }
+    if (type === 'fixed') {
+      value = parseInt(voucherDraft.value, 10);
+      if (!value || value < 1) {
+        toast.error('Enter a fixed discount of at least ₹1');
+        return;
+      }
+    }
+    const code = voucherDraft.code.trim().toUpperCase();
+    if (code && !/^[A-Z0-9-]{4,20}$/.test(code)) {
+      toast.error('Custom code must be 4–20 characters: letters, numbers and hyphens only');
+      return;
+    }
+    const maxUses =
+      voucherDraft.max_uses === '' ? null : parseInt(voucherDraft.max_uses, 10);
+    if (maxUses !== null && (!maxUses || maxUses < 1)) {
+      toast.error('Max uses must be at least 1, or blank for unlimited');
+      return;
+    }
+
+    setCreatingVoucher(true);
+    try {
+      const body = { type };
+      if (value !== null) body.value = value;
+      if (maxUses !== null) body.max_uses = maxUses;
+      if (voucherDraft.expires_at) body.expires_at = voucherDraft.expires_at;
+      if (code) body.code = code;
+      if (voucherDraft.label.trim()) body.label = voucherDraft.label.trim();
+      const { data } = await axios.post(`${API}/auctions/${eventId}/vouchers`, body, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success(`Voucher ${data?.code || code || ''} created`);
+      setVoucherDraft({ type: 'full', value: '', max_uses: '', expires_at: '', code: '', label: '' });
+      fetchVouchers();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to create voucher');
+    } finally {
+      setCreatingVoucher(false);
+    }
+  };
+
+  const toggleVoucherActive = async (v) => {
+    setVoucherBusyId(v.id);
+    try {
+      const { data } = await axios.patch(
+        `${API}/auctions/${eventId}/vouchers/${v.id}`,
+        { active: !v.active },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setVouchers((prev) =>
+        prev.map((x) => (x.id === v.id ? { ...x, ...(data || {}), active: !v.active } : x))
+      );
+      toast.success(v.active ? 'Voucher deactivated' : 'Voucher activated');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update voucher');
+    } finally {
+      setVoucherBusyId(null);
+    }
+  };
+
+  const startVoucherEdit = (v) => {
+    setEditingVoucherId(v.id);
+    setEditDraft({
+      max_uses: v.max_uses ?? '',
+      expires_at: v.expires_at ? String(v.expires_at).slice(0, 10) : '',
+      label: v.label || '',
+    });
+  };
+
+  const saveVoucherEdit = async (v) => {
+    const maxUses = editDraft.max_uses === '' ? null : parseInt(editDraft.max_uses, 10);
+    if (maxUses !== null && (!maxUses || maxUses < 1)) {
+      toast.error('Max uses must be at least 1, or blank for unlimited');
+      return;
+    }
+    setVoucherBusyId(v.id);
+    try {
+      const { data } = await axios.patch(
+        `${API}/auctions/${eventId}/vouchers/${v.id}`,
+        {
+          max_uses: maxUses,
+          expires_at: editDraft.expires_at || null,
+          label: editDraft.label.trim() || null,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setVouchers((prev) => prev.map((x) => (x.id === v.id ? { ...x, ...(data || {}) } : x)));
+      setEditingVoucherId(null);
+      toast.success('Voucher updated');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update voucher');
+    } finally {
+      setVoucherBusyId(null);
+    }
+  };
+
+  const deleteVoucher = async (v) => {
+    if ((v.used_count || 0) > 0) return; // Used codes can only be deactivated.
+    if (!window.confirm(`Delete voucher ${v.code}? This cannot be undone.`)) return;
+    setVoucherBusyId(v.id);
+    try {
+      await axios.delete(`${API}/auctions/${eventId}/vouchers/${v.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setVouchers((prev) => prev.filter((x) => x.id !== v.id));
+      toast.success('Voucher deleted');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete voucher');
+    } finally {
+      setVoucherBusyId(null);
+    }
   };
 
   if (loading) {
@@ -1032,6 +1207,296 @@ const EventSettings = () => {
                     className="border-white/20 bg-white/5 text-white"
                   />
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Vouchers */}
+          <Card className="glass border-white/15" data-testid="voucher-settings">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-white">
+                <TicketPercent className="h-5 w-5 text-red-300" />
+                Vouchers
+              </CardTitle>
+              <p className="text-sm text-white/55">
+                Discount codes for this event only. Players enter a code on the public
+                registration form; the discount is applied by the server.
+              </p>
+              {!formData.payment_settings.collect_payment && (
+                <p className="text-sm text-amber-200/80">
+                  Vouchers only apply when payment collection is on — turn on
+                  “Collect payment on registration” above for codes to take effect.
+                </p>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {vouchersUnavailable ? (
+                <p className="text-sm text-white/60">
+                  Voucher management is not available yet — the server does not serve
+                  voucher endpoints for this event.
+                </p>
+              ) : (
+                <>
+                  {/* Create a voucher */}
+                  <div
+                    className="space-y-3 rounded-xl border border-dashed border-white/15 p-4"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        createVoucher();
+                      }
+                    }}
+                  >
+                    <p className="text-sm font-medium text-white">Create a voucher code</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-white/70">Type</Label>
+                        <Select
+                          value={voucherDraft.type}
+                          onValueChange={(value) =>
+                            setVoucherDraft({ ...voucherDraft, type: value, value: '' })
+                          }
+                        >
+                          <SelectTrigger className="border-white/20 bg-white/5 text-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="full">Full free — no payment</SelectItem>
+                            <SelectItem value="percent">% off</SelectItem>
+                            <SelectItem value="fixed">₹ off</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {voucherDraft.type !== 'full' && (
+                        <div className="space-y-1.5">
+                          <Label className="text-white/70">
+                            {voucherDraft.type === 'percent' ? 'Percent off (1–99)' : 'Rupees off'}
+                          </Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={voucherDraft.type === 'percent' ? 99 : undefined}
+                            placeholder={voucherDraft.type === 'percent' ? 'e.g. 50' : 'e.g. 100'}
+                            value={voucherDraft.value}
+                            onChange={(e) =>
+                              setVoucherDraft({ ...voucherDraft, value: e.target.value })
+                            }
+                            className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                          />
+                        </div>
+                      )}
+                      <div className="space-y-1.5">
+                        <Label className="text-white/70">Max uses (blank = unlimited)</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="e.g. 20"
+                          value={voucherDraft.max_uses}
+                          onChange={(e) =>
+                            setVoucherDraft({ ...voucherDraft, max_uses: e.target.value })
+                          }
+                          className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-white/70">Expiry (blank = none)</Label>
+                        <Input
+                          type="date"
+                          value={voucherDraft.expires_at}
+                          onChange={(e) =>
+                            setVoucherDraft({ ...voucherDraft, expires_at: e.target.value })
+                          }
+                          className="border-white/20 bg-white/5 text-white"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-white/70">
+                          Custom code (blank = auto-generated)
+                        </Label>
+                        <Input
+                          value={voucherDraft.code}
+                          onChange={(e) =>
+                            setVoucherDraft({
+                              ...voucherDraft,
+                              code: e.target.value.toUpperCase(),
+                            })
+                          }
+                          placeholder="e.g. EARLYBIRD"
+                          className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-white/70">Label (optional)</Label>
+                        <Input
+                          value={voucherDraft.label}
+                          onChange={(e) =>
+                            setVoucherDraft({ ...voucherDraft, label: e.target.value })
+                          }
+                          placeholder="e.g. VIP invitees"
+                          className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                      onClick={createVoucher}
+                      disabled={creatingVoucher}
+                    >
+                      <Plus className="mr-1.5 h-4 w-4" />
+                      {creatingVoucher ? 'Creating…' : 'Create voucher'}
+                    </Button>
+                  </div>
+
+                  {/* Existing codes */}
+                  {vouchersLoading ? (
+                    <p className="text-sm text-white/60">Loading vouchers…</p>
+                  ) : vouchers.length === 0 ? (
+                    <p className="text-sm text-white/60">No voucher codes yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {vouchers.map((v) => {
+                        const used = v.used_count || 0;
+                        const isEditing = editingVoucherId === v.id;
+                        const busy = voucherBusyId === v.id;
+                        return (
+                          <div
+                            key={v.id || v.code}
+                            className="space-y-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3"
+                          >
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0 flex-1">
+                                <p className="flex flex-wrap items-center gap-2 font-medium text-white">
+                                  <span className="font-mono">{v.code}</span>
+                                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/80">
+                                    {describeVoucher(v)}
+                                  </span>
+                                  {v.label && (
+                                    <span className="text-xs font-normal text-white/50">
+                                      {v.label}
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-xs text-white/45">
+                                  Used {used}
+                                  {v.max_uses ? ` / ${v.max_uses}` : ' / unlimited'}
+                                  {v.expires_at
+                                    ? ` · expires ${new Date(v.expires_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                                    : ' · no expiry'}
+                                  {!v.active && ' · inactive'}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3">
+                                <label className="flex items-center gap-2 text-xs text-white/70">
+                                  <Switch
+                                    checked={!!v.active}
+                                    disabled={busy}
+                                    onCheckedChange={() => toggleVoucherActive(v)}
+                                  />
+                                  Active
+                                </label>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-white/70 hover:text-white"
+                                  disabled={busy}
+                                  onClick={() => copyText('Voucher code', v.code)}
+                                  aria-label={`Copy code ${v.code}`}
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-white/70 hover:text-white"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    isEditing ? setEditingVoucherId(null) : startVoucherEdit(v)
+                                  }
+                                >
+                                  {isEditing ? 'Cancel' : 'Edit'}
+                                </Button>
+                                {used === 0 ? (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-white/50 hover:text-red-300"
+                                    disabled={busy}
+                                    onClick={() => deleteVoucher(v)}
+                                    aria-label={`Delete voucher ${v.code}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                ) : (
+                                  <span
+                                    className="text-xs text-white/40"
+                                    title="Used codes cannot be deleted — deactivate them instead"
+                                  >
+                                    Used — deactivate to stop it
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {isEditing && (
+                              <div className="grid gap-3 border-t border-white/10 pt-3 sm:grid-cols-3">
+                                <div className="space-y-1.5">
+                                  <Label className="text-white/70">
+                                    Max uses (blank = unlimited)
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={editDraft.max_uses}
+                                    onChange={(e) =>
+                                      setEditDraft({ ...editDraft, max_uses: e.target.value })
+                                    }
+                                    className="border-white/20 bg-white/5 text-white"
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-white/70">Expiry (blank = none)</Label>
+                                  <Input
+                                    type="date"
+                                    value={editDraft.expires_at}
+                                    onChange={(e) =>
+                                      setEditDraft({ ...editDraft, expires_at: e.target.value })
+                                    }
+                                    className="border-white/20 bg-white/5 text-white"
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-white/70">Label</Label>
+                                  <Input
+                                    value={editDraft.label}
+                                    onChange={(e) =>
+                                      setEditDraft({ ...editDraft, label: e.target.value })
+                                    }
+                                    className="border-white/20 bg-white/5 text-white"
+                                  />
+                                </div>
+                                <div className="sm:col-span-3">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="bg-red-600 text-white hover:bg-red-700"
+                                    disabled={busy}
+                                    onClick={() => saveVoucherEdit(v)}
+                                  >
+                                    {busy ? 'Saving…' : 'Save changes'}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>

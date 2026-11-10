@@ -5,7 +5,7 @@ import AppShell from '@/components/AppShell';
 import PageHeader from '@/components/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, DollarSign, TrendingUp, CreditCard, Clock, XCircle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, DollarSign, TrendingUp, CreditCard, Clock, XCircle, CheckCircle, TicketPercent } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 
@@ -91,7 +91,10 @@ const EventPayments = () => {
       'SUCCESS': { color: 'bg-green-100 text-green-800 border-green-300', icon: CheckCircle, label: 'Success' },
       'PENDING': { color: 'bg-yellow-100 text-yellow-800 border-yellow-300', icon: Clock, label: 'Pending' },
       'FAILED': { color: 'bg-red-100 text-red-800 border-red-300', icon: XCircle, label: 'Failed' },
-      'CANCELLED': { color: 'bg-gray-100 text-gray-800 border-gray-300', icon: XCircle, label: 'Cancelled' }
+      'CANCELLED': { color: 'bg-gray-100 text-gray-800 border-gray-300', icon: XCircle, label: 'Cancelled' },
+      // Full-voucher registration: no money taken, recorded as a ₹0 row so
+      // the redemption stays visible and auditable next to paid rows.
+      'VOUCHER': { color: 'bg-purple-100 text-purple-800 border-purple-300', icon: TicketPercent, label: 'Voucher' }
     };
 
     const config = statusConfig[status] || statusConfig['PENDING'];
@@ -269,6 +272,19 @@ const EventPayments = () => {
                         <td className="py-3 px-4 text-white/80 text-sm">{payment.customer_phone}</td>
                         <td className="py-3 px-4 text-white font-medium">
                           {formatCurrency(payment.amount)}
+                          {payment.voucher_code && (
+                            <div className="text-xs font-normal text-purple-300">
+                              Voucher {payment.voucher_code}
+                              {payment.original_amount != null &&
+                                Number(payment.original_amount) > Number(payment.amount) && (
+                                  <>
+                                    {' '}· was {formatCurrency(payment.original_amount)}
+                                    {payment.discount_amount != null &&
+                                      ` (−${formatCurrency(payment.discount_amount)})`}
+                                  </>
+                                )}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-4">{getStatusBadge(payment.status)}</td>
                         <td className="py-3 px-4 text-white/80 text-sm">
