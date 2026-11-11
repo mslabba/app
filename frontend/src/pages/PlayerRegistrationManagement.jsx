@@ -482,6 +482,27 @@ const PlayerRegistrationManagement = () => {
     );
   };
 
+  // Registration category + member status (issue #57) — shown on the
+  // cards and in the detail dialog whenever the server recorded them.
+  const RegistrationCategoryRow = ({ registration, dark }) => {
+    if (!registration.registration_category) return null;
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className={`text-[11px] font-bold tracking-wider uppercase ${dark ? 'text-white/60' : 'text-gray-500'}`}>
+          Category
+        </span>
+        <span className={`text-xs font-semibold ${dark ? 'text-white' : 'text-gray-900'}`}>
+          {registration.registration_category}
+        </span>
+        {registration.is_member && (
+          <span className="inline-block rounded-full bg-green-600/90 px-2 py-0.5 text-[11px] font-bold text-white">
+            Member
+          </span>
+        )}
+      </div>
+    );
+  };
+
   return (
     <AppShell title="Registrations" subtitle="Review applications and approved players">
       <div className="container mx-auto px-4 py-8 sm:px-6">
@@ -688,6 +709,7 @@ const PlayerRegistrationManagement = () => {
                                 +{Object.keys(registration.extra_fields).length - 4} more fields
                               </div>
                             )}
+                          <RegistrationCategoryRow registration={registration} />
                           <RegistrationIdRow registrationId={registration.id} />
                         </div>
 
@@ -795,6 +817,7 @@ const PlayerRegistrationManagement = () => {
                                   <span>{f.label}</span>: {f.value}
                                 </div>
                               ))}
+                          <RegistrationCategoryRow registration={registration} dark />
                           <RegistrationIdRow registrationId={registration.id} dark />
                         </div>
 
@@ -1168,7 +1191,8 @@ const PlayerRegistrationManagement = () => {
                           {getStatusBadge(registration.status)}
                         </div>
 
-                        <div className="mb-3">
+                        <div className="mb-3 space-y-0.5">
+                          <RegistrationCategoryRow registration={registration} dark />
                           <RegistrationIdRow registrationId={registration.id} dark />
                         </div>
 
@@ -1230,6 +1254,18 @@ const PlayerRegistrationManagement = () => {
                   <span className="font-semibold text-gray-600">Registration ID:</span>
                   <RegistrationIdRow registrationId={viewingRegistration.id} />
                 </div>
+
+                {viewingRegistration.registration_category && (
+                  <div className="flex items-center gap-2 text-sm border-b pb-3">
+                    <span className="font-semibold text-gray-600">Category:</span>
+                    <span className="font-medium">{viewingRegistration.registration_category}</span>
+                    {viewingRegistration.is_member && (
+                      <span className="inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-green-700">
+                        Member
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>

@@ -185,6 +185,12 @@ class PlayerRegistration(Base):
     amount_paid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     discount_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     original_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Registration category pricing (issue #57). registration_category
+    # stores the category NAME as picked at registration time (receipt
+    # semantics — a later rename does not rewrite history). is_member is
+    # the server-computed member flag for that registration.
+    registration_category: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    is_member: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
 
@@ -336,7 +342,36 @@ class PaymentOrder(Base):
     voucher_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     original_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     discount_amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Registration category pricing (issue #57): the category NAME and
+    # server-computed member flag for the order, copied onto the
+    # registration at completion (server truth, like voucher_code).
+    registration_category: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    is_member: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+
+class OrganizerMember(Base):
+    """One member of an organizer's uploaded member list (issue #57).
+
+    Keyed by the organizer (the ``created_by`` uid of their events), so
+    one list is shared across all of the organizer's events. Phones are
+    stored normalised to 10 digits; matching is by phone only. ``details``
+    keeps the sheet's other columns (name lives in its own column).
+    """
+
+    __tablename__ = "organizer_members"
+    __table_args__ = (
+        Index("ix_organizer_members_organizer_id", "organizer_id"),
+        UniqueConstraint("organizer_id", "phone_normalized", name="uq_organizer_members_organizer_phone"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organizer_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    phone_normalized: Mapped[str] = mapped_column(String(16), nullable=False)
+    name: Mapped[Optional[str]] = mapped_column(String(255))
+    details: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
 
 class BankDetails(Base):

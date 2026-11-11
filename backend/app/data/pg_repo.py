@@ -18,6 +18,7 @@ from app.data.serializers import (
     bid_to_dict,
     category_to_dict,
     event_to_dict,
+    organizer_member_to_dict,
     payment_to_dict,
     player_to_dict,
     registration_to_dict,
@@ -33,6 +34,7 @@ from app.models import (
     Bid,
     Category,
     Event,
+    OrganizerMember,
     PaymentGatewaySettings,
     PaymentOrder,
     Player,
@@ -44,6 +46,7 @@ from app.models import (
     User,
     Voucher,
 )
+from app.registration_form import normalize_phone_number
 
 
 def _session() -> Session:
@@ -787,6 +790,8 @@ def _new_registration(data: dict[str, Any]) -> PlayerRegistration:
         amount_paid=data.get("amount_paid"),
         discount_amount=data.get("discount_amount"),
         original_amount=data.get("original_amount"),
+        registration_category=data.get("registration_category"),
+        is_member=data.get("is_member"),
     )
 
 
@@ -1163,6 +1168,8 @@ def create_payment(data: dict[str, Any]) -> dict[str, Any]:
             voucher_code=data.get("voucher_code"),
             original_amount=data.get("original_amount"),
             discount_amount=data.get("discount_amount"),
+            registration_category=data.get("registration_category"),
+            is_member=data.get("is_member"),
             created_at=_parse_dt(data.get("created_at")) or datetime.now(timezone.utc),
         )
         s.add(p)
@@ -1355,6 +1362,8 @@ def consume_voucher_and_create_registration(
             voucher_code=payment_data.get("voucher_code"),
             original_amount=payment_data.get("original_amount"),
             discount_amount=payment_data.get("discount_amount"),
+            registration_category=payment_data.get("registration_category"),
+            is_member=payment_data.get("is_member"),
             created_at=datetime.now(timezone.utc),
         )
         s.add(pay)
@@ -1402,6 +1411,106 @@ def create_registration_with_voucher_consume(
         s.commit()
         s.refresh(reg)
         return registration_to_dict(reg)
+
+
+# ---------------------------------------------------------------------------
+# Organizer members (issue #57). One list per organizer (their events'
+# created_by uid), shared across all their events. Phones are stored
+# normalised to 10 digits; matching is by phone only.
+# ---------------------------------------------------------------------------
+
+
+def get_organizer_member(organizer_id: str, phone_normalized: str) -> Optional[dict[str, Any]]:
+    """One listed member by (organizer, normalized phone), or None."""
+    if not phone_normalized:
+        return None
+    with _session() as s:
+        m = s.scalars(
+            select(OrganizerMember).where(
+                OrganizerMember.organizer_id == organizer_id,
+                OrganizerMember.phone_normalized == phone_normalized,
+            )
+        ).first()
+        return organizer_member_to_dict(m) if m else None
+
+
+def count_organizer_members(organizer_id: str) -> dict[str, Any]:
+    """Member-list size + last update time for an organizer."""
+    with _session() as s:
+        rows = s.scalars(
+            select(OrganizerMember).where(OrganizerMember.organizer_id == organizer_id)
+        ).all()
+        updated_at = max((r.updated_at for r in rows if r.updated_at), default=None)
+        return {
+            "count": len(rows),
+            "updated_at": updated_at.isoformat() if updated_at else None,
+        }
+
+
+def replace_organizer_members(organizer_id: str, members: list[dict[str, Any]]) -> dict[str, Any]:
+    """Replace an organizer's whole member list in one transaction.
+
+    ``members`` are the parsed rows from parse_member_rows (phone already
+    normalised, name + details). Re-upload replaces — there is no merge,
+    so a stale sheet cannot leave ghost members behind.
+    """
+    now = datetime.now(timezone.utc)
+    with _session() as s:
+        s.execute(
+            OrganizerMember.__table__.delete().where(
+                OrganizerMember.organizer_id == organizer_id
+            )
+        )
+        for m in members:
+            s.add(
+                OrganizerMember(
+                    id=str(uuid.uuid4()),
+                    organizer_id=organizer_id,
+                    phone_normalized=m["phone"],
+                    name=m.get("name") or None,
+                    details=m.get("details") or None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        s.commit()
+        return count_organizer_members(organizer_id)
+
+
+def clear_organizer_members(organizer_id: str) -> dict[str, Any]:
+    """Delete an organizer's whole member list. Returns the new (empty) count."""
+    with _session() as s:
+        s.execute(
+            OrganizerMember.__table__.delete().where(
+                OrganizerMember.organizer_id == organizer_id
+            )
+        )
+        s.commit()
+        return {"count": 0, "updated_at": None}
+
+
+def has_prior_registration(organizer_id: str, phone_normalized: str) -> bool:
+    """True when this phone has a prior non-rejected registration in any
+    of the organizer's events — the "existing player" member source.
+
+    Phones are stored raw on registrations, so the comparison normalises
+    each stored number in Python (same precedent as
+    _find_payment_for_customer's Python-side filtering in server.py).
+    """
+    if not phone_normalized:
+        return False
+    with _session() as s:
+        rows = s.execute(
+            select(PlayerRegistration.contact_number)
+            .join(Event, PlayerRegistration.event_id == Event.id)
+            .where(
+                Event.created_by == organizer_id,
+                PlayerRegistration.status != "rejected",
+            )
+        ).scalars().all()
+        return any(
+            normalize_phone_number(p) == phone_normalized for p in rows if p
+        )
 
 
 def validate_public_token(team_id: str, token: str) -> bool:
