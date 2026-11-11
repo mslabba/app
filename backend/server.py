@@ -127,6 +127,20 @@ async def require_event_access(event_id: str, current_user: dict = Depends(requi
     return current_user
 
 
+def _txn_snapshot(transaction, ref):
+    """One document snapshot from a Firestore transaction read.
+
+    In google-cloud-firestore 2.21.0 (pinned in requirements.txt),
+    Transaction.get() returns a *generator* of snapshots (it delegates
+    to Client.get_all), not a single DocumentSnapshot — so
+    ``transaction.get(ref).exists`` raises
+    ``AttributeError: 'generator' object has no attribute 'exists'``.
+    Take the single yielded value; it is None when the document does
+    not exist.
+    """
+    return next(transaction.get(ref), None)
+
+
 # ---------------------------------------------------------------------------
 # Voucher helpers (issue #40). Vouchers are scoped to ONE event; every
 # discount is computed server-side from the event fee + the stored voucher
@@ -2612,8 +2626,8 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
 
                 @firestore.transactional
                 def _redeem_full_voucher(transaction):
-                    snap = transaction.get(voucher_ref)
-                    if not snap.exists:
+                    snap = _txn_snapshot(transaction, voucher_ref)
+                    if snap is None or not snap.exists:
                         raise ValueError('not_found')
                     valid, reason = validate_voucher(snap.to_dict(), event_id)
                     if not valid:
@@ -4889,14 +4903,14 @@ async def complete_bid_transaction(
         def update_transaction(transaction):
             # Get player
             player_ref = db.collection('players').document(player_id)
-            player_doc = transaction.get(player_ref)
-            if not player_doc.exists:
+            player_doc = _txn_snapshot(transaction, player_ref)
+            if player_doc is None or not player_doc.exists:
                 raise HTTPException(status_code=404, detail="Player not found")
             
             # Get team
             team_ref = db.collection('teams').document(team_id)
-            team_doc = transaction.get(team_ref)
-            if not team_doc.exists:
+            team_doc = _txn_snapshot(transaction, team_ref)
+            if team_doc is None or not team_doc.exists:
                 raise HTTPException(status_code=404, detail="Team not found")
             
             team_data = team_doc.to_dict()
@@ -6101,8 +6115,8 @@ def _create_registration_for_payment(event_id: str, order_id: str, form_data: di
 
             @firestore.transactional
             def _complete_with_voucher_consume(transaction):
-                snap = transaction.get(voucher_ref)
-                if snap.exists:
+                snap = _txn_snapshot(transaction, voucher_ref)
+                if snap is not None and snap.exists:
                     valid, reason = validate_voucher(snap.to_dict(), event_id)
                     if not valid:
                         raise ValueError(reason)
