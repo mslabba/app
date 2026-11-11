@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import ReactCrop from 'react-image-crop';
+import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -26,6 +26,21 @@ const ImageCropper = ({
   const [completedCrop, setCompletedCrop] = useState(null);
   const imgRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // Default crop: a centred rectangle over the image, computed once the
+  // image's real dimensions are known. A percent crop with only a width
+  // and an aspect has no height until then, so without this the crop
+  // renders as a flat line at the top of the image.
+  const onImageLoad = (e) => {
+    const { width, height } = e.currentTarget;
+    const defaultCrop = centerCrop(
+      makeAspectCrop({ unit: '%', width: 90 }, aspect, width, height),
+      width,
+      height
+    );
+    setCrop(defaultCrop);
+    setCompletedCrop(defaultCrop);
+  };
 
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
@@ -224,6 +239,7 @@ const ImageCropper = ({
                     ref={imgRef}
                     src={imageSrc}
                     alt="Crop preview"
+                    onLoad={onImageLoad}
                     style={{ maxHeight: '60vh', maxWidth: '100%' }}
                   />
                 </ReactCrop>

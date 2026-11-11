@@ -7,7 +7,7 @@ import { Upload, X, Image as ImageIcon, Link, Shuffle, Cloud, Crop } from 'lucid
 import { toast } from 'sonner';
 import { getRandomSampleImage } from '@/utils/sampleImages';
 import { uploadImageToCloudinary } from '@/lib/cloudinary';
-import ReactCrop from 'react-image-crop';
+import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
 const ImageUploadWithCrop = ({
@@ -35,6 +35,21 @@ const ImageUploadWithCrop = ({
   const [completedCrop, setCompletedCrop] = useState(null);
   const imgRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // Default crop: a centred rectangle over the image, computed once the
+  // image's real dimensions are known. A percent crop with only a width
+  // and an aspect has no height until then, so without this the crop
+  // renders as a flat line at the top of the image.
+  const onImageLoad = (e) => {
+    const { width, height } = e.currentTarget;
+    const defaultCrop = centerCrop(
+      makeAspectCrop({ unit: '%', width: 90 }, cropAspect, width, height),
+      width,
+      height
+    );
+    setCrop(defaultCrop);
+    setCompletedCrop(defaultCrop);
+  };
 
   const handleUrlChange = (url) => {
     setPreview(url);
@@ -353,6 +368,7 @@ const ImageUploadWithCrop = ({
                       ref={imgRef}
                       src={imageSrc}
                       alt="Crop preview"
+                      onLoad={onImageLoad}
                       style={{ maxHeight: '60vh', maxWidth: '100%' }}
                     />
                   </ReactCrop>
