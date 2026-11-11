@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -483,6 +483,17 @@ const PublicPlayerRegistration = () => {
   // from the picked category + phone, so the price shown is always the
   // price the server will charge.
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  // Phone-first auto-identify (issue #59): refs, not state — they are
+  // only read inside the quote handler, never rendered.
+  // categoryManuallyPickedRef: the player picked a category by hand;
+  // a hand-picked category is never overridden by auto-identify.
+  // prevIsMemberRef: the membership flag from the latest quote, so the
+  // auto-switch only fires on the false → true transition.
+  // feeQuoteSeqRef: guards against a stale (out-of-order) quote
+  // switching the category for a phone the player already changed.
+  const categoryManuallyPickedRef = useRef(false);
+  const prevIsMemberRef = useRef(false);
+  const feeQuoteSeqRef = useRef(0);
   const [feeQuote, setFeeQuote] = useState(null);
   const [feeQuoteLoading, setFeeQuoteLoading] = useState(false);
   const [ticket, setTicket] = useState(null);
@@ -811,6 +822,9 @@ const PublicPlayerRegistration = () => {
         {hints.length > 0 && (
           <p className="mt-1 text-xs text-gray-500">{hints.join(' · ')}</p>
         )}
+        {field.key === 'contact_number' && hasCategories && feeQuote?.is_member && (
+          <p className="mt-1 text-xs text-green-600">✓ Member identified — member price applied</p>
+        )}
       </div>
     );
   };
@@ -832,6 +846,7 @@ const PublicPlayerRegistration = () => {
   const hasCategories = categories.length > 0;
 
   const fetchFeeQuote = async ({ category_id, phone, voucher_code }) => {
+    const seq = ++feeQuoteSeqRef.current;
     setFeeQuoteLoading(true);
     try {
       const { data } = await axios.post(`${API}/auctions/${eventId}/fee-quote`, {
@@ -854,6 +869,24 @@ const PublicPlayerRegistration = () => {
               }
             : prev
         );
+      }
+      // Phone-first auto-identify (issue #59): the quote returns
+      // is_member for the phone alone, whatever the category. On the
+      // false → true transition — and only if the player has not
+      // picked a category by hand — switch the dropdown to the first
+      // member-tiered category, so the fee becomes the member price.
+      // Only the latest quote may switch: a stale response for a
+      // phone the player already changed must not move the dropdown.
+      // No switch-back on true → false; the player changes it by hand.
+      if (seq === feeQuoteSeqRef.current) {
+        const wasMember = prevIsMemberRef.current;
+        prevIsMemberRef.current = !!data.is_member;
+        if (data.is_member && !wasMember && !categoryManuallyPickedRef.current) {
+          const memberCategory = categories.find((c) => c.pricing_type === 'member_tiered');
+          if (memberCategory && memberCategory.id !== selectedCategoryId) {
+            setSelectedCategoryId(memberCategory.id);
+          }
+        }
       }
       return data;
     } catch {
@@ -1484,7 +1517,12 @@ const PublicPlayerRegistration = () => {
                       <Label className="text-gray-700">Category *</Label>
                       <Select
                         value={selectedCategoryId}
-                        onValueChange={(value) => setSelectedCategoryId(value)}
+                        onValueChange={(value) => {
+                          // A hand-picked category is never overridden by
+                          // auto-identify (issue #59).
+                          categoryManuallyPickedRef.current = true;
+                          setSelectedCategoryId(value);
+                        }}
                       >
                         <SelectTrigger className="bg-white border-gray-300 text-gray-900">
                           <SelectValue placeholder="Select your category" />

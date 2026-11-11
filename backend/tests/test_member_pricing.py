@@ -22,6 +22,7 @@ import pytest
 
 from app.registration_form import (
     category_price,
+    detect_member_header_row,
     is_member_phone,
     normalize_phone_number,
     normalize_registration_categories,
@@ -196,6 +197,80 @@ def test_parse_member_rows_float_phone_and_duplicate_last_wins():
     assert len(members) == 1
     assert members[0]["name"] == "Second"
     assert members[0]["details"] == {"Shop": "New"}
+
+
+# --- member sheet header-row detection (issue #59) ----------------------
+
+def test_detect_member_header_row_title_row_above_headers():
+    # His real sheet: row 1 a title, row 2 the headers, rows 3-4 data.
+    raw = [
+        ["Table 1", None, None],
+        ["Registration ID", "Name", "Mobile"],
+        [101, "Muhammed", 9037138030],
+        [102, "Shihab", 9947702294],
+    ]
+    assert detect_member_header_row(raw) == 1
+
+
+def test_detect_member_header_row_first_row():
+    raw = [["Name", "Mobile"], ["Ravi", "9876543210"]]
+    assert detect_member_header_row(raw) == 0
+
+
+def test_detect_member_header_row_none_found():
+    assert detect_member_header_row([["Foo", "Bar"], ["x", "y"]]) is None
+    assert detect_member_header_row([]) is None
+    # A title row that merely mentions a phone is not a header row:
+    # only an exact header cell counts.
+    assert detect_member_header_row([["Mobile members list"], ["x"]]) is None
+
+
+def test_parse_member_rows_real_header_row_numbers():
+    # Headers on sheet row 2: errors must carry the real sheet rows.
+    members, errors = parse_member_rows([
+        {"Registration ID": 201, "Name": "No Phone", "Mobile": None},
+        {"Registration ID": 202, "Name": "Good", "Mobile": "9876543210"},
+        {"Registration ID": None, "Name": "", "Mobile": ""},  # empty: skipped
+    ], header_row=2)
+    assert len(members) == 1
+    assert members[0]["phone"] == "9876543210"
+    assert errors == ["Row 3: no usable phone number"]
+
+
+def test_parse_member_rows_phone_key_variants():
+    # "Mobile No." (trailing period) and "Telephone" both match.
+    members, errors = parse_member_rows([
+        {"Name": "A", "Mobile No.": "9876543210"},
+        {"Name": "B", "Telephone": "9123456780"},
+    ])
+    assert errors == []
+    assert [m["phone"] for m in members] == ["9876543210", "9123456780"]
+
+
+def test_parse_member_rows_multiple_phone_columns():
+    # A sheet with both Mobile and Phone columns, different rows
+    # filling different ones — each row takes its first usable number.
+    members, errors = parse_member_rows([
+        {"Name": "A", "Mobile": "9876543210", "Phone": None},
+        {"Name": "B", "Mobile": None, "Phone": "9123456780"},
+    ])
+    assert errors == []
+    assert [m["phone"] for m in members] == ["9876543210", "9123456780"]
+
+
+def test_parse_member_rows_title_row_shape_like_real_sheet():
+    # Dicts exactly as pandas produces for his membership.xlsx once
+    # the detected header row (row 2) is used: 2 members, 0 skipped.
+    members, errors = parse_member_rows([
+        {"Registration ID": 101, "Name": "Muhammed", "Mobile": 9037138030,
+         "Unnamed: 3": None, "Unnamed: 4": None},
+        {"Registration ID": 102, "Name": "Shihab", "Mobile": 9947702294,
+         "Unnamed: 3": None, "Unnamed: 4": None},
+    ], header_row=2)
+    assert errors == []
+    assert [(m["phone"], m["name"]) for m in members] == [
+        ("9037138030", "Muhammed"), ("9947702294", "Shihab")]
+    assert members[0]["details"] == {"Registration ID": 101}
 
 
 # --- Pydantic models (skipped when pydantic is absent) --------------------

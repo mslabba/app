@@ -337,16 +337,56 @@ def is_member_phone(*, listed: bool, existing_player: bool) -> bool:
     return bool(listed or existing_player)
 
 
-_MEMBER_PHONE_KEYS = ("phone", "mobile", "mobile number", "phone number", "contact_number", "contact number")
+_MEMBER_PHONE_KEYS = (
+    "phone", "mobile", "mobile number", "phone number",
+    "contact_number", "contact number",
+    "mobile no", "phone no", "contact no", "mob no", "telephone", "cell",
+)
 _MEMBER_NAME_KEYS = ("name", "full name", "member name")
 
 
-def _member_row_key(headers: list[str], wanted: tuple[str, ...]) -> str | None:
-    """First header matching one of the wanted keys (case-insensitive)."""
-    lowered = {h.strip().lower(): h for h in headers if isinstance(h, str)}
-    for key in wanted:
-        if key in lowered:
-            return lowered[key]
+def _normalize_header(value: Any) -> str:
+    """One header cell into a comparable key: lowercased, whitespace
+    collapsed, trailing periods stripped (so "Mobile No." matches
+    "mobile no"). Non-strings become their str form; blanks become ""."""
+    if value is None:
+        return ""
+    if isinstance(value, float) and value != value:  # NaN
+        return ""
+    return " ".join(str(value).strip().lower().rstrip(".").split())
+
+
+def _member_row_keys(headers: list[str], wanted: tuple[str, ...]) -> list[str]:
+    """Headers matching one of the wanted keys (case-insensitive,
+    punctuation-tolerant), in wanted-priority order. A sheet can carry
+    more than one phone column ("Mobile" and "Phone") with different
+    rows filling different ones, so the caller tries each in turn
+    instead of committing to a single column."""
+    lowered = {}
+    for h in headers:
+        if isinstance(h, str):
+            lowered.setdefault(_normalize_header(h), h)
+    return [lowered[key] for key in wanted if key in lowered]
+
+
+def detect_member_header_row(raw_rows: list[list[Any]], max_scan: int = 10) -> int | None:
+    """Find the header row of a member sheet, 0-based index into
+    ``raw_rows`` (or None if no row looks like a header).
+
+    Real sheets often carry a title row above the headers (e.g. row 1
+    "Table 1", row 2 "Registration ID | Name | Mobile") — assuming the
+    headers are row 1 turns the title into the header and every data
+    row fails. So scan the first ``max_scan`` rows for one containing a
+    phone-like header cell (an exact match on a phone key, after
+    normalisation). The first such row wins; a sheet whose headers are
+    already row 1 returns 0.
+    """
+    for index, row in enumerate(raw_rows[:max_scan]):
+        if not isinstance(row, (list, tuple)):
+            continue
+        for cell in row:
+            if _normalize_header(cell) in _MEMBER_PHONE_KEYS:
+                return index
     return None
 
 
@@ -363,38 +403,48 @@ def _clean_cell(value: Any) -> Any:
     return value
 
 
-def parse_member_rows(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+def parse_member_rows(rows: list[dict[str, Any]], header_row: int = 1) -> tuple[list[dict[str, Any]], list[str]]:
     """Turn parsed Excel rows into member records + per-row errors.
 
-    ``rows`` is a list of dicts keyed by the sheet's header row. A row
-    needs a usable phone number; the name is optional (matching is by
-    phone only). Every other column is kept as ``details``. Fully-empty
-    rows are skipped silently; rows with an unusable phone are reported
-    (``Row N: ...``) instead of failing the whole upload. A phone that
-    appears twice keeps the LAST row's data.
+    ``rows`` is a list of dicts keyed by the sheet's header row, and
+    ``header_row`` is that header's 1-based sheet row (default 1, so
+    data starts at row 2). A row needs a usable phone number; the name
+    is optional (matching is by phone only). Every other column is kept
+    as ``details``. Fully-empty rows are skipped silently; rows with an
+    unusable phone are reported (``Row N: ...`` with the REAL sheet row
+    number) instead of failing the whole upload. A phone that appears
+    twice keeps the LAST row's data.
     """
     members: list[dict[str, Any]] = []
     errors: list[str] = []
     by_phone: dict[str, dict[str, Any]] = {}
-    for index, row in enumerate(rows, start=2):  # header is row 1
+    for index, row in enumerate(rows, start=header_row + 1):  # header is header_row
         if not isinstance(row, dict):
             continue
         row = {k: _clean_cell(v) for k, v in row.items()}
         if all(v is None or (isinstance(v, str) and not v.strip()) for v in row.values()):
             continue
         headers = list(row.keys())
-        phone_key = _member_row_key(headers, _MEMBER_PHONE_KEYS)
-        name_key = _member_row_key(headers, _MEMBER_NAME_KEYS)
-        phone = normalize_phone_number(row.get(phone_key) if phone_key else None)
+        phone_keys = _member_row_keys(headers, _MEMBER_PHONE_KEYS)
+        name_keys = _member_row_keys(headers, _MEMBER_NAME_KEYS)
+        # A sheet can carry several phone columns with different rows
+        # filling different ones — take the first usable number.
+        phone = ""
+        for key in phone_keys:
+            phone = normalize_phone_number(row.get(key))
+            if phone:
+                break
         if not phone:
             errors.append(f"Row {index}: no usable phone number")
             continue
         name = ""
-        if name_key:
-            name = str(row.get(name_key) or "").strip()
+        for key in name_keys:
+            name = str(row.get(key) or "").strip()
+            if name:
+                break
         details: dict[str, Any] = {}
         for key, value in row.items():
-            if key in (phone_key, name_key):
+            if key in phone_keys or key in name_keys:
                 continue
             if value is None or (isinstance(value, str) and not value.strip()):
                 continue

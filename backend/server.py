@@ -21,6 +21,7 @@ from models import *
 from auth_middleware import verify_token, get_current_user, require_super_admin, require_team_admin, require_event_organizer
 from app.registration_form import (
     category_price,
+    detect_member_header_row,
     is_member_phone,
     normalize_phone_number,
     parse_member_rows,
@@ -311,7 +312,13 @@ def _resolve_category_fee(
         if require_category:
             raise HTTPException(
                 status_code=400, detail="Select a registration category")
-        return base_fee, False, None
+        # Phone-only preview (issue #59): no category picked yet, so the
+        # fee is the base fee — but membership is still computed from
+        # the phone, so the form can auto-identify the player before
+        # they pick a category. (Was: forced False, so a member typing
+        # their number first could never be identified.)
+        member = _is_member(_organizer_id_for_event(event_data), phone) if phone else False
+        return base_fee, member, None
     member = _is_member(_organizer_id_for_event(event_data), phone) if phone else False
     fee = category_price(base_fee, categories, category_id, member)
     return fee, member, category
@@ -2912,11 +2919,16 @@ async def upload_organizer_members(
     """Replace the organizer's member list from an Excel sheet.
 
     Columns: name + phone (any of phone/mobile/contact_number, plus
-    "mobile number"/"phone number") + any other columns, kept as details.
-    A row needs a usable phone number; bad rows are reported, not
-    silently dropped, and never fail the whole upload. Re-upload
-    replaces — there is no merge, so a stale sheet cannot leave ghost
-    members behind.
+    "mobile number"/"phone number" and no./telephone/cell variants) +
+    any other columns, kept as details. The header row is DETECTED, not
+    assumed to be row 1: real sheets often carry a title row above the
+    headers (e.g. row 1 "Table 1", row 2 the headers) — the first ~10
+    rows are scanned for one containing a phone-like header, and the
+    rows below it are the data. A row needs a usable phone number; bad
+    rows are reported with their real sheet row numbers, not silently
+    dropped, and never fail the whole upload. Re-upload replaces —
+    there is no merge, so a stale sheet cannot leave ghost members
+    behind.
     """
     import io
 
@@ -2933,12 +2945,23 @@ async def upload_organizer_members(
             status_code=400, detail="File must be an Excel file (.xlsx or .xls)")
     try:
         contents = await file.read()
-        df = pd.read_excel(io.BytesIO(contents))
+        # Read once without headers to find the header row, then again
+        # with it — assuming header=0 turns a title row into the
+        # headers and every data row fails with "no usable phone".
+        raw_df = pd.read_excel(io.BytesIO(contents), header=None)
+        raw_rows = [
+            [None if (isinstance(v, float) and v != v) else v for v in row]
+            for row in raw_df.values.tolist()
+        ]
+        header_idx = detect_member_header_row(raw_rows)
+        if header_idx is None:
+            header_idx = 0
+        df = pd.read_excel(io.BytesIO(contents), header=header_idx)
     except Exception:
         raise HTTPException(
             status_code=400, detail="Could not read this Excel file")
     rows = df.to_dict(orient="records")
-    members, errors = parse_member_rows(rows)
+    members, errors = parse_member_rows(rows, header_row=header_idx + 1)
     if _USE_POSTGRES and _pg:
         result = _pg.replace_organizer_members(organizer_id, members)
     elif db:
