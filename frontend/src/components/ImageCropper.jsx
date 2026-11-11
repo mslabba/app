@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
+import ReactCrop, { centerCrop, makeAspectCrop, convertToPixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -73,22 +73,28 @@ const ImageCropper = ({
     }
 
     const image = imgRef.current;
+    // The completed crop may be a PercentCrop (the onImageLoad default)
+    // or a PixelCrop (onComplete's first argument after a drag). Convert
+    // to pixels first — reading percent values as pixels crops a tiny
+    // box at the top of the image (issue #65). Pixel crops pass through
+    // unchanged, so the drag path is unaffected.
+    const pixelCrop = convertToPixelCrop(completedCrop, image.width, image.height);
     const canvas = document.createElement('canvas');
     const scaleX = image.naturalWidth / image.width;
     const scaleY = image.naturalHeight / image.height;
 
     // Set canvas size to the cropped area
-    canvas.width = completedCrop.width * scaleX;
-    canvas.height = completedCrop.height * scaleY;
+    canvas.width = pixelCrop.width * scaleX;
+    canvas.height = pixelCrop.height * scaleY;
 
     const ctx = canvas.getContext('2d');
 
     ctx.drawImage(
       image,
-      completedCrop.x * scaleX,
-      completedCrop.y * scaleY,
-      completedCrop.width * scaleX,
-      completedCrop.height * scaleY,
+      pixelCrop.x * scaleX,
+      pixelCrop.y * scaleY,
+      pixelCrop.width * scaleX,
+      pixelCrop.height * scaleY,
       0,
       0,
       canvas.width,

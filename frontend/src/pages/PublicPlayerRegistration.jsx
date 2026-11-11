@@ -667,10 +667,18 @@ const PublicPlayerRegistration = () => {
     }
   };
 
-  const activeFields = useMemo(
-    () => enabledFields(formConfig || resolveRegistrationFormConfig(event)),
-    [formConfig, event]
-  );
+  const activeFields = useMemo(() => {
+    const cfg = formConfig || resolveRegistrationFormConfig(event);
+    const fields = enabledFields(cfg);
+    // With registration categories, the mobile number goes first: typing
+    // it identifies the member before any category is hand-picked, so
+    // auto-identify can switch the category (issues #59, #66). Events
+    // without categories keep their configured order.
+    if (!registrationCategories(cfg).length) return fields;
+    const mobile = fields.find((f) => f.key === 'contact_number');
+    if (!mobile) return fields;
+    return [mobile, ...fields.filter((f) => f.key !== 'contact_number')];
+  }, [formConfig, event]);
 
   const handleChange = (fieldKey, value) => {
     if (STATS_KEYS.has(fieldKey)) {
