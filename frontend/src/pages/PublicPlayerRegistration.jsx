@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Trophy, User, CheckCircle, ArrowLeft, CreditCard, Users, XCircle, Calendar, MapPin, Copy, Check, MessageCircle } from 'lucide-react';
+import { Trophy, User, CheckCircle, ArrowLeft, CreditCard, Users, XCircle, Calendar, MapPin, Copy, Check, MessageCircle, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 import ImageUploadWithCrop from '@/components/ImageUploadWithCrop';
 import DocumentUpload from '@/components/DocumentUpload';
@@ -23,6 +23,7 @@ import {
   emptyFormValues,
   enabledFields,
   fieldConditions,
+  registrationCategories,
   resolveRegistrationFormConfig,
   validateRegistrationValues,
   COLUMN_KEYS,
@@ -193,7 +194,7 @@ const RegistrationStatusHeader = ({ status, eventName }) => {
 // payment.kind is 'free' | 'paid' | 'voucher' — 'voucher' only when the
 // data actually carries a voucher code (a later voucher feature); it is
 // never invented here.
-const buildTicket = ({ registrationId, playerValues, payment, eventSnapshot }) => {
+const buildTicket = ({ registrationId, playerValues, payment, eventSnapshot, category, isMember }) => {
   const values = playerValues || {};
   const voucherCode = values.voucher_code || payment?.voucherCode || null;
   return {
@@ -211,6 +212,10 @@ const buildTicket = ({ registrationId, playerValues, payment, eventSnapshot }) =
       voucherCode,
       orderId: payment?.orderId || null,
     },
+    // Registration category + member status (issue #57) — from the
+    // server's verify response or the fee quote, never the form.
+    category: category || null,
+    is_member: !!isMember,
     event: eventSnapshot || null,
   };
 };
@@ -364,6 +369,22 @@ const RegistrationTicket = ({ ticket, event, eventId, onRegisterAnother }) => {
               </div>
             </div>
           )}
+          {ticket.category && (
+            <div className="flex items-start gap-2.5">
+              <Tag className="w-4 h-4 text-red-600 mt-1 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold tracking-wider text-gray-600 uppercase">Category</p>
+                <p className="font-semibold text-gray-900 break-words">
+                  {ticket.category}
+                  {ticket.is_member && (
+                    <span className="ml-2 inline-block rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-bold text-green-700">
+                      Member
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
           {ev.venue && (
             <div className="flex items-start gap-2.5">
               <MapPin className="w-4 h-4 text-red-600 mt-1 shrink-0" />
@@ -458,6 +479,12 @@ const PublicPlayerRegistration = () => {
   const [voucher, setVoucher] = useState(null); // { code, type, value, amount_due, message } | null
   const [voucherApplying, setVoucherApplying] = useState(false);
   const [voucherError, setVoucherError] = useState('');
+  // Registration categories (issue #57) — the fee is quoted server-side
+  // from the picked category + phone, so the price shown is always the
+  // price the server will charge.
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [feeQuote, setFeeQuote] = useState(null);
+  const [feeQuoteLoading, setFeeQuoteLoading] = useState(false);
   const [ticket, setTicket] = useState(null);
   const [formData, setFormData] = useState(() => emptyFormValues(resolveRegistrationFormConfig(null)));
 
@@ -793,10 +820,77 @@ const PublicPlayerRegistration = () => {
   // The code is always re-sent at submit time and the server decides the
   // amount — a preview is never trusted to skip payment.
   const appliedVoucher = voucher?.valid ? voucher : null;
-  const amountDue = appliedVoucher
-    ? Number(appliedVoucher.amount_due ?? registrationFee)
-    : registrationFee;
-  const isFreeWithVoucher = !!appliedVoucher && amountDue === 0;
+
+  // Registration categories (issue #57) — the fee is quoted server-side
+  // from the picked category + the player's phone, so the price shown is
+  // always the price the server will charge. The quote is rate-limited
+  // like the voucher check, since it can reveal member status.
+  const categories = useMemo(
+    () => registrationCategories(resolveRegistrationFormConfig(event)),
+    [event]
+  );
+  const hasCategories = categories.length > 0;
+
+  const fetchFeeQuote = async ({ category_id, phone, voucher_code }) => {
+    setFeeQuoteLoading(true);
+    try {
+      const { data } = await axios.post(`${API}/auctions/${eventId}/fee-quote`, {
+        ...(category_id ? { category_id } : {}),
+        ...(phone ? { phone } : {}),
+        ...(voucher_code ? { voucher_code } : {}),
+      });
+      setFeeQuote(data);
+      // Keep an applied voucher's amount in sync when the category or
+      // phone changes — the quote already re-priced it.
+      if (voucher_code) {
+        setVoucher((prev) =>
+          prev
+            ? {
+                ...prev,
+                amount_due: data.amount_due,
+                type: data.voucher_type,
+                value: data.voucher_value,
+                valid: data.voucher_valid,
+              }
+            : prev
+        );
+      }
+      return data;
+    } catch {
+      // A quote is a preview — a failed quote falls back to the base fee.
+      return null;
+    } finally {
+      setFeeQuoteLoading(false);
+    }
+  };
+
+  // Re-quote when the category or the phone changes (debounced while the
+  // player types). The quote always carries the applied voucher code, so
+  // the amount due stays correct across category changes.
+  useEffect(() => {
+    if (!hasCategories || !eventId) return;
+    const phone = (formData.contact_number || '').trim();
+    const timer = setTimeout(() => {
+      fetchFeeQuote({
+        category_id: selectedCategoryId || undefined,
+        phone: phone || undefined,
+        voucher_code: appliedVoucher?.code || undefined,
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [hasCategories, eventId, selectedCategoryId, formData.contact_number]);
+
+  // The fee before any voucher (the category price, or the base fee).
+  const quotedFee = feeQuote ? Number(feeQuote.fee) : null;
+  const displayBaseFee = quotedFee ?? registrationFee;
+  // The amount the player actually owes — from the server quote when the
+  // event has categories, from the voucher preview otherwise.
+  const amountDue = hasCategories
+    ? (feeQuote ? Number(feeQuote.amount_due) : registrationFee)
+    : appliedVoucher
+      ? Number(appliedVoucher.amount_due ?? registrationFee)
+      : registrationFee;
+  const isFreeRegistration = amountDue === 0;
 
   const applyVoucher = async () => {
     const code = voucherCode.trim().toUpperCase();
@@ -807,16 +901,28 @@ const PublicPlayerRegistration = () => {
     setVoucherApplying(true);
     setVoucherError('');
     try {
-      const { data } = await axios.post(`${API}/auctions/${eventId}/vouchers/validate`, {
-        code,
+      // The fee-quote endpoint validates the voucher against the category
+      // price (or the base fee), so the preview matches what the server
+      // will charge at submit time.
+      const data = await fetchFeeQuote({
+        category_id: selectedCategoryId || undefined,
+        phone: (formData.contact_number || '').trim() || undefined,
+        voucher_code: code,
       });
-      if (data?.valid) {
-        setVoucher({ ...data, code });
+      if (data?.voucher_valid) {
+        setVoucher({
+          valid: true,
+          code,
+          type: data.voucher_type,
+          value: data.voucher_value,
+          amount_due: data.amount_due,
+          message: data.message,
+        });
         setVoucherCode(code);
         toast.success(
           Number(data.amount_due) === 0
             ? 'Voucher applied — registration is free.'
-            : `Voucher applied — you pay ₹${Number(data.amount_due).toLocaleString('en-IN')} instead of ₹${registrationFee.toLocaleString('en-IN')}.`
+            : `Voucher applied — you pay ₹${Number(data.amount_due).toLocaleString('en-IN')} instead of ₹${displayBaseFee.toLocaleString('en-IN')}.`
         );
       } else {
         setVoucher(null);
@@ -838,6 +944,13 @@ const PublicPlayerRegistration = () => {
     setVoucher(null);
     setVoucherCode('');
     setVoucherError('');
+    // Re-quote without the voucher so the fee display is correct again.
+    if (hasCategories) {
+      fetchFeeQuote({
+        category_id: selectedCategoryId || undefined,
+        phone: (formData.contact_number || '').trim() || undefined,
+      });
+    }
   };
 
   const initiateCashfreePayment = async () => {
@@ -860,7 +973,11 @@ const PublicPlayerRegistration = () => {
       // Send the full registration payload with the order, so the server can
       // complete the registration even if the player never returns from the
       // gateway (UPI app-switch is the common case).
-      const registrationPayload = buildRegistrationPayload(formData, cfg);
+      const registrationPayload = buildRegistrationPayload(
+        formData,
+        cfg,
+        selectedCategoryId ? { registration_category: selectedCategoryId } : {}
+      );
       // The client-sent amount is ignored server-side (the fee is read from
       // the event); likewise the voucher discount is computed server-side
       // from the stored voucher — the code is sent, never a client amount.
@@ -871,6 +988,7 @@ const PublicPlayerRegistration = () => {
         customer_phone: formData.contact_number.trim(),
         amount: event.payment_settings.registration_fee,
         ...(appliedVoucher ? { voucher_code: appliedVoucher.code } : {}),
+        ...(selectedCategoryId ? { registration_category: selectedCategoryId } : {}),
         form_data: registrationPayload
       });
 
@@ -887,6 +1005,8 @@ const PublicPlayerRegistration = () => {
             orderId: orderResponse.data.order_id,
             voucherCode: appliedVoucher?.code || null,
           },
+          category: orderResponse.data.registration_category || feeQuote?.category_name || null,
+          isMember: orderResponse.data.is_member ?? feeQuote?.is_member ?? false,
           eventSnapshot: eventSnapshot(),
         });
         setTicket(nextTicket);
@@ -948,7 +1068,7 @@ const PublicPlayerRegistration = () => {
         event_id: eventId
       });
 
-      const { payment_status, registration_completed, registration_id, order_amount, form_data, voucher_code } = verifyResponse.data;
+      const { payment_status, registration_completed, registration_id, order_amount, form_data, voucher_code, registration_category, is_member } = verifyResponse.data;
 
       // Clear URL parameters
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -974,6 +1094,8 @@ const PublicPlayerRegistration = () => {
             orderId: orderId,
             voucherCode: voucher_code || form_data?.voucher_code || null,
           },
+          category: registration_category || null,
+          isMember: is_member || false,
           eventSnapshot: eventSnapshot(),
         });
         setTicket(nextTicket);
@@ -995,14 +1117,18 @@ const PublicPlayerRegistration = () => {
   };
 
   // Direct registration with no Cashfree step: used when no payment is
-  // collected, and when a full voucher makes the amount due ₹0. The
-  // voucher code (if any) is sent so the server can re-validate it and
-  // consume one use atomically with the registration.
+  // collected, and when a full voucher or a ₹0 category makes the amount
+  // due ₹0. The voucher code (if any) is sent so the server can re-validate
+  // it and consume one use atomically with the registration.
   const submitDirectRegistration = async (voucherCodeToSend) => {
     try {
       setLoading(true);
 
-      const registrationData = buildRegistrationPayload(formData, formConfig || resolveRegistrationFormConfig(event));
+      const registrationData = buildRegistrationPayload(
+        formData,
+        formConfig || resolveRegistrationFormConfig(event),
+        selectedCategoryId ? { registration_category: selectedCategoryId } : {}
+      );
       if (voucherCodeToSend) registrationData.voucher_code = voucherCodeToSend;
 
       console.log('Sending direct registration request:', registrationData);
@@ -1014,6 +1140,8 @@ const PublicPlayerRegistration = () => {
         payment: voucherCodeToSend
           ? { kind: 'voucher', amount: 0, voucherCode: voucherCodeToSend }
           : { kind: 'free', amount: 0 },
+        category: registerResponse.data?.registration_category || feeQuote?.category_name || null,
+        isMember: registerResponse.data?.is_member ?? feeQuote?.is_member ?? false,
         eventSnapshot: eventSnapshot(),
       });
       setTicket(nextTicket);
@@ -1038,11 +1166,20 @@ const PublicPlayerRegistration = () => {
       return;
     }
 
+    // A category, when the event has any, is part of the registration
+    // itself — the server requires it for paid registrations, and the
+    // ticket and admin both show it for free ones too.
+    if (hasCategories && !selectedCategoryId) {
+      toast.error('Select a registration category');
+      return;
+    }
+
     // Check if payment is required
     if (event?.payment_settings?.collect_payment) {
-      if (isFreeWithVoucher) {
-        // Full voucher: nothing to pay — register directly, no Cashfree step.
-        await submitDirectRegistration(appliedVoucher.code);
+      if (isFreeRegistration) {
+        // Full voucher or a ₹0 category: nothing to pay — register
+        // directly, no Cashfree step.
+        await submitDirectRegistration(appliedVoucher?.code || null);
         return;
       }
       // Partial voucher (or none): pay the discounted amount via Cashfree.
@@ -1224,9 +1361,9 @@ const PublicPlayerRegistration = () => {
                       {appliedVoucher ? (
                         <>
                           <div className="text-lg font-semibold text-gray-500 line-through">
-                            ₹{registrationFee.toLocaleString('en-IN')}
+                            ₹{displayBaseFee.toLocaleString('en-IN')}
                           </div>
-                          {isFreeWithVoucher ? (
+                          {isFreeRegistration ? (
                             <div className="text-3xl font-bold text-green-600">Free with voucher</div>
                           ) : (
                             <div className="text-3xl font-bold text-green-600">
@@ -1240,6 +1377,26 @@ const PublicPlayerRegistration = () => {
                               : appliedVoucher.type === 'fixed' && appliedVoucher.value != null
                                 ? ` (₹${Number(appliedVoucher.value).toLocaleString('en-IN')} off)`
                                 : ''}
+                          </p>
+                        </>
+                      ) : feeQuote ? (
+                        <>
+                          {displayBaseFee !== registrationFee && (
+                            <div className="text-lg font-semibold text-gray-500 line-through">
+                              ₹{registrationFee.toLocaleString('en-IN')}
+                            </div>
+                          )}
+                          {isFreeRegistration ? (
+                            <div className="text-3xl font-bold text-green-600">Free</div>
+                          ) : (
+                            <div className="text-3xl font-bold text-green-600">
+                              ₹{amountDue.toLocaleString('en-IN')}
+                            </div>
+                          )}
+                          <p className="text-xs text-gray-600 mt-1">
+                            {feeQuote.category_name || 'One-time payment'}
+                            {feeQuote.is_member ? ' · Member price' : ''}
+                            {feeQuoteLoading ? ' · updating…' : ''}
                           </p>
                         </>
                       ) : (
@@ -1265,7 +1422,7 @@ const PublicPlayerRegistration = () => {
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm text-green-700">
                           ✓ Voucher <span className="font-mono font-semibold">{appliedVoucher.code}</span> applied
-                          {isFreeWithVoucher
+                          {isFreeRegistration
                             ? ' — no payment needed.'
                             : ` — you pay ₹${amountDue.toLocaleString('en-IN')}.`}
                         </p>
@@ -1307,7 +1464,7 @@ const PublicPlayerRegistration = () => {
                         </div>
                         {voucherError && (
                           <p className="mt-2 text-sm text-red-600">
-                            {voucherError} You can still pay the full fee of ₹{registrationFee.toLocaleString('en-IN')}.
+                            {voucherError} You can still pay the full fee of ₹{displayBaseFee.toLocaleString('en-IN')}.
                           </p>
                         )}
                       </>
@@ -1317,6 +1474,39 @@ const PublicPlayerRegistration = () => {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Registration category (issue #57) — shown only when the
+                    organizer configured categories. Picked before the
+                    details, because the fee shown above depends on it. */}
+                {hasCategories && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800">Registration category</h3>
+                    <div>
+                      <Label className="text-gray-700">Category *</Label>
+                      <Select
+                        value={selectedCategoryId}
+                        onValueChange={(value) => setSelectedCategoryId(value)}
+                      >
+                        <SelectTrigger className="bg-white border-gray-300 text-gray-900">
+                          <SelectValue placeholder="Select your category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>
+                              {cat.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {feeQuote?.category_name && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          {feeQuote.category_name}
+                          {feeQuote.is_member ? ' · member price applied' : ''}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold text-gray-800">Your details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1334,7 +1524,7 @@ const PublicPlayerRegistration = () => {
                     {loading ? 'Submitting...' :
                       paymentLoading ? 'Processing Payment...' :
                         event?.payment_settings?.collect_payment ?
-                          isFreeWithVoucher ?
+                          isFreeRegistration ?
                             'Submit Registration' :
                             `Proceed to Pay ₹${amountDue.toLocaleString('en-IN')}` :
                           'Submit Registration'}
@@ -1343,7 +1533,7 @@ const PublicPlayerRegistration = () => {
 
                 <p className="text-sm text-gray-500 text-center">
                   * Required fields. Your registration will be reviewed by the organizer.
-                  {event?.payment_settings?.collect_payment && !isFreeWithVoucher && (
+                  {event?.payment_settings?.collect_payment && !isFreeRegistration && (
                     <><br />You will be redirected to a secure payment gateway to complete the registration fee.</>
                   )}
                 </p>

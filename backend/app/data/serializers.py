@@ -130,6 +130,8 @@ def registration_to_dict(r) -> dict[str, Any]:
         "amount_paid": getattr(r, "amount_paid", None),
         "discount_amount": getattr(r, "discount_amount", None),
         "original_amount": getattr(r, "original_amount", None),
+        "registration_category": getattr(r, "registration_category", None),
+        "is_member": getattr(r, "is_member", None),
     }
     return d
 
@@ -221,4 +223,18 @@ def payment_to_dict(p) -> dict[str, Any]:
         "voucher_code": getattr(p, "voucher_code", None),
         "original_amount": getattr(p, "original_amount", None),
         "discount_amount": getattr(p, "discount_amount", None),
+        "registration_category": getattr(p, "registration_category", None),
+        "is_member": getattr(p, "is_member", None),
+    }
+
+
+def organizer_member_to_dict(m) -> dict[str, Any]:
+    return {
+        "id": m.id,
+        "organizer_id": m.organizer_id,
+        "phone_normalized": m.phone_normalized,
+        "name": m.name,
+        "details": m.details,
+        "created_at": _iso(m.created_at),
+        "updated_at": _iso(m.updated_at),
     }

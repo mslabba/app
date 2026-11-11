@@ -93,12 +93,31 @@ class RegistrationFormField(BaseModel):
     conditions: Optional[List[RegistrationFormFieldCondition]] = None
 
 
+class RegistrationCategory(BaseModel):
+    """One organizer-created registration category (issue #57).
+
+    pricing_type: "flat" (one price), "member_tiered" (member price vs
+    non-member price, decided by the player's mobile number) or
+    "voucher" (base fee, voucher discount on top).
+    """
+
+    id: str
+    name: str
+    pricing_type: str = "flat"
+    member_price: Optional[int] = None
+    non_member_price: Optional[int] = None
+    flat_price: Optional[int] = None
+
+
 class RegistrationFormConfig(BaseModel):
     fields: List[RegistrationFormField] = []
     # Optional WhatsApp group invite link, set by the organizer in the
     # Registration form settings. Shown to confirmed players only, as a
     # "Join WhatsApp group" button on their registration ticket.
     whatsapp_group_link: Optional[str] = None
+    # Organizer-created registration categories with per-category pricing
+    # rules (issue #57). Empty = today's single base fee for everyone.
+    categories: List[RegistrationCategory] = []
 
     @field_validator("whatsapp_group_link")
     @classmethod
@@ -115,6 +134,22 @@ class RegistrationFormConfig(BaseModel):
         if error is not None:
             raise ValueError(error)
         return normalize_whatsapp_group_link(v)
+
+    @field_validator("categories", mode="before")
+    @classmethod
+    def _validate_categories(cls, v):
+        # mode="before": normalise (including generating an id when one
+        # is missing) before pydantic coerces each item into
+        # RegistrationCategory.
+        from app.registration_form import (
+            normalize_registration_categories,
+            validate_registration_categories,
+        )
+
+        error = validate_registration_categories(v)
+        if error is not None:
+            raise ValueError(error)
+        return normalize_registration_categories(v)
 
 
 class EventCreate(BaseModel):
@@ -313,6 +348,34 @@ class VoucherValidateResponse(BaseModel):
     discount_amount: int = 0
     message: str
 
+
+class FeeQuoteRequest(BaseModel):
+    """Public fee quote (issue #57): what would this registration cost?
+
+    category_id is the organizer-configured category the player picked
+    (absent = base fee). phone is the mobile number to check for member
+    status (absent = non-member price). voucher_code is optional and is
+    validated the same way as the voucher preview — an invalid code is
+    ignored, never an error.
+    """
+
+    category_id: Optional[str] = None
+    phone: Optional[str] = None
+    voucher_code: Optional[str] = None
+
+
+class FeeQuoteResponse(BaseModel):
+    fee: int  # category price before any voucher
+    amount_due: int  # what the player actually pays
+    discount_amount: int = 0
+    is_member: bool = False
+    category_id: Optional[str] = None
+    category_name: Optional[str] = None
+    voucher_valid: bool = False
+    voucher_type: Optional[str] = None
+    voucher_value: Optional[int] = None
+    message: str = ""
+
 class PaymentOrderResponse(BaseModel):
     order_id: str
     payment_session_id: str
@@ -343,6 +406,11 @@ class PaymentVerificationResponse(BaseModel):
     # registration ticket after a gateway return, when the browser holds no
     # form state. None for orders created before the payload was saved.
     form_data: Optional[Dict[str, Any]] = None
+    # Server-truth category name + member flag for the ticket (issue #57).
+    # The category id in form_data is the player's pick; these are what
+    # the server charged for.
+    registration_category: Optional[str] = None
+    is_member: Optional[bool] = None
     # Voucher code recorded on the payment order, if a voucher was used.
     # Returned for the same reason — the ticket labels voucher payments.
     voucher_code: Optional[str] = None
@@ -439,7 +507,13 @@ class PublicPlayerRegistration(BaseModel):
     # through this endpoint; partial vouchers go through create-order and
     # arrive here with payment_order_id instead.
     voucher_code: Optional[str] = None
-    # Server-set from the payment order / voucher at registration time.
+    # Registration category id picked by the player (issue #57). The
+    # server validates it against the event's configured categories; the
+    # category NAME is stored on the registration/payment as the display
+    # value. Server-set from the payment order / category pricing at
+    # registration time.
+    registration_category: Optional[str] = None
+    is_member: Optional[bool] = None
     amount_paid: Optional[int] = None
     discount_amount: Optional[int] = None
     original_amount: Optional[int] = None

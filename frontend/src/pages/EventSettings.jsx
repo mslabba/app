@@ -37,6 +37,7 @@ import {
   Copy,
   ExternalLink,
   TicketPercent,
+  Upload,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
@@ -45,11 +46,16 @@ import {
   FIELD_TYPES,
   CONDITION_OPS_DATE,
   CONDITION_OPS_VALUE,
+  MAX_REGISTRATION_CATEGORIES,
+  PRICING_TYPES,
   WHATSAPP_GROUP_LINK_ERROR,
   defaultRegistrationFormConfig,
   isValidWhatsappGroupLink,
   newCustomField,
+  normalizeRegistrationCategories,
+  registrationCategories,
   resolveRegistrationFormConfig,
+  validateRegistrationCategories,
 } from '@/lib/registrationFormConfig';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -211,6 +217,21 @@ const EventSettings = () => {
   const [editingVoucherId, setEditingVoucherId] = useState(null);
   const [editDraft, setEditDraft] = useState({ max_uses: '', expires_at: '', label: '' });
   const [voucherBusyId, setVoucherBusyId] = useState(null);
+  // Registration categories (issue #57) — organizer-created, each with
+  // a pricing rule. Saved with the form config in the settings PUT.
+  const [categoryDraft, setCategoryDraft] = useState({
+    name: '',
+    pricing_type: 'flat',
+    member_price: '',
+    non_member_price: '',
+    flat_price: '',
+  });
+  // Organizer member list (issue #57) — one list per organizer, shared
+  // across all their events; managed through its own endpoints.
+  const [membersInfo, setMembersInfo] = useState(null);
+  const [membersUnavailable, setMembersUnavailable] = useState(false);
+  const [membersUploading, setMembersUploading] = useState(false);
+  const [membersResult, setMembersResult] = useState(null);
 
   useEffect(() => {
     if (!eventId || !token) return;
@@ -328,6 +349,145 @@ const EventSettings = () => {
     }));
   };
 
+  // Registration categories (issue #57) — settings on the form config,
+  // not fields. Every updater spreads the config so field edits never
+  // drop the categories (the latent-drop trap the WhatsApp link hit).
+  const categories = registrationCategories(formData.registration_form_config);
+
+  const updateCategory = (id, patch) => {
+    setFormData((prev) => ({
+      ...prev,
+      registration_form_config: {
+        ...prev.registration_form_config,
+        categories: registrationCategories(prev.registration_form_config).map((c) =>
+          c.id === id ? { ...c, ...patch } : c
+        ),
+      },
+    }));
+  };
+
+  const removeCategory = (id) => {
+    setFormData((prev) => ({
+      ...prev,
+      registration_form_config: {
+        ...prev.registration_form_config,
+        categories: registrationCategories(prev.registration_form_config).filter(
+          (c) => c.id !== id
+        ),
+      },
+    }));
+  };
+
+  const addCategory = () => {
+    const name = categoryDraft.name.trim();
+    if (!name) {
+      toast.error('Enter a category name');
+      return;
+    }
+    if (categories.length >= MAX_REGISTRATION_CATEGORIES) {
+      toast.error(`At most ${MAX_REGISTRATION_CATEGORIES} registration categories`);
+      return;
+    }
+    const next = [
+      ...categories,
+      {
+        id: `cat_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+        name,
+        pricing_type: categoryDraft.pricing_type,
+        member_price: categoryDraft.member_price,
+        non_member_price: categoryDraft.non_member_price,
+        flat_price: categoryDraft.flat_price,
+      },
+    ];
+    const error = validateRegistrationCategories(next);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      registration_form_config: {
+        ...prev.registration_form_config,
+        categories: next,
+      },
+    }));
+    setCategoryDraft({
+      name: '',
+      pricing_type: 'flat',
+      member_price: '',
+      non_member_price: '',
+      flat_price: '',
+    });
+    toast.success(`Added category “${name}”`);
+  };
+
+  /* ---------------- Organizer member list ---------------- */
+
+  const fetchMembersInfo = async () => {
+    if (!eventId || !token) return;
+    try {
+      const { data } = await axios.get(`${API}/auctions/${eventId}/members`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setMembersUnavailable(false);
+      setMembersInfo(data);
+    } catch (err) {
+      // A 404 means the member endpoints are not served yet (backend
+      // still being built) — show a note instead of an error toast.
+      if (err.response?.status === 404) {
+        setMembersUnavailable(true);
+        setMembersInfo(null);
+      } else {
+        toast.error(err.response?.data?.detail || 'Failed to load member list');
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchMembersInfo();
+  }, [eventId, token]);
+
+  const uploadMembersFile = async (file) => {
+    if (!file) return;
+    setMembersUploading(true);
+    setMembersResult(null);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const { data } = await axios.post(
+        `${API}/auctions/${eventId}/members/upload`,
+        body,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setMembersResult(data);
+      setMembersInfo({ count: data.total ?? 0, updated_at: data.updated_at || null });
+      toast.success(
+        `Member list updated — ${data.imported} members imported` +
+          (data.skipped ? `, ${data.skipped} rows skipped` : '')
+      );
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to upload member list');
+    } finally {
+      setMembersUploading(false);
+    }
+  };
+
+  const clearMembers = async () => {
+    if (!window.confirm('Clear your whole member list? Members will then only count through prior registrations.')) {
+      return;
+    }
+    try {
+      const { data } = await axios.delete(`${API}/auctions/${eventId}/members`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setMembersInfo(data);
+      setMembersResult(null);
+      toast.success('Member list cleared');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to clear member list');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.date) {
@@ -358,8 +518,19 @@ const EventSettings = () => {
       return;
     }
 
+    const categoriesError = validateRegistrationCategories(
+      registrationCategories(formData.registration_form_config)
+    );
+    if (categoriesError) {
+      toast.error(categoriesError);
+      return;
+    }
+
     const formConfig = {
       whatsapp_group_link: whatsappGroupLink || null,
+      categories: normalizeRegistrationCategories(
+        registrationCategories(formData.registration_form_config)
+      ),
       fields: (formData.registration_form_config?.fields || []).map((f) => ({
         id: f.id,
         key: f.key,
@@ -1041,6 +1212,274 @@ const EventSettings = () => {
                   Confirmed players will see a Join WhatsApp group button on their registration
                   ticket. Leave empty for no group link.
                 </p>
+              </div>
+
+              {/* Registration categories (issue #57) — the base fee applies
+                  unless a category changes it. Players pick a category on
+                  the public form; the price is computed server-side. */}
+              <div className="space-y-3 border-t border-white/10 pt-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Registration categories (optional)</p>
+                  <p className="text-xs text-white/45">
+                    Create your own categories — each with its own price rule. Without any
+                    categories, everyone pays the base registration fee.
+                  </p>
+                </div>
+                {categories.map((cat) => (
+                  <div
+                    key={cat.id}
+                    className="space-y-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3"
+                  >
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-white/70">Category name</Label>
+                        <Input
+                          value={cat.name || ''}
+                          onChange={(e) => updateCategory(cat.id, { name: e.target.value })}
+                          placeholder="e.g. Gentswear retailer"
+                          className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-white/70">Pricing rule</Label>
+                        <Select
+                          value={cat.pricing_type || 'flat'}
+                          onValueChange={(value) =>
+                            updateCategory(cat.id, { pricing_type: value })
+                          }
+                        >
+                          <SelectTrigger className="border-white/20 bg-white/5 text-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PRICING_TYPES.map((t) => (
+                              <SelectItem key={t.value} value={t.value}>
+                                {t.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {cat.pricing_type === 'flat' && (
+                        <div className="space-y-1.5">
+                          <Label className="text-white/70">Price (₹)</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={cat.flat_price ?? ''}
+                            onChange={(e) => updateCategory(cat.id, { flat_price: e.target.value })}
+                            placeholder="e.g. 7500"
+                            className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                          />
+                        </div>
+                      )}
+                      {cat.pricing_type === 'member_tiered' && (
+                        <>
+                          <div className="space-y-1.5">
+                            <Label className="text-white/70">Member price (₹)</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={cat.member_price ?? ''}
+                              onChange={(e) => updateCategory(cat.id, { member_price: e.target.value })}
+                              placeholder="e.g. 5000"
+                              className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-white/70">Non-member price (₹)</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={cat.non_member_price ?? ''}
+                              onChange={(e) => updateCategory(cat.id, { non_member_price: e.target.value })}
+                              placeholder="e.g. 6000"
+                              className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                            />
+                          </div>
+                        </>
+                      )}
+                      {cat.pricing_type === 'voucher' && (
+                        <p className="text-xs text-white/45 sm:col-span-2">
+                          Pays the base fee, minus any voucher they enter — a full voucher
+                          makes it free, no voucher pays the base fee.
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="text-white/50 hover:text-red-300"
+                      onClick={() => removeCategory(cat.id)}
+                    >
+                      <Trash2 className="mr-1.5 h-4 w-4" /> Remove category
+                    </Button>
+                  </div>
+                ))}
+                <div className="space-y-3 rounded-xl border border-dashed border-white/15 p-4">
+                  <p className="text-sm font-medium text-white">Add category</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-white/70">Category name</Label>
+                      <Input
+                        value={categoryDraft.name}
+                        onChange={(e) =>
+                          setCategoryDraft({ ...categoryDraft, name: e.target.value })
+                        }
+                        placeholder="e.g. Textile owner"
+                        className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-white/70">Pricing rule</Label>
+                      <Select
+                        value={categoryDraft.pricing_type}
+                        onValueChange={(value) =>
+                          setCategoryDraft({ ...categoryDraft, pricing_type: value })
+                        }
+                      >
+                        <SelectTrigger className="border-white/20 bg-white/5 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PRICING_TYPES.map((t) => (
+                            <SelectItem key={t.value} value={t.value}>
+                              {t.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {categoryDraft.pricing_type === 'flat' && (
+                      <div className="space-y-1.5">
+                        <Label className="text-white/70">Price (₹)</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={categoryDraft.flat_price}
+                          onChange={(e) =>
+                            setCategoryDraft({ ...categoryDraft, flat_price: e.target.value })
+                          }
+                          placeholder="e.g. 7500"
+                          className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                        />
+                      </div>
+                    )}
+                    {categoryDraft.pricing_type === 'member_tiered' && (
+                      <>
+                        <div className="space-y-1.5">
+                          <Label className="text-white/70">Member price (₹)</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={categoryDraft.member_price}
+                            onChange={(e) =>
+                              setCategoryDraft({ ...categoryDraft, member_price: e.target.value })
+                            }
+                            placeholder="e.g. 5000"
+                            className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-white/70">Non-member price (₹)</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={categoryDraft.non_member_price}
+                            onChange={(e) =>
+                              setCategoryDraft({ ...categoryDraft, non_member_price: e.target.value })
+                            }
+                            placeholder="e.g. 6000"
+                            className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                    onClick={addCategory}
+                  >
+                    <Plus className="mr-1.5 h-4 w-4" /> Add category
+                  </Button>
+                </div>
+              </div>
+
+              {/* Organizer member list (issue #57) — one list per organizer,
+                  shared across all their events. Members pay the member
+                  price; anyone who registered in one of your events before
+                  also counts as a member, with no upload needed. */}
+              <div className="space-y-3 border-t border-white/10 pt-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Member list (optional)</p>
+                  <p className="text-xs text-white/45">
+                    Upload an Excel sheet of members (name, phone, plus any other details).
+                    Shared across all your events — uploading replaces your current list.
+                  </p>
+                </div>
+                {membersUnavailable ? (
+                  <p className="text-sm text-white/60">
+                    Member list upload is not available yet — the server does not serve
+                    member endpoints for this event.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-white/80">
+                      {membersInfo
+                        ? `${membersInfo.count} member${membersInfo.count === 1 ? '' : 's'} in your list` +
+                          (membersInfo.updated_at
+                            ? ` · updated ${new Date(membersInfo.updated_at).toLocaleDateString()}`
+                            : '')
+                        : 'Loading member list…'}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-white hover:bg-white/10">
+                        <Upload className="h-4 w-4" />
+                        {membersUploading ? 'Uploading…' : 'Upload Excel (.xlsx)'}
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls"
+                          className="hidden"
+                          disabled={membersUploading}
+                          onChange={(e) => {
+                            uploadMembersFile(e.target.files?.[0]);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                      {membersInfo && membersInfo.count > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-white/50 hover:text-red-300"
+                          onClick={clearMembers}
+                        >
+                          <Trash2 className="mr-1.5 h-4 w-4" /> Clear list
+                        </Button>
+                      )}
+                    </div>
+                    {membersResult && (
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/80">
+                        <p>
+                          Imported {membersResult.imported} member
+                          {membersResult.imported === 1 ? '' : 's'}
+                          {membersResult.skipped > 0 && ` · ${membersResult.skipped} row${membersResult.skipped === 1 ? '' : 's'} skipped`}
+                        </p>
+                        {(membersResult.errors || []).length > 0 && (
+                          <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-amber-200/80">
+                            {membersResult.errors.map((err) => (
+                              <li key={err}>{err}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

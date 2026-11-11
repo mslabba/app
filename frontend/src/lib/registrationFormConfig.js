@@ -252,7 +252,7 @@ export function builtinCatalog() {
 
 /** New auctions / when organizer opens settings for the first time. */
 export function defaultRegistrationFormConfig() {
-  return { fields: builtinCatalog(), whatsapp_group_link: null };
+  return { fields: builtinCatalog(), whatsapp_group_link: null, categories: [] };
 }
 
 /**
@@ -284,7 +284,7 @@ export function legacyRegistrationFormConfig() {
       required: f.key === 'name' || f.key === 'contact_number' || f.key === 'photo_url',
     };
   });
-  return { fields, whatsapp_group_link: null };
+  return { fields, whatsapp_group_link: null, categories: [] };
 }
 
 export function resolveRegistrationFormConfig(eventOrConfig) {
@@ -319,14 +319,99 @@ export function resolveRegistrationFormConfig(eventOrConfig) {
         enabled: f.enabled !== false,
       });
     });
-    // Preserve the organizer's WhatsApp group link (a setting, not a field).
-    return { fields: merged, whatsapp_group_link: cfg.whatsapp_group_link || null };
+    // Preserve the organizer's WhatsApp group link (a setting, not a field),
+    // and their registration categories (same — settings, not fields).
+    return {
+      fields: merged,
+      whatsapp_group_link: cfg.whatsapp_group_link || null,
+      categories: Array.isArray(cfg.categories) ? cfg.categories : [],
+    };
   }
   return legacyRegistrationFormConfig();
 }
 
 export function enabledFields(config) {
   return (config?.fields || []).filter((f) => f.enabled);
+}
+
+/**
+ * Registration categories (issue #57) — organizer-created, each with a
+ * pricing rule. Mirrors validate_registration_categories /
+ * normalize_registration_categories in backend/app/registration_form.py
+ * — keep the two in sync.
+ *
+ * pricing_type: "flat" (one price), "member_tiered" (member price vs
+ * non-member price), "voucher" (base fee, voucher on top).
+ */
+export const PRICING_TYPES = [
+  { value: 'flat', label: 'One fixed price' },
+  { value: 'member_tiered', label: 'Member price / non-member price' },
+  { value: 'voucher', label: 'Base price, voucher decides (e.g. Sponsor)' },
+];
+
+export const MAX_REGISTRATION_CATEGORIES = 20;
+
+const categoryPriceValue = (raw) => {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) return null;
+  return n;
+};
+
+/** Error message for the first invalid category, or '' when valid. */
+export function validateRegistrationCategories(categories) {
+  if (!categories || !categories.length) return '';
+  if (!Array.isArray(categories)) return 'Registration categories must be a list';
+  if (categories.length > MAX_REGISTRATION_CATEGORIES) {
+    return `At most ${MAX_REGISTRATION_CATEGORIES} registration categories`;
+  }
+  const seen = new Set();
+  for (const raw of categories) {
+    const name = String(raw?.name || '').trim();
+    if (!name) return 'Each registration category needs a name';
+    if (seen.has(name.toLowerCase())) {
+      return `Duplicate registration category name: ${name}`;
+    }
+    seen.add(name.toLowerCase());
+    const pricingType = raw?.pricing_type || 'flat';
+    if (!PRICING_TYPES.some((t) => t.value === pricingType)) {
+      return `Unknown pricing rule for category ${name}`;
+    }
+    if (pricingType === 'flat' && categoryPriceValue(raw?.flat_price) === null) {
+      return `Category ${name} needs a price`;
+    }
+    if (pricingType === 'member_tiered') {
+      if (categoryPriceValue(raw?.member_price) === null) {
+        return `Category ${name} needs a member price`;
+      }
+      if (categoryPriceValue(raw?.non_member_price) === null) {
+        return `Category ${name} needs a non-member price`;
+      }
+    }
+  }
+  return '';
+}
+
+/** Clean categories into the shape the server stores. */
+export function normalizeRegistrationCategories(categories) {
+  if (!Array.isArray(categories)) return [];
+  return categories
+    .filter((raw) => raw && String(raw.name || '').trim())
+    .map((raw) => ({
+      id: raw.id || `cat_${Math.random().toString(36).slice(2, 10)}`,
+      name: String(raw.name).trim(),
+      pricing_type: PRICING_TYPES.some((t) => t.value === raw.pricing_type)
+        ? raw.pricing_type
+        : 'flat',
+      member_price: categoryPriceValue(raw.member_price),
+      non_member_price: categoryPriceValue(raw.non_member_price),
+      flat_price: categoryPriceValue(raw.flat_price),
+    }));
+}
+
+/** The stored categories for an event (never null). */
+export function registrationCategories(config) {
+  return Array.isArray(config?.categories) ? config.categories : [];
 }
 
 export function emptyFormValues(config) {
@@ -347,7 +432,7 @@ export function emptyFormValues(config) {
   return values;
 }
 
-export function buildRegistrationPayload(values, config) {
+export function buildRegistrationPayload(values, config, extra = {}) {
   const enabled = enabledFields(config);
   const payload = {
     name: (values.name || '').trim(),
@@ -404,7 +489,9 @@ export function buildRegistrationPayload(values, config) {
     payload.extra_fields = null;
   }
 
-  return payload;
+  // Top-level extras the caller owns (e.g. registration_category) — the
+  // server validates them; they are never form-field values.
+  return { ...payload, ...extra };
 }
 
 /**
