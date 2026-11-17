@@ -20,8 +20,10 @@ from firebase_admin import firestore
 from models import *
 from auth_middleware import verify_token, get_current_user, require_super_admin, require_team_admin, require_event_organizer
 from app.registration_form import (
+    PHOTO_TOO_LARGE_MESSAGE,
     category_price,
     detect_member_header_row,
+    is_document_size_error,
     is_member_phone,
     normalize_phone_number,
     parse_member_rows,
@@ -2706,6 +2708,12 @@ async def register_player_public(event_id: str, player_data: PublicPlayerRegistr
         raise
     except Exception as e:
         logger.error(f"Registration error: {str(e)}")
+        # A document-size failure means the photo (stored as a base64
+        # data URI when the Cloudinary upload failed) pushed the
+        # registration over Firestore's 1 MiB document limit. Surface
+        # the same friendly message instead of the raw backend error.
+        if is_document_size_error(e):
+            raise HTTPException(status_code=400, detail=PHOTO_TOO_LARGE_MESSAGE)
         raise HTTPException(status_code=400, detail=str(e))
 
 # ============= VOUCHER ROUTES (issue #40) =============

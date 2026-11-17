@@ -5,6 +5,29 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+# Maximum size of a registration photo URL. The photo is stored on the
+# registration document, and a base64 fallback (when the Cloudinary
+# upload fails) can be several MB — Firestore rejects documents over
+# 1 MiB, so an oversized photo must be rejected here with a clear
+# message instead of failing at the write with a raw backend error.
+MAX_PHOTO_URL_BYTES = 5 * 1024 * 1024
+
+PHOTO_TOO_LARGE_MESSAGE = (
+    "Your photo is too large. Please upload a smaller image "
+    "(under 5 MB) and try again."
+)
+
+# Substring of the error raised when a document exceeds the per-document
+# size limit (Firestore: "Document exceeds maximum allowed size").
+DOCUMENT_SIZE_ERROR_FRAGMENT = "exceeds maximum allowed size"
+
+
+def is_document_size_error(error: BaseException | str) -> bool:
+    """True when `error` is a document-size failure — e.g. Firestore
+    rejecting a registration whose base64 photo pushed it over the
+    1 MiB document limit."""
+    return DOCUMENT_SIZE_ERROR_FRAGMENT in str(error).lower()
+
 # Field keys stored on the registration root (not extra_fields), mirroring
 # COLUMN_KEYS in frontend/src/lib/registrationFormConfig.js.
 COLUMN_KEYS = {
@@ -602,6 +625,14 @@ def validate_registration_payload(
     cfg = resolve_registration_form_config(event_data)
     payload = payload or {}
     errors: list[str] = []
+    # The photo URL is stored on the registration document regardless of
+    # whether the photo field is enabled in the form config, so this
+    # check is not gated on the field — a base64 fallback can be several
+    # MB and would otherwise only fail at the Firestore write (1 MiB
+    # document limit) with a raw backend error.
+    photo_url = payload.get("photo_url")
+    if isinstance(photo_url, str) and len(photo_url.encode("utf-8")) > MAX_PHOTO_URL_BYTES:
+        errors.append(PHOTO_TOO_LARGE_MESSAGE)
     for field in cfg.get("fields") or []:
         if not isinstance(field, dict) or not field.get("enabled"):
             continue
