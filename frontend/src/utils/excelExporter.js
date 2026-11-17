@@ -42,6 +42,21 @@ const sanitizeRow = (row) => {
 };
 
 /**
+ * Resolve the category name for a row. The server records the resolved
+ * category name in registration_category (member pricing, issue #57) —
+ * the same value the cards display. Older records may hold the id
+ * instead, so resolve it against the list first. Falls back to the
+ * category_id lookup the exporter previously relied on alone.
+ */
+const resolveCategoryName = (item, categories) => {
+  const raw = item.registration_category || item.category_name;
+  if (raw) {
+    return categories.find(c => c.id === raw)?.name || raw;
+  }
+  return categories.find(c => c.id === item.category_id)?.name || '';
+};
+
+/**
  * Map one registration/player to an Excel row. Shared by both exporters so
  * the two paths can't drift.
  */
@@ -59,7 +74,7 @@ const mapRegistrationToExcelRow = (item, index, categories, event, isPlayer = fa
     'Specialty': item.specialty || '',
     'District': item.district || '',
     'Previous Team': item.previous_team || '',
-    'Category': item.category_name || categories.find(c => c.id === item.category_id)?.name || '',
+    'Category': resolveCategoryName(item, categories),
   };
 
   // Add base price for players

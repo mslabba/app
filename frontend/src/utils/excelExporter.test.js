@@ -120,4 +120,34 @@ describe('excel export cell-length guard', () => {
       'No data to export'
     );
   });
+
+  test('a registration_category name is exported even without category_id', () => {
+    // The server records the resolved category name in registration_category
+    // (member pricing) — the same value the cards show. The exporter used
+    // to read only category_name / category_id, so the Category column
+    // came out empty for these registrations.
+    const reg = makeReg({
+      category_id: undefined,
+      registration_category: 'New KGRA Member',
+    });
+
+    expect(() =>
+      exportRegistrationsToExcel([reg], [], categories, event, 'all')
+    ).not.toThrow();
+
+    expect(firstSheetRows()[0]['Category']).toBe('New KGRA Member');
+  });
+
+  test('a registration_category holding an id resolves to the category name', () => {
+    const reg = makeReg({
+      category_id: undefined,
+      registration_category: 'cat1',
+    });
+
+    expect(() =>
+      exportRegistrationsToExcel([reg], [], categories, event, 'all')
+    ).not.toThrow();
+
+    expect(firstSheetRows()[0]['Category']).toBe('Senior');
+  });
 });
