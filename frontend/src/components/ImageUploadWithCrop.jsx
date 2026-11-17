@@ -10,13 +10,26 @@ import { uploadImageToCloudinary } from '@/lib/cloudinary';
 import ReactCrop, { centerCrop, makeAspectCrop, convertToPixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
+// Maximum size of the final image value (Cloudinary URL or base64 data
+// URI). The photo is stored on the registration document and Firestore
+// rejects documents over 1 MiB, so an oversized photo must be rejected
+// here with a clear message instead of failing at submit.
+const PHOTO_TOO_LARGE_MESSAGE = 'Your photo is too large. Please upload a smaller image (under 5 MB) and try again.';
+
+// The cropped image is capped at this dimension on its longest side.
+// A full-resolution crop of a high-res photo can be several MB, and the
+// base64 fallback is ~33% larger still. 1024px is far more than the
+// photo is ever displayed at, and a 1024px JPEG stays well under the
+// 5MB cap (and the 1MB Firestore document limit).
+const MAX_CROP_DIMENSION = 1024;
+
 const ImageUploadWithCrop = ({
   label,
   value,
   onChange,
   placeholder = "Enter image URL or upload file",
   accept = "image/*",
-  maxSize = 5 * 1024 * 1024, // 5MB default
+  maxSize = 5 * 1000 * 1000, // 5MB default (decimal, matches what the OS file picker shows)
   className = "",
   sampleType = null, // e.g., { type: 'events', subtype: 'logos' }
   showSample = true,
@@ -72,9 +85,14 @@ const ImageUploadWithCrop = ({
     const scaleX = image.naturalWidth / image.width;
     const scaleY = image.naturalHeight / image.height;
 
-    // Set canvas size to the cropped area
-    canvas.width = pixelCrop.width * scaleX;
-    canvas.height = pixelCrop.height * scaleY;
+    // Set canvas size to the cropped area, capped at MAX_CROP_DIMENSION
+    // on the longest side — the crop rectangle the user selected is
+    // kept, only the output resolution is capped (see above).
+    const cropWidth = pixelCrop.width * scaleX;
+    const cropHeight = pixelCrop.height * scaleY;
+    const downscale = Math.min(1, MAX_CROP_DIMENSION / Math.max(cropWidth, cropHeight));
+    canvas.width = Math.max(1, Math.round(cropWidth * downscale));
+    canvas.height = Math.max(1, Math.round(cropHeight * downscale));
 
     const ctx = canvas.getContext('2d');
 
@@ -116,6 +134,16 @@ const ImageUploadWithCrop = ({
           return;
         }
 
+        // The cropped image must fit the size cap even before upload —
+        // the base64 fallback is ~33% larger than the blob, so a blob
+        // over the cap would fail at submit. Stay in the crop dialog
+        // so the user can pick a smaller area.
+        if (blob.size > maxSize) {
+          toast.error(PHOTO_TOO_LARGE_MESSAGE);
+          setUploading(false);
+          return;
+        }
+
         // Convert blob to file
         const croppedFile = new File([blob], 'cropped-image.jpg', { type: 'image/jpeg' });
 
@@ -132,10 +160,17 @@ const ImageUploadWithCrop = ({
         } catch (cloudinaryError) {
           console.warn('Cloudinary upload failed, using base64:', cloudinaryError);
 
-          // Fallback to base64
+          // Fallback to base64 — but not when the fallback itself is
+          // over the cap (base64 is ~33% larger than the blob, so a
+          // blob just under the cap can still overflow it). Surface
+          // the proper error instead of setting an oversized value.
           const reader = new FileReader();
           reader.onload = (e) => {
             const dataUrl = e.target.result;
+            if (dataUrl.length > maxSize) {
+              toast.error(PHOTO_TOO_LARGE_MESSAGE);
+              return;
+            }
             setPreview(dataUrl);
             onChange(dataUrl);
             toast.success('📎 Cropped image saved (fallback method)');
@@ -158,9 +193,9 @@ const ImageUploadWithCrop = ({
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validate file size
+    // Validate file size — reject here, before anything reaches Cloudinary.
     if (file.size > maxSize) {
-      toast.error(`File size must be less than ${Math.round(maxSize / (1024 * 1024))}MB`);
+      toast.error(PHOTO_TOO_LARGE_MESSAGE);
       return;
     }
 
@@ -201,10 +236,18 @@ const ImageUploadWithCrop = ({
         toast.warning('Cloudinary unavailable, using fallback method...');
       }
 
-      // Fallback to base64 if Cloudinary fails
+      // Fallback to base64 if Cloudinary fails — but not when the
+      // fallback itself is over the cap (base64 is ~33% larger than
+      // the file, so a file just under the cap can still overflow
+      // it). Surface the proper error instead of setting an
+      // oversized value.
       const reader = new FileReader();
       reader.onload = (e) => {
         const dataUrl = e.target.result;
+        if (dataUrl.length > maxSize) {
+          toast.error(PHOTO_TOO_LARGE_MESSAGE);
+          return;
+        }
         setPreview(dataUrl);
         onChange(dataUrl);
         toast.success('📎 Image uploaded (fallback method)');

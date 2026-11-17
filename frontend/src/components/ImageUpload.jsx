@@ -7,13 +7,19 @@ import { toast } from 'sonner';
 import { getRandomSampleImage } from '@/utils/sampleImages';
 import { uploadImageToCloudinary } from '@/lib/cloudinary';
 
+// Maximum size of the final image value (Cloudinary URL or base64 data
+// URI). The photo is stored on the registration document and Firestore
+// rejects documents over 1 MiB, so an oversized photo must be rejected
+// here with a clear message instead of failing at submit.
+const PHOTO_TOO_LARGE_MESSAGE = 'Your photo is too large. Please upload a smaller image (under 5 MB) and try again.';
+
 const ImageUpload = ({
   label,
   value,
   onChange,
   placeholder = "Enter image URL or upload file",
   accept = "image/*",
-  maxSize = 5 * 1024 * 1024, // 5MB default
+  maxSize = 5 * 1000 * 1000, // 5MB default (decimal, matches what the OS file picker shows)
   className = "",
   labelClassName = "",
   /** dark = readable on glass/dark admin surfaces */
@@ -38,9 +44,9 @@ const ImageUpload = ({
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validate file size
+    // Validate file size — reject here, before anything reaches Cloudinary.
     if (file.size > maxSize) {
-      toast.error(`File size must be less than ${Math.round(maxSize / (1024 * 1024))}MB`);
+      toast.error(PHOTO_TOO_LARGE_MESSAGE);
       return;
     }
 
@@ -69,10 +75,18 @@ const ImageUpload = ({
         toast.warning('Cloudinary unavailable, using fallback method...');
       }
 
-      // Fallback to base64 if Cloudinary fails
+      // Fallback to base64 if Cloudinary fails — but not when the
+      // fallback itself is over the cap (base64 is ~33% larger than
+      // the file, so a file just under the cap can still overflow
+      // it). Surface the proper error instead of setting an
+      // oversized value.
       const reader = new FileReader();
       reader.onload = (e) => {
         const dataUrl = e.target.result;
+        if (dataUrl.length > maxSize) {
+          toast.error(PHOTO_TOO_LARGE_MESSAGE);
+          return;
+        }
         setPreview(dataUrl);
         onChange(dataUrl);
         toast.success('📎 Image uploaded (fallback method)');

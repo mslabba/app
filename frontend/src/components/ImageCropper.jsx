@@ -13,7 +13,7 @@ const ImageCropper = ({
   onChange,
   onImageCropped,
   aspect = 1, // Default to square crop (1:1)
-  maxSize = 5 * 1024 * 1024, // 5MB default
+  maxSize = 5 * 1000 * 1000, // 5MB default (decimal, matches what the OS file picker shows)
   className = ""
 }) => {
   const [showCropDialog, setShowCropDialog] = useState(false);
@@ -46,9 +46,9 @@ const ImageCropper = ({
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validate file size
+    // Validate file size — reject here, before anything reaches Cloudinary.
     if (file.size > maxSize) {
-      toast.error(`File size must be less than ${Math.round(maxSize / (1024 * 1024))}MB`);
+      toast.error('Your photo is too large. Please upload a smaller image (under 5 MB) and try again.');
       return;
     }
 
