@@ -1,6 +1,103 @@
 import { describeExtraFields } from '@/lib/registrationFormConfig';
 import * as XLSX from 'xlsx';
 
+// Excel caps every cell at 32,767 characters — a longer value makes
+// XLSX.writeFile throw ("Text length must not exceed 32767 characters")
+// and the whole export fails. A photo that fell back to a base64 data URI
+// (Cloudinary upload failed) is typically 100KB–several MB, so one such
+// registration breaks the export for every row in the tab.
+const MAX_CELL_LENGTH = 32767;
+const TRUNCATION_MARKER = '… (truncated)';
+const DATA_URI_PHOTO_PLACEHOLDER = 'Photo attached (data URI, not exported)';
+const DATA_URI_ID_PROOF_PLACEHOLDER = 'ID proof attached (data URI, not exported)';
+const DATA_URI_GENERIC_PLACEHOLDER = 'File attached (data URI, not exported)';
+
+/**
+ * Make a value safe for an Excel cell. Base64 data URIs are never written
+ * raw — they are replaced with a short placeholder. Any other string longer
+ * than Excel's per-cell limit is truncated (with a marker) instead of
+ * throwing at write time. Non-strings pass through unchanged.
+ */
+const sanitizeCellValue = (value, dataUriPlaceholder = DATA_URI_GENERIC_PLACEHOLDER) => {
+  if (typeof value !== 'string') return value;
+  if (value.startsWith('data:')) return dataUriPlaceholder;
+  if (value.length > MAX_CELL_LENGTH) {
+    return value.slice(0, MAX_CELL_LENGTH - TRUNCATION_MARKER.length) + TRUNCATION_MARKER;
+  }
+  return value;
+};
+
+/** Sanitize every cell of a row. Photo / ID-proof columns get their own placeholder. */
+const sanitizeRow = (row) => {
+  const sanitized = {};
+  for (const [key, value] of Object.entries(row)) {
+    const placeholder = key === 'Photo URL'
+      ? DATA_URI_PHOTO_PLACEHOLDER
+      : key === 'ID Proof URL'
+        ? DATA_URI_ID_PROOF_PLACEHOLDER
+        : DATA_URI_GENERIC_PLACEHOLDER;
+    sanitized[key] = sanitizeCellValue(value, placeholder);
+  }
+  return sanitized;
+};
+
+/**
+ * Map one registration/player to an Excel row. Shared by both exporters so
+ * the two paths can't drift.
+ */
+const mapRegistrationToExcelRow = (item, index, categories, event, isPlayer = false) => {
+  const row = {
+    'S.No': index + 1,
+    'Name': item.name || '',
+    'Status': item.status === 'pending_approval' ? 'Pending' :
+      item.status === 'player' ? 'Player' :
+        (item.status?.charAt(0).toUpperCase() + item.status?.slice(1)) || '',
+    'Email': item.email || '',
+    'Contact Number': item.contact_number || '',
+    'Age': item.age || '',
+    'Position': item.position || '',
+    'Specialty': item.specialty || '',
+    'District': item.district || '',
+    'Previous Team': item.previous_team || '',
+    'Category': item.category_name || categories.find(c => c.id === item.category_id)?.name || '',
+  };
+
+  // Add base price for players
+  if (isPlayer) {
+    row['Base Price'] = item.base_price || '';
+  }
+
+  // Add stats if available
+  if (item.stats) {
+    row['Matches'] = item.stats.matches || '';
+    row['Runs/Goals'] = item.stats.runs || '';
+    row['Wickets/Assists'] = item.stats.wickets || '';
+  }
+
+  // Add CricHeroes link if available
+  row['CricHeroes Link'] = item.cricheroes_link || '';
+
+  // Add photo URL instead of embedding image
+  row['Photo URL'] = item.photo_url || '';
+
+  // Add ID proof URL instead of embedding document
+  row['ID Proof URL'] = item.identity_proof_url || '';
+
+  // Custom / extra form fields (date of birth, state, organizer-defined, etc.)
+  if (item.extra_fields && typeof item.extra_fields === 'object') {
+    describeExtraFields(event, item.extra_fields).forEach(({ label, value }) => {
+      row[label] = value;
+    });
+  }
+
+  // Add registration date if available
+  if (item.created_at || item.registered_at) {
+    row['Registration Date'] = formatDate(item.created_at || item.registered_at);
+  }
+
+  return sanitizeRow(row);
+};
+
 /**
  * Export registrations/players to Excel file
  * @param {Array} registrations - Array of registration objects
@@ -54,58 +151,9 @@ export const exportRegistrationsToExcel = (registrations, players, categories, e
   const isPlayers = statusFilter === 'players';
 
   // Map data to Excel-friendly format
-  const excelData = filteredData.map((item, index) => {
-    const row = {
-      'S.No': index + 1,
-      'Name': item.name || '',
-      'Status': item.status === 'pending_approval' ? 'Pending' :
-        item.status === 'player' ? 'Player' :
-          (item.status?.charAt(0).toUpperCase() + item.status?.slice(1)) || '',
-      'Email': item.email || '',
-      'Contact Number': item.contact_number || '',
-      'Age': item.age || '',
-      'Position': item.position || '',
-      'Specialty': item.specialty || '',
-      'District': item.district || '',
-      'Previous Team': item.previous_team || '',
-      'Category': item.category_name || '',
-    };
-
-    // Add base price for players
-    if (isPlayers) {
-      row['Base Price'] = item.base_price || '';
-    }
-
-    // Add stats if available
-    if (item.stats) {
-      row['Matches'] = item.stats.matches || '';
-      row['Runs/Goals'] = item.stats.runs || '';
-      row['Wickets/Assists'] = item.stats.wickets || '';
-    }
-
-    // Add CricHeroes link if available
-    row['CricHeroes Link'] = item.cricheroes_link || '';
-
-    // Add photo URL instead of embedding image
-    row['Photo URL'] = item.photo_url || '';
-
-    // Add ID proof URL instead of embedding document
-    row['ID Proof URL'] = item.identity_proof_url || '';
-
-    // Custom / extra form fields (date of birth, state, organizer-defined, etc.)
-    if (item.extra_fields && typeof item.extra_fields === 'object') {
-      describeExtraFields(event, item.extra_fields).forEach(({ label, value }) => {
-        row[label] = value;
-      });
-    }
-
-    // Add registration date if available
-    if (item.created_at || item.registered_at) {
-      row['Registration Date'] = formatDate(item.created_at || item.registered_at);
-    }
-
-    return row;
-  });
+  const excelData = filteredData.map((item, index) =>
+    mapRegistrationToExcelRow(item, index, categories, event, isPlayers)
+  );
 
   // Create workbook and worksheet
   const workbook = XLSX.utils.book_new();
@@ -159,50 +207,9 @@ export const exportRegistrationsToExcel = (registrations, players, categories, e
 export const exportAllToExcel = (registrations, players, categories, event) => {
   const workbook = XLSX.utils.book_new();
 
-  // Helper function to map data
-  const mapToExcelRow = (item, index, isPlayer = false) => {
-    const row = {
-      'S.No': index + 1,
-      'Name': item.name || '',
-      'Status': item.status === 'pending_approval' ? 'Pending' :
-        item.status === 'player' ? 'Player' :
-          (item.status?.charAt(0).toUpperCase() + item.status?.slice(1)) || '',
-      'Email': item.email || '',
-      'Contact Number': item.contact_number || '',
-      'Age': item.age || '',
-      'Position': item.position || '',
-      'Specialty': item.specialty || '',
-      'District': item.district || '',
-      'Previous Team': item.previous_team || '',
-      'Category': categories.find(c => c.id === item.category_id)?.name || '',
-    };
-
-    if (isPlayer) {
-      row['Base Price'] = item.base_price || '';
-    }
-
-    if (item.stats) {
-      row['Matches'] = item.stats.matches || '';
-      row['Runs/Goals'] = item.stats.runs || '';
-      row['Wickets/Assists'] = item.stats.wickets || '';
-    }
-
-    row['CricHeroes Link'] = item.cricheroes_link || '';
-    row['Photo URL'] = item.photo_url || '';
-    row['ID Proof URL'] = item.identity_proof_url || '';
-
-    if (item.extra_fields && typeof item.extra_fields === 'object') {
-      describeExtraFields(event, item.extra_fields).forEach(({ label, value }) => {
-        row[label] = value;
-      });
-    }
-
-    if (item.created_at || item.registered_at) {
-      row['Registration Date'] = formatDate(item.created_at || item.registered_at);
-    }
-
-    return row;
-  };
+  // Helper function to map data (shared with exportRegistrationsToExcel)
+  const mapToExcelRow = (item, index, isPlayer = false) =>
+    mapRegistrationToExcelRow(item, index, categories, event, isPlayer);
 
   // Column widths
   const columnWidths = [
@@ -256,6 +263,13 @@ export const exportAllToExcel = (registrations, players, categories, event) => {
     const allSheet = XLSX.utils.json_to_sheet(allData);
     allSheet['!cols'] = columnWidths;
     XLSX.utils.book_append_sheet(workbook, allSheet, 'All Registrations');
+  }
+
+  // Nothing to write — an empty workbook makes XLSX.writeFile throw
+  // ("Workbook is empty"), so fail with the same message as the
+  // single-sheet export instead.
+  if (workbook.SheetNames.length === 0) {
+    throw new Error('No data to export');
   }
 
   // Generate filename
