@@ -46,9 +46,9 @@ const ImageCropper = ({
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validate file size
+    // Validate file size — reject here, before anything reaches Cloudinary.
     if (file.size > maxSize) {
-      toast.error(`File size must be less than ${Math.round(maxSize / (1024 * 1024))}MB`);
+      toast.error('Your photo is too large. Please upload a smaller image (under 5 MB) and try again.');
       return;
     }
 

@@ -734,7 +734,7 @@ const PublicPlayerRegistration = () => {
             onChange={(url) => handleChange(field.key, url)}
             placeholder={field.placeholder || 'Upload file (image or PDF) or enter URL'}
             accept="image/*,application/pdf"
-            maxSize={10 * 1024 * 1024}
+            maxSize={5 * 1024 * 1024}
           />
         </div>
       );

@@ -7,13 +7,16 @@ import { toast } from 'sonner';
 import { storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
+// Shown when a selected file is over the 5MB cap, before any upload starts.
+const FILE_TOO_LARGE_MESSAGE = 'Your file is too large. Please upload a smaller file (under 5 MB) and try again.';
+
 const DocumentUpload = ({
   label,
   value,
   onChange,
   placeholder = "Enter document URL or upload file",
   accept = "image/*,application/pdf",
-  maxSize = 10 * 1024 * 1024, // 10MB default for documents
+  maxSize = 5 * 1024 * 1024, // 5MB default for documents
   className = "",
   required = false
 }) => {
@@ -62,9 +65,9 @@ const DocumentUpload = ({
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validate file size
+    // Validate file size — reject here, before anything is uploaded.
     if (file.size > maxSize) {
-      toast.error(`File size must be less than ${Math.round(maxSize / (1024 * 1024))}MB`);
+      toast.error(FILE_TOO_LARGE_MESSAGE);
       return;
     }
 
