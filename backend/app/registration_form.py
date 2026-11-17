@@ -10,7 +10,9 @@ from typing import Any
 # upload fails) can be several MB — Firestore rejects documents over
 # 1 MiB, so an oversized photo must be rejected here with a clear
 # message instead of failing at the write with a raw backend error.
-MAX_PHOTO_URL_BYTES = 5 * 1024 * 1024
+# 5MB cap on the photo_url string, decimal (5,000,000 bytes) to match the
+# frontend cap and what the OS file picker reports as "5 MB".
+MAX_PHOTO_URL_BYTES = 5 * 1000 * 1000
 
 PHOTO_TOO_LARGE_MESSAGE = (
     "Your photo is too large. Please upload a smaller image "

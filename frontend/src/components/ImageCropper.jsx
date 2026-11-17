@@ -13,7 +13,7 @@ const ImageCropper = ({
   onChange,
   onImageCropped,
   aspect = 1, // Default to square crop (1:1)
-  maxSize = 5 * 1024 * 1024, // 5MB default
+  maxSize = 5 * 1000 * 1000, // 5MB default (decimal, matches what the OS file picker shows)
   className = ""
 }) => {
   const [showCropDialog, setShowCropDialog] = useState(false);

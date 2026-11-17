@@ -16,7 +16,7 @@ const DocumentUpload = ({
   onChange,
   placeholder = "Enter document URL or upload file",
   accept = "image/*,application/pdf",
-  maxSize = 5 * 1024 * 1024, // 5MB default for documents
+  maxSize = 5 * 1000 * 1000, // 5MB default for documents (decimal, matches what the OS file picker shows)
   className = "",
   required = false
 }) => {

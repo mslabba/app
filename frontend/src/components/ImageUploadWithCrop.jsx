@@ -29,7 +29,7 @@ const ImageUploadWithCrop = ({
   onChange,
   placeholder = "Enter image URL or upload file",
   accept = "image/*",
-  maxSize = 5 * 1024 * 1024, // 5MB default
+  maxSize = 5 * 1000 * 1000, // 5MB default (decimal, matches what the OS file picker shows)
   className = "",
   sampleType = null, // e.g., { type: 'events', subtype: 'logos' }
   showSample = true,
