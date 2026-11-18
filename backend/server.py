@@ -3022,6 +3022,58 @@ async def upload_organizer_members(
     }
 
 
+@api_router.post("/auctions/{event_id}/members")
+async def add_organizer_member(
+    event_id: str,
+    payload: dict,
+    current_user: dict = Depends(require_event_access),
+):
+    """Add one member (name + phone) to the organizer's list.
+
+    Appends — unlike the Excel upload, which replaces the whole list.
+    A phone already on the list just gets its name updated, so the
+    same number can never appear twice. The phone is normalised to
+    10 digits, the same as the Excel import and member matching.
+    """
+    event_data = _load_event_dict(event_id)
+    if not event_data:
+        raise HTTPException(status_code=404, detail="Event not found")
+    organizer_id = _organizer_id_for_event(event_data)
+    if not organizer_id:
+        raise HTTPException(status_code=400, detail="Event has no organizer")
+    name = (payload.get("name") or "").strip()
+    phone = normalize_phone_number(payload.get("phone"))
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not phone:
+        raise HTTPException(
+            status_code=400, detail="Enter a valid 10-digit mobile number")
+    if _USE_POSTGRES and _pg:
+        return _pg.add_organizer_member(organizer_id, phone, name)
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    now = datetime.now(timezone.utc).isoformat()
+    ref = db.collection('organizer_members').document(f"{organizer_id}_{phone}")
+    existing = ref.get()
+    added = not existing.exists
+    doc = {
+        'id': ref.id,
+        'organizer_id': organizer_id,
+        'phone_normalized': phone,
+        'name': name,
+        'updated_at': now,
+    }
+    if not existing.exists:
+        doc['details'] = None
+        doc['created_at'] = now
+    ref.set(doc, merge=True)
+    docs = list(db.collection('organizer_members').where(
+        'organizer_id', '==', organizer_id).stream())
+    updated = max(
+        (d.to_dict().get('updated_at') or '' for d in docs), default='')
+    return {"added": added, "count": len(docs), "updated_at": updated or None}
+
+
 @api_router.get("/auctions/{event_id}/members")
 async def get_organizer_members(
     event_id: str, current_user: dict = Depends(require_event_access)
