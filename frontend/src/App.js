@@ -35,6 +35,7 @@ import Settings from '@/pages/Settings';
 import PaymentGatewaySettings from '@/pages/PaymentGatewaySettings';
 import EventPayments from '@/pages/EventPayments';
 import EventSettings from '@/pages/EventSettings';
+import EventMembers from '@/pages/EventMembers';
 import OrganizerOnboarding from '@/pages/OrganizerOnboarding';
 import LivePlayerBoard from '@/pages/LivePlayerBoard';
 import LiveTeamsBoard from '@/pages/LiveTeamsBoard';
@@ -299,6 +300,14 @@ function App() {
               element={
                 <ProtectedRoute requireSuperAdmin>
                   <EventSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/events/:eventId/members"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <EventMembers />
                 </ProtectedRoute>
               }
             />

@@ -297,3 +297,43 @@ def test_add_organizer_member_appends_and_dedupes_by_phone():
         assert member["name"] == "Rashid L"
     finally:
         pg_repo.clear_organizer_members(org)
+
+
+def test_manage_organizer_members_list_update_delete():
+    """Manage page: list is name-ordered, edit updates name/phone, a
+    phone change to an existing number is refused, delete removes one."""
+    from app.data import pg_repo
+
+    org = f"test-org-{uuid.uuid4().hex[:8]}"
+    try:
+        pg_repo.add_organizer_member(org, "9876543210", "Zahir Khan")
+        pg_repo.add_organizer_member(org, "9876543211", "Anas P")
+
+        listed = pg_repo.list_organizer_members(org)
+        assert [m["name"] for m in listed] == ["Anas P", "Zahir Khan"]
+
+        # Edit the name only.
+        updated = pg_repo.update_organizer_member(
+            org, "9876543210", "Zahir K", "9876543210")
+        assert updated["name"] == "Zahir K"
+        assert updated["phone_normalized"] == "9876543210"
+
+        # Move to a new number — created_at is kept (same person).
+        created = pg_repo.get_organizer_member(org, "9876543210")["created_at"]
+        moved = pg_repo.update_organizer_member(
+            org, "9876543210", "Zahir K", "9876543212")
+        assert moved["phone_normalized"] == "9876543212"
+        assert moved["created_at"] == created
+        assert pg_repo.get_organizer_member(org, "9876543210") is None
+
+        # Moving onto a number already on the list is refused.
+        with pytest.raises(ValueError):
+            pg_repo.update_organizer_member(
+                org, "9876543212", "Zahir K", "9876543211")
+
+        # Delete one — the other stays.
+        result = pg_repo.delete_organizer_member(org, "9876543212")
+        assert result["count"] == 1
+        assert pg_repo.get_organizer_member(org, "9876543211")["name"] == "Anas P"
+    finally:
+        pg_repo.clear_organizer_members(org)
