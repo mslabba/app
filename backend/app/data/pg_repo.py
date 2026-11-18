@@ -1489,6 +1489,75 @@ def clear_organizer_members(organizer_id: str) -> dict[str, Any]:
         return {"count": 0, "updated_at": None}
 
 
+def list_organizer_members(organizer_id: str) -> list[dict[str, Any]]:
+    """All of an organizer's members, name first, for the manage page."""
+    with _session() as s:
+        rows = s.scalars(
+            select(OrganizerMember)
+            .where(OrganizerMember.organizer_id == organizer_id)
+            .order_by(
+                OrganizerMember.name.asc(),
+                OrganizerMember.phone_normalized.asc(),
+            )
+        ).all()
+        return [organizer_member_to_dict(m) for m in rows]
+
+
+def update_organizer_member(
+    organizer_id: str,
+    old_phone_normalized: str,
+    name: str,
+    new_phone_normalized: str,
+) -> Optional[dict[str, Any]]:
+    """Edit one member's name and/or phone.
+
+    The phone is the member's identity, so changing it moves the row
+    to the new number (created_at is kept — same person). Returns the
+    updated member, or None when the old phone is not on the list.
+    Raises ValueError when the new phone is already on the list under
+    a different member.
+    """
+    now = datetime.now(timezone.utc)
+    with _session() as s:
+        member = s.scalars(
+            select(OrganizerMember).where(
+                OrganizerMember.organizer_id == organizer_id,
+                OrganizerMember.phone_normalized == old_phone_normalized,
+            )
+        ).first()
+        if not member:
+            return None
+        if new_phone_normalized != old_phone_normalized:
+            clash = s.scalars(
+                select(OrganizerMember).where(
+                    OrganizerMember.organizer_id == organizer_id,
+                    OrganizerMember.phone_normalized == new_phone_normalized,
+                )
+            ).first()
+            if clash:
+                raise ValueError("That mobile number is already in your list")
+            member.phone_normalized = new_phone_normalized
+        member.name = name or member.name
+        member.updated_at = now
+        s.commit()
+        return organizer_member_to_dict(member)
+
+
+def delete_organizer_member(
+    organizer_id: str, phone_normalized: str
+) -> dict[str, Any]:
+    """Remove one member from the list. Returns the new count."""
+    with _session() as s:
+        s.execute(
+            OrganizerMember.__table__.delete().where(
+                OrganizerMember.organizer_id == organizer_id,
+                OrganizerMember.phone_normalized == phone_normalized,
+            )
+        )
+        s.commit()
+        return count_organizer_members(organizer_id)
+
+
 def add_organizer_member(
     organizer_id: str, phone_normalized: str, name: str
 ) -> dict[str, Any]:

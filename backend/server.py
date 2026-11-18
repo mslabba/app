@@ -3095,6 +3095,137 @@ async def get_organizer_members(
     return {"count": len(docs), "updated_at": updated or None}
 
 
+@api_router.get("/auctions/{event_id}/members/list")
+async def list_organizer_members(
+    event_id: str, current_user: dict = Depends(require_event_access)
+):
+    """Full member list for the manage page (name + phone + dates)."""
+    event_data = _load_event_dict(event_id)
+    if not event_data:
+        raise HTTPException(status_code=404, detail="Event not found")
+    organizer_id = _organizer_id_for_event(event_data)
+    if not organizer_id:
+        raise HTTPException(status_code=400, detail="Event has no organizer")
+    if _USE_POSTGRES and _pg:
+        members = _pg.list_organizer_members(organizer_id)
+        return {
+            "members": members,
+            "count": len(members),
+            "updated_at": max(
+                (m.get("updated_at") or "" for m in members), default="") or None,
+        }
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    members = []
+    for d in db.collection('organizer_members').where(
+            'organizer_id', '==', organizer_id).stream():
+        m = d.to_dict()
+        m['id'] = d.id
+        members.append(m)
+    members.sort(key=lambda m: (
+        (m.get('name') or '').lower(), m.get('phone_normalized') or ''))
+    return {
+        "members": members,
+        "count": len(members),
+        "updated_at": max(
+            (m.get('updated_at') or '' for m in members), default='') or None,
+    }
+
+
+@api_router.patch("/auctions/{event_id}/members/{phone}")
+async def update_organizer_member(
+    event_id: str,
+    phone: str,
+    payload: dict,
+    current_user: dict = Depends(require_event_access),
+):
+    """Edit one member's name and/or mobile number."""
+    event_data = _load_event_dict(event_id)
+    if not event_data:
+        raise HTTPException(status_code=404, detail="Event not found")
+    organizer_id = _organizer_id_for_event(event_data)
+    if not organizer_id:
+        raise HTTPException(status_code=400, detail="Event has no organizer")
+    old_phone = normalize_phone_number(phone)
+    if not old_phone:
+        raise HTTPException(status_code=404, detail="Member not found")
+    name = (payload.get("name") or "").strip()
+    new_phone = normalize_phone_number(payload.get("phone")) or old_phone
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not new_phone:
+        raise HTTPException(
+            status_code=400, detail="Enter a valid 10-digit mobile number")
+    if _USE_POSTGRES and _pg:
+        try:
+            updated = _pg.update_organizer_member(
+                organizer_id, old_phone, name, new_phone)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        if not updated:
+            raise HTTPException(status_code=404, detail="Member not found")
+        return updated
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    old_ref = db.collection('organizer_members').document(
+        f"{organizer_id}_{old_phone}")
+    existing = old_ref.get()
+    if not existing.exists:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if new_phone != old_phone:
+        clash = db.collection('organizer_members').document(
+            f"{organizer_id}_{new_phone}").get()
+        if clash.exists:
+            raise HTTPException(
+                status_code=400,
+                detail="That mobile number is already in your list")
+    now = datetime.now(timezone.utc).isoformat()
+    data = existing.to_dict()
+    data['name'] = name
+    data['phone_normalized'] = new_phone
+    data['updated_at'] = now
+    if new_phone != old_phone:
+        # The doc id embeds the phone, so a number change moves the record.
+        new_ref = db.collection('organizer_members').document(
+            f"{organizer_id}_{new_phone}")
+        data['id'] = new_ref.id
+        new_ref.set(data)
+        old_ref.delete()
+    else:
+        old_ref.set(data, merge=True)
+    return data
+
+
+@api_router.delete("/auctions/{event_id}/members/{phone}")
+async def delete_organizer_member(
+    event_id: str,
+    phone: str,
+    current_user: dict = Depends(require_event_access),
+):
+    """Remove one member from the organizer's list."""
+    event_data = _load_event_dict(event_id)
+    if not event_data:
+        raise HTTPException(status_code=404, detail="Event not found")
+    organizer_id = _organizer_id_for_event(event_data)
+    if not organizer_id:
+        raise HTTPException(status_code=400, detail="Event has no organizer")
+    phone_normalized = normalize_phone_number(phone)
+    if not phone_normalized:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if _USE_POSTGRES and _pg:
+        return _pg.delete_organizer_member(organizer_id, phone_normalized)
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not available")
+    ref = db.collection('organizer_members').document(
+        f"{organizer_id}_{phone_normalized}")
+    ref.delete()
+    docs = list(db.collection('organizer_members').where(
+        'organizer_id', '==', organizer_id).stream())
+    updated = max(
+        (d.to_dict().get('updated_at') or '' for d in docs), default='')
+    return {"count": len(docs), "updated_at": updated or None}
+
+
 @api_router.delete("/auctions/{event_id}/members")
 async def delete_organizer_members(
     event_id: str, current_user: dict = Depends(require_event_access)

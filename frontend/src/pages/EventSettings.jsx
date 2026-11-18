@@ -1459,14 +1459,24 @@ const EventSettings = () => {
                   </p>
                 ) : (
                   <>
-                    <p className="text-sm text-white/80">
-                      {membersInfo
-                        ? `${membersInfo.count} member${membersInfo.count === 1 ? '' : 's'} in your list` +
-                          (membersInfo.updated_at
-                            ? ` · updated ${new Date(membersInfo.updated_at).toLocaleDateString()}`
-                            : '')
-                        : 'Loading member list…'}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <p className="text-sm text-white/80">
+                        {membersInfo
+                          ? `${membersInfo.count} member${membersInfo.count === 1 ? '' : 's'} in your list` +
+                            (membersInfo.updated_at
+                              ? ` · updated ${new Date(membersInfo.updated_at).toLocaleDateString()}`
+                              : '')
+                          : 'Loading member list…'}
+                      </p>
+                      {membersInfo && (
+                        <Link
+                          to={`/admin/events/${eventId}/members`}
+                          className="text-sm font-medium text-red-300 hover:text-red-200"
+                        >
+                          Manage →
+                        </Link>
+                      )}
+                    </div>
                     <div className="flex flex-wrap items-center gap-3">
                       <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-white hover:bg-white/10">
                         <Upload className="h-4 w-4" />
