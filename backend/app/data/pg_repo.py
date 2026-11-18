@@ -1489,6 +1489,47 @@ def clear_organizer_members(organizer_id: str) -> dict[str, Any]:
         return {"count": 0, "updated_at": None}
 
 
+def add_organizer_member(
+    organizer_id: str, phone_normalized: str, name: str
+) -> dict[str, Any]:
+    """Add one member (name + phone) to an organizer's list.
+
+    Unlike replace_organizer_members (Excel upload), this APPENDS — it
+    never touches the other members. A phone already on the list just
+    gets its name updated, so the same number can never appear twice
+    (the unique constraint on (organizer_id, phone_normalized) backs
+    this up). Returns whether it was a new member plus the new count.
+    """
+    now = datetime.now(timezone.utc)
+    with _session() as s:
+        existing = s.scalars(
+            select(OrganizerMember).where(
+                OrganizerMember.organizer_id == organizer_id,
+                OrganizerMember.phone_normalized == phone_normalized,
+            )
+        ).first()
+        if existing:
+            existing.name = name or existing.name
+            existing.updated_at = now
+            added = False
+        else:
+            s.add(
+                OrganizerMember(
+                    id=str(uuid.uuid4()),
+                    organizer_id=organizer_id,
+                    phone_normalized=phone_normalized,
+                    name=name or None,
+                    details=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            added = True
+        s.commit()
+        result = count_organizer_members(organizer_id)
+        return {"added": added, **result}
+
+
 def has_prior_registration(organizer_id: str, phone_normalized: str) -> bool:
     """True when this phone has a prior non-rejected registration in any
     of the organizer's events — the "existing player" member source.

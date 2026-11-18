@@ -271,3 +271,29 @@ def test_registration_flow(auction_fixture):
     player = pg_repo.get_player(result["player_id"])
     assert player["name"] == "Applicant"
     assert player["base_price"] == 12000
+
+
+def test_add_organizer_member_appends_and_dedupes_by_phone():
+    """Add-one-member appends without touching the rest of the list, and
+    a phone already on the list only gets its name updated (count
+    unchanged)."""
+    from app.data import pg_repo
+
+    org = f"test-org-{uuid.uuid4().hex[:8]}"
+    try:
+        first = pg_repo.add_organizer_member(org, "9876543210", "Rashid Lalu")
+        assert first["added"] is True
+        assert first["count"] == 1
+
+        second = pg_repo.add_organizer_member(org, "9876543211", "Shanid K")
+        assert second["added"] is True
+        assert second["count"] == 2
+
+        # Same phone again — name updated, count unchanged.
+        dup = pg_repo.add_organizer_member(org, "9876543210", "Rashid L")
+        assert dup["added"] is False
+        assert dup["count"] == 2
+        member = pg_repo.get_organizer_member(org, "9876543210")
+        assert member["name"] == "Rashid L"
+    finally:
+        pg_repo.clear_organizer_members(org)

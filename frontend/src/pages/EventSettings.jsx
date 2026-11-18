@@ -232,6 +232,9 @@ const EventSettings = () => {
   const [membersUnavailable, setMembersUnavailable] = useState(false);
   const [membersUploading, setMembersUploading] = useState(false);
   const [membersResult, setMembersResult] = useState(null);
+  const [memberName, setMemberName] = useState('');
+  const [memberPhone, setMemberPhone] = useState('');
+  const [addingMember, setAddingMember] = useState(false);
 
   useEffect(() => {
     if (!eventId || !token) return;
@@ -485,6 +488,35 @@ const EventSettings = () => {
       toast.success('Member list cleared');
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to clear member list');
+    }
+  };
+
+  const addMember = async (e) => {
+    e.preventDefault();
+    if (!memberName.trim() || !memberPhone.trim()) {
+      toast.error('Enter the member name and mobile number');
+      return;
+    }
+    setAddingMember(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/auctions/${eventId}/members`,
+        { name: memberName.trim(), phone: memberPhone.trim() },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setMembersInfo({ count: data.count ?? 0, updated_at: data.updated_at || null });
+      const addedName = memberName.trim();
+      setMemberName('');
+      setMemberPhone('');
+      toast.success(
+        data.added
+          ? `${addedName} added to your member list`
+          : `${addedName} is already in your list — name updated`
+      );
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to add member');
+    } finally {
+      setAddingMember(false);
     }
   };
 
@@ -1462,6 +1494,40 @@ const EventSettings = () => {
                         </Button>
                       )}
                     </div>
+                    {/* Add one member by hand — name + mobile only. Appends
+                        to the list (unlike the Excel upload, which replaces
+                        it); the count above goes up by one. */}
+                    <form onSubmit={addMember} className="flex flex-wrap items-end gap-3">
+                      <div className="min-w-[170px] flex-1 space-y-1.5">
+                        <Label className="text-white/70">Name</Label>
+                        <Input
+                          value={memberName}
+                          onChange={(e) => setMemberName(e.target.value)}
+                          placeholder="e.g. Rashid Lalu"
+                          disabled={addingMember}
+                          className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                        />
+                      </div>
+                      <div className="min-w-[170px] flex-1 space-y-1.5">
+                        <Label className="text-white/70">Mobile number</Label>
+                        <Input
+                          value={memberPhone}
+                          onChange={(e) => setMemberPhone(e.target.value)}
+                          placeholder="e.g. 9876543210"
+                          inputMode="tel"
+                          disabled={addingMember}
+                          className="border-white/20 bg-white/5 text-white placeholder:text-white/35"
+                        />
+                      </div>
+                      <Button
+                        type="submit"
+                        disabled={addingMember}
+                        className="bg-red-600 text-white hover:bg-red-500"
+                      >
+                        <Plus className="mr-1.5 h-4 w-4" />
+                        {addingMember ? 'Adding…' : 'Add member'}
+                      </Button>
+                    </form>
                     {membersResult && (
                       <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/80">
                         <p>
