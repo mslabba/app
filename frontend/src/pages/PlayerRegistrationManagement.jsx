@@ -119,6 +119,35 @@ const PlayerRegistrationManagement = () => {
     }
   };
 
+  // Upload photos that are still stored as base64 data URIs to Cloudinary and
+  // replace them with the Cloudinary URL, so the Excel export shows a real,
+  // clickable photo URL instead of 'Photo attached (data URI, not exported)'.
+  // Safe to re-run: photos that already have a URL are skipped.
+  const handleMigratePhotos = async () => {
+    if (!window.confirm('Upload photos stored as data to Cloudinary and replace them with real URLs? This may take a while for large lists — you can re-run it if it times out.')) return;
+    try {
+      setLoading(true);
+      toast.info('Uploading photos to Cloudinary...');
+      const res = await axios.post(`${API}/auctions/${eventId}/registrations/migrate-photos`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const { migrated_photos = 0, migrated_id_proofs = 0, failed = 0, skipped = 0 } = res.data || {};
+      if (failed > 0) {
+        toast.warning(`${migrated_photos} photos and ${migrated_id_proofs} ID proofs uploaded, ${failed} failed. Re-run to retry the failed ones.`);
+      } else if (migrated_photos === 0 && migrated_id_proofs === 0) {
+        toast.info('No photos stored as data — nothing to upload. The export already shows real URLs.');
+      } else {
+        toast.success(`Uploaded ${migrated_photos} photos and ${migrated_id_proofs} ID proofs to Cloudinary. Re-export Excel to see the URLs.`);
+      }
+      await fetchData();
+    } catch (error) {
+      console.error('Failed to migrate photos:', error);
+      toast.error(error.response?.data?.detail || error.message || 'Failed to upload photos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleExportPDF = async (statusFilter) => {
     try {
       toast.info('Generating PDF...');
@@ -519,6 +548,16 @@ const PlayerRegistrationManagement = () => {
             >
               <FileSpreadsheet className="w-4 h-4 mr-2" />
               Export Excel
+            </Button>
+            <Button
+              variant="outline"
+              className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+              onClick={handleMigratePhotos}
+              disabled={registrations.length === 0 || loading}
+              title="Upload photos stored as data to Cloudinary so the Excel export shows real photo URLs"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Upload Photos to Cloudinary
             </Button>
             <Button
               variant="outline"
