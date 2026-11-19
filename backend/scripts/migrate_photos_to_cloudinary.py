@@ -19,6 +19,8 @@ Safety (no image is replaced, no mismatch):
   or changing anything.
 - Scope it: --event-id migrates a single event first, so you can verify the
   result on a small set before running it for everything.
+- One first: --limit 1 migrates a single photo, so you can confirm it
+  worked (re-export and check that one row) before doing the rest.
 
 Collections migrated: player_registrations and players (approved players
 carry the same photo_url copied from their registration).
@@ -27,6 +29,7 @@ Usage (from backend/ with the venv active):
   export PYTHONPATH=.
   python scripts/migrate_photos_to_cloudinary.py --dry-run
   python scripts/migrate_photos_to_cloudinary.py --dry-run --event-id 5dc941da-347a-4471-80a6-25af5dbe4360
+  python scripts/migrate_photos_to_cloudinary.py --event-id 5dc941da-347a-4471-80a6-25af5dbe4360 --limit 1 --yes
   python scripts/migrate_photos_to_cloudinary.py --event-id 5dc941da-347a-4471-80a6-25af5dbe4360 --yes
   python scripts/migrate_photos_to_cloudinary.py --yes
 
@@ -106,17 +109,32 @@ def upload_data_uri_to_cloudinary(data_uri: str, folder: str) -> str | None:
         return None
 
 
-def migrate_collection(db, collection: str, event_id: str | None, dry_run: bool) -> dict:
-    """Migrate data-URI photos in one collection. Returns counts."""
+def migrate_collection(db, collection: str, event_id: str | None, dry_run: bool,
+                       limit: int | None = None) -> dict:
+    """Migrate data-URI photos in one collection. Returns counts.
+
+    `limit` caps how many items (photos + ID proofs) are migrated in this
+    call — pass the remaining budget when limiting across collections.
+    Only successful migrations count toward the limit; a failed upload does
+    not consume it, so a retry picks up where it left off.
+    """
     counts = {"migrated_photos": 0, "migrated_id_proofs": 0, "failed": 0, "skipped": 0, "errors": []}
+
+    def migrated_so_far() -> int:
+        return counts["migrated_photos"] + counts["migrated_id_proofs"]
+
     query = db.collection(collection)
     if event_id:
         query = query.where("event_id", "==", event_id)
     for doc in query.stream():
+        if limit is not None and migrated_so_far() >= limit:
+            break
         data = doc.to_dict() or {}
         name = data.get("name") or doc.id
         updates: dict[str, str] = {}
         for field, folder in FIELDS:
+            if limit is not None and migrated_so_far() >= limit:
+                break
             value = data.get(field) or ""
             if isinstance(value, str) and value.startswith("data:"):
                 if dry_run:
@@ -148,6 +166,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true", help="List what would be migrated; upload and change nothing.")
     parser.add_argument("--event-id", default=None, help="Migrate only this event (player_registrations and players with this event_id).")
+    parser.add_argument("--limit", type=int, default=None, help="Migrate at most this many photos / ID proofs, then stop. Use 1 to try a single photo first and verify it before running the rest.")
     parser.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
     args = parser.parse_args()
 
@@ -165,8 +184,14 @@ def main() -> int:
             return 1
 
     total = {"migrated_photos": 0, "migrated_id_proofs": 0, "failed": 0, "skipped": 0, "errors": []}
+    remaining = args.limit
     for collection in COLLECTIONS:
-        counts = migrate_collection(db, collection, args.event_id, args.dry_run)
+        if remaining is not None and remaining <= 0:
+            break
+        counts = migrate_collection(db, collection, args.event_id, args.dry_run, limit=remaining)
+        migrated_here = counts["migrated_photos"] + counts["migrated_id_proofs"]
+        if remaining is not None:
+            remaining -= migrated_here
         for key in ("migrated_photos", "migrated_id_proofs", "failed", "skipped"):
             total[key] += counts[key]
         total["errors"].extend(counts["errors"])
