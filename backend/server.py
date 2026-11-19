@@ -439,7 +439,56 @@ def upload_google_drive_image_to_cloudinary(google_drive_url: str) -> Optional[s
     except Exception as e:
         logger.error(f"Error uploading to Cloudinary: {str(e)}")
         return None
-        
+
+
+def upload_data_uri_to_cloudinary(data_uri: str, folder: str = 'auction_players') -> Optional[str]:
+    """
+    Upload a base64 data URI image (e.g. 'data:image/jpeg;base64,...') to
+    Cloudinary using unsigned uploads. Returns the Cloudinary secure URL,
+    or None if the data URI is invalid or the upload fails.
+
+    Used to rescue photos that were stored as data URIs when the Cloudinary
+    upload failed at registration time — a data URI has no URL, so the Excel
+    export can only show 'Photo attached (data URI, not exported)' for it.
+    Once migrated, the export shows the real Cloudinary URL.
+    """
+    if not data_uri or not isinstance(data_uri, str):
+        return None
+    if not data_uri.startswith('data:'):
+        return None
+    try:
+        # Split 'data:<mime>;base64,<payload>' — the payload is after the first comma.
+        header, _, b64 = data_uri.partition(',')
+        if not b64 or ';base64' not in header:
+            logger.warning('Data URI is not base64-encoded, skipping Cloudinary upload')
+            return None
+        mime = header[5:].split(';')[0].strip().lower() or 'image/jpeg'
+        ext = {'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif'}.get(mime, 'jpg')
+        image_data = base64.b64decode(b64, validate=True)
+    except Exception as e:
+        logger.warning(f'Could not decode data URI for Cloudinary upload: {e}')
+        return None
+    try:
+        upload_url = f'https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload'
+        files = {'file': (f'photo.{ext}', image_data)}
+        data = {
+            'upload_preset': CLOUDINARY_UPLOAD_PRESET,
+            'folder': folder,
+            'resource_type': 'image',
+        }
+        response = requests.post(upload_url, files=files, data=data, timeout=30)
+        if response.status_code == 200:
+            cloudinary_url = response.json().get('secure_url')
+            logger.info(f'Successfully uploaded data URI image to Cloudinary: {cloudinary_url}')
+            return cloudinary_url
+        logger.error(f'Cloudinary upload failed: {response.status_code} - {response.text}')
+        return None
+    except Exception as e:
+        logger.error(f'Error uploading data URI to Cloudinary: {e}')
+        return None
+
+
+
         cloudinary_url = upload_result.get('secure_url')
         logger.info(f"Successfully uploaded image to Cloudinary: {cloudinary_url}")
         return cloudinary_url
@@ -3271,6 +3320,100 @@ async def get_auction_registrations(event_id: str, current_user: dict = Depends(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@api_router.post("/auctions/{event_id}/registrations/migrate-photos")
+async def migrate_registration_photos(
+    event_id: str, current_user: dict = Depends(require_event_organizer)
+):
+    """
+    Upload every registration photo / ID proof that is still a base64 data URI
+    to Cloudinary and replace it with the Cloudinary URL, so the Excel export
+    shows a real, clickable photo URL instead of
+    'Photo attached (data URI, not exported)'. Only the event's organizer can
+    run it. Idempotent: photos that already have a URL are skipped, so
+    re-running after a partial run (e.g. a timeout) resumes safely.
+    """
+    try:
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only migrate photos for events you created",
+            )
+
+        if _USE_POSTGRES and _pg:
+            registrations = _pg.list_registrations(event_id)
+        elif db:
+            registrations = [
+                {**reg.to_dict(), 'id': reg.id}
+                for reg in db.collection('player_registrations').where('event_id', '==', event_id).stream()
+            ]
+        else:
+            return {"migrated_photos": 0, "migrated_id_proofs": 0, "failed": 0, "skipped": 0, "errors": []}
+
+        migrated_photos = 0
+        migrated_id_proofs = 0
+        failed = 0
+        skipped = 0
+        errors = []
+
+        for reg in registrations:
+            reg_id = reg.get('id')
+            if not reg_id:
+                continue
+            updates = {}
+            name = reg.get('name') or reg_id
+
+            photo = reg.get('photo_url') or ''
+            if isinstance(photo, str) and photo.startswith('data:'):
+                url = upload_data_uri_to_cloudinary(photo, folder='auction_players')
+                if url:
+                    updates['photo_url'] = url
+                    migrated_photos += 1
+                else:
+                    failed += 1
+                    errors.append(f'{name}: photo upload failed')
+            elif photo:
+                skipped += 1
+
+            id_proof = reg.get('identity_proof_url') or ''
+            if isinstance(id_proof, str) and id_proof.startswith('data:'):
+                url = upload_data_uri_to_cloudinary(id_proof, folder='auction_id_proofs')
+                if url:
+                    updates['identity_proof_url'] = url
+                    migrated_id_proofs += 1
+                else:
+                    failed += 1
+                    errors.append(f'{name}: ID proof upload failed')
+            elif id_proof:
+                skipped += 1
+
+            if updates:
+                try:
+                    if _USE_POSTGRES and _pg:
+                        _pg.update_registration(reg_id, updates)
+                    elif db:
+                        db.collection('player_registrations').document(reg_id).update(updates)
+                except Exception as e:
+                    failed += 1
+                    errors.append(f'{name}: save failed ({e})')
+                    if 'photo_url' in updates:
+                        migrated_photos -= 1
+                    if 'identity_proof_url' in updates:
+                        migrated_id_proofs -= 1
+
+        return {
+            "migrated_photos": migrated_photos,
+            "migrated_id_proofs": migrated_id_proofs,
+            "failed": failed,
+            "skipped": skipped,
+            "errors": errors,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 @api_router.post("/registrations/{registration_id}/approve")
 async def approve_player_registration(registration_id: str, approval_data: ApprovalRequest, current_user: dict = Depends(require_event_organizer)):
