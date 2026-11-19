@@ -3,10 +3,17 @@ import { auto } from '@cloudinary/url-gen/actions/resize';
 import { autoGravity } from '@cloudinary/url-gen/qualifiers/gravity';
 import { format, quality } from '@cloudinary/url-gen/actions/delivery';
 
+// Cloudinary config — defaults keep uploads working even if the env vars
+// are missing from a build. Without a default, the upload URL becomes
+// .../v1_1/undefined/image/upload, the upload fails, and every photo
+// silently falls back to a base64 data URI (no URL in the Excel export).
+const CLOUDINARY_CLOUD_NAME = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME || 'drok5rkeb';
+const CLOUDINARY_UPLOAD_PRESET = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET || 'auction_uploads';
+
 // Initialize Cloudinary
 const cld = new Cloudinary({
   cloud: {
-    cloudName: process.env.REACT_APP_CLOUDINARY_CLOUD_NAME
+    cloudName: CLOUDINARY_CLOUD_NAME
   }
 });
 
@@ -23,7 +30,7 @@ export const uploadImageToCloudinary = async (file, folder = 'auction') => {
   formData.append('file', file);
 
   // Add upload preset (we'll create this in Cloudinary dashboard)
-  formData.append('upload_preset', process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET || 'auction_uploads');
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
   // Add folder
   formData.append('folder', folder);
@@ -33,7 +40,7 @@ export const uploadImageToCloudinary = async (file, folder = 'auction') => {
 
   try {
     const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/image/upload`,
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
       {
         method: 'POST',
         body: formData,
