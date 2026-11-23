@@ -632,6 +632,12 @@ class EventSchedule(BaseModel):
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
+class InterpretScheduleRequest(BaseModel):
+    text: str
+
+class InterpretScheduleResponse(BaseModel):
+    conditions: ScheduleConditions
+
 # Analytics Models
 class TeamAnalytics(BaseModel):
     team_id: str

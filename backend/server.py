@@ -74,6 +74,11 @@ except Exception as _cfg_err:
 # unavailable (Firestore-only mode).
 from app.schedule import generate_schedule as _generate_schedule
 from app.schedule import validate_schedule as _validate_schedule
+# AI interpretation of free-text conditions (Groq). The module reads
+# GROQ_API_KEY from the environment itself; without a key the interpret
+# endpoint fails gracefully and the manual form keeps working.
+from app.schedule_ai import AINotConfiguredError as _AINotConfiguredError
+from app.schedule_ai import interpret_conditions as _interpret_conditions
 
 logger.info(f"DATA_BACKEND={'postgres' if _USE_POSTGRES else 'firestore'}")
 
@@ -5936,6 +5941,33 @@ async def generate_event_schedule(event_id: str, conditions: ScheduleConditions,
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         return GeneratedSchedule(**schedule)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/events/{event_id}/schedule/interpret", response_model=InterpretScheduleResponse)
+async def interpret_event_schedule(event_id: str, payload: InterpretScheduleRequest, current_user: dict = Depends(require_event_organizer)):
+    """Interpret a free-text tournament description into schedule conditions.
+
+    AI only — it returns the conditions for the organiser to review and
+    correct in the form. It does not generate or save a schedule; the
+    deterministic generate endpoint does that, and validates the
+    schedule against the conditions.
+    """
+    try:
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only interpret a schedule for events you created",
+            )
+        try:
+            conditions = _interpret_conditions(payload.text)
+        except _AINotConfiguredError as e:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return InterpretScheduleResponse(conditions=ScheduleConditions(**conditions))
     except HTTPException:
         raise
     except Exception as e:

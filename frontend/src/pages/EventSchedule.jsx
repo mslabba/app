@@ -56,6 +56,8 @@ export default function EventSchedule() {
   const [days, setDays] = useState(4);
   const [preview, setPreview] = useState(null);
   const [saved, setSaved] = useState(null);
+  const [description, setDescription] = useState('');
+  const [interpreting, setInterpreting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -120,6 +122,30 @@ export default function EventSchedule() {
     start_date: startDate || null,
     days: days === '' || days === null ? null : Number(days),
   });
+
+  const handleInterpret = async () => {
+    if (!description.trim()) {
+      toast.error('Describe the tournament first');
+      return;
+    }
+    setInterpreting(true);
+    try {
+      const { data } = await axios.post(
+        `${API}/events/${eventId}/schedule/interpret`,
+        { text: description },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      fillFromConditions(data.conditions);
+      toast.success('Conditions filled in — review them, correct anything, then Generate schedule');
+    } catch (err) {
+      // The backend says plainly when AI is not configured (503) or the
+      // description could not be understood (400); the manual form
+      // below stays usable either way.
+      toast.error(err.response?.data?.detail || 'Could not interpret that description');
+    } finally {
+      setInterpreting(false);
+    }
+  };
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -217,6 +243,33 @@ export default function EventSchedule() {
                 <CardTitle className="text-white">Tournament conditions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Describe in words — AI fills in the conditions below */}
+                <div className="space-y-2 rounded-lg border border-white/10 p-3">
+                  <Label className="text-white/70">Describe in words</Label>
+                  <Textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder={'e.g. Two groups, Pro and Legend, 4 teams in each. Round robin in each group, a separate final for each group, 12 overs per match, 4 days, max 4 matches a day. All Pro matches first because we provide their accommodation, so the Pro teams finish and leave and only the Legend teams stay.'}
+                    rows={4}
+                    className="border-white/15 bg-white/5 text-white"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-white/15 bg-white/5 text-white/85 hover:bg-white/10"
+                    onClick={handleInterpret}
+                    disabled={interpreting}
+                  >
+                    <Sparkles className="mr-1 h-4 w-4" />
+                    {interpreting ? 'Interpreting…' : 'Interpret'}
+                  </Button>
+                  <p className="text-xs text-white/50">
+                    The AI fills in the conditions below — review them and correct
+                    anything before generating. If AI is not set up, just fill in
+                    the conditions manually.
+                  </p>
+                </div>
+
                 {groups.map((group, index) => (
                   <div key={index} className="space-y-2 rounded-lg border border-white/10 p-3">
                     <div className="flex items-center gap-2">
