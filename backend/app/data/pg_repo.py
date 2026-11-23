@@ -17,6 +17,7 @@ from app.data.serializers import (
     auction_state_to_dict,
     bid_to_dict,
     category_to_dict,
+    event_schedule_to_dict,
     event_to_dict,
     organizer_member_to_dict,
     payment_to_dict,
@@ -34,6 +35,7 @@ from app.models import (
     Bid,
     Category,
     Event,
+    EventSchedule,
     OrganizerMember,
     PaymentGatewaySettings,
     PaymentOrder,
@@ -1141,6 +1143,53 @@ def delete_sponsor(sponsor_id: str) -> None:
         if not sp:
             raise ValueError("Sponsor not found")
         s.delete(sp)
+        s.commit()
+
+
+def save_event_schedule(
+    event_id: str, conditions: dict[str, Any], schedule: dict[str, Any]
+) -> dict[str, Any]:
+    """Save (upsert) the event's match schedule — one row per event."""
+    now = datetime.now(timezone.utc)
+    with _session() as s:
+        row = s.scalars(
+            select(EventSchedule).where(EventSchedule.event_id == event_id)
+        ).first()
+        if row is None:
+            row = EventSchedule(
+                id=str(uuid.uuid4()),
+                event_id=event_id,
+                conditions=conditions,
+                schedule=schedule,
+                created_at=now,
+                updated_at=now,
+            )
+            s.add(row)
+        else:
+            row.conditions = conditions
+            row.schedule = schedule
+            row.updated_at = now
+        s.commit()
+        s.refresh(row)
+        return event_schedule_to_dict(row)
+
+
+def get_event_schedule(event_id: str) -> Optional[dict[str, Any]]:
+    with _session() as s:
+        row = s.scalars(
+            select(EventSchedule).where(EventSchedule.event_id == event_id)
+        ).first()
+        return event_schedule_to_dict(row) if row else None
+
+
+def delete_event_schedule(event_id: str) -> None:
+    with _session() as s:
+        row = s.scalars(
+            select(EventSchedule).where(EventSchedule.event_id == event_id)
+        ).first()
+        if not row:
+            raise ValueError("Schedule not found")
+        s.delete(row)
         s.commit()
 
 

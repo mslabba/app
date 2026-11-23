@@ -69,6 +69,17 @@ except Exception as _cfg_err:
     _USE_POSTGRES = False
     _pg = None
 
+# Schedule generator is pure (no DB, no config) — import it on its own
+# so the generate endpoint works even when the Postgres config is
+# unavailable (Firestore-only mode).
+from app.schedule import generate_schedule as _generate_schedule
+from app.schedule import validate_schedule as _validate_schedule
+# AI interpretation of free-text conditions (Groq). The module reads
+# GROQ_API_KEY from the environment itself; without a key the interpret
+# endpoint fails gracefully and the manual form keeps working.
+from app.schedule_ai import AINotConfiguredError as _AINotConfiguredError
+from app.schedule_ai import interpret_conditions as _interpret_conditions
+
 logger.info(f"DATA_BACKEND={'postgres' if _USE_POSTGRES else 'firestore'}")
 
 # Cloudinary configuration (using unsigned uploads, no API secret needed)
@@ -5903,6 +5914,165 @@ async def delete_sponsor(sponsor_id: str, current_user: dict = Depends(require_e
         db.collection('sponsors').document(sponsor_id).delete()
         
         return {"message": "Sponsor deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# --- Match schedule generator (issue #77) ---
+# Deterministic generator in app.schedule: the organiser enters the
+# tournament conditions and gets a day-by-day fixture list. No LLM —
+# the ticket permits AI but does not require it, and a deterministic
+# generator satisfies the acceptance criteria without LLM cost,
+# latency or hallucination risk. The generated schedule is validated
+# against the conditions before it is returned or saved.
+
+@api_router.post("/events/{event_id}/schedule/generate", response_model=GeneratedSchedule)
+async def generate_event_schedule(event_id: str, conditions: ScheduleConditions, current_user: dict = Depends(require_event_organizer)):
+    """Generate a match schedule from tournament conditions — preview only, not saved"""
+    try:
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only generate a schedule for events you created",
+            )
+        try:
+            schedule = _generate_schedule(conditions.model_dump())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return GeneratedSchedule(**schedule)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/events/{event_id}/schedule/interpret", response_model=InterpretScheduleResponse)
+async def interpret_event_schedule(event_id: str, payload: InterpretScheduleRequest, current_user: dict = Depends(require_event_organizer)):
+    """Interpret a free-text tournament description into schedule conditions.
+
+    AI only — it returns the conditions for the organiser to review and
+    correct in the form. It does not generate or save a schedule; the
+    deterministic generate endpoint does that, and validates the
+    schedule against the conditions.
+    """
+    try:
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only interpret a schedule for events you created",
+            )
+        try:
+            conditions = _interpret_conditions(payload.text)
+        except _AINotConfiguredError as e:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return InterpretScheduleResponse(conditions=ScheduleConditions(**conditions))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/events/{event_id}/schedule", response_model=EventSchedule)
+async def save_event_schedule(event_id: str, payload: SaveScheduleRequest, current_user: dict = Depends(require_event_organizer)):
+    """Save a generated schedule for an event — replaces any saved schedule.
+
+    The submitted schedule is re-validated against its conditions
+    before saving, so a schedule that was not generated from these
+    conditions is refused.
+    """
+    try:
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only save a schedule for events you created",
+            )
+        conditions = payload.conditions.model_dump()
+        schedule = payload.schedule.model_dump()
+        try:
+            _validate_schedule(conditions, schedule)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Schedule does not match its conditions: {e}")
+        now = datetime.now(timezone.utc).isoformat()
+
+        if _USE_POSTGRES and _pg:
+            return EventSchedule(**_pg.save_event_schedule(event_id, conditions, schedule))
+
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not available")
+
+        doc = {
+            'id': str(uuid.uuid4()),
+            'event_id': event_id,
+            'conditions': conditions,
+            'schedule': schedule,
+            'created_at': now,
+            'updated_at': now,
+        }
+        existing = db.collection('event_schedules').document(event_id).get()
+        if existing.exists:
+            doc['id'] = existing.to_dict().get('id', doc['id'])
+            doc['created_at'] = existing.to_dict().get('created_at', now)
+        db.collection('event_schedules').document(event_id).set(doc)
+        return EventSchedule(**doc)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.get("/events/{event_id}/schedule", response_model=EventSchedule)
+async def get_event_schedule(event_id: str, current_user: dict = Depends(require_event_organizer)):
+    """Get the saved schedule for an event"""
+    try:
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view the schedule for events you created",
+            )
+
+        if _USE_POSTGRES and _pg:
+            data = _pg.get_event_schedule(event_id)
+            if not data:
+                raise HTTPException(status_code=404, detail="Schedule not found")
+            return EventSchedule(**data)
+
+        if not db:
+            raise HTTPException(status_code=503, detail="Database not available")
+
+        doc = db.collection('event_schedules').document(event_id).get()
+        if not doc.exists:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+        return EventSchedule(**doc.to_dict())
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/events/{event_id}/schedule")
+async def delete_event_schedule(event_id: str, current_user: dict = Depends(require_event_organizer)):
+    """Delete the saved schedule for an event"""
+    try:
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only delete the schedule for events you created",
+            )
+
+        if _USE_POSTGRES and _pg:
+            try:
+                _pg.delete_event_schedule(event_id)
+            except ValueError:
+                raise HTTPException(status_code=404, detail="Schedule not found")
+            return {"message": "Schedule deleted successfully"}
+
+        if not db:
+            raise HTTPException(status_code=500, detail="Database not available")
+
+        doc = db.collection('event_schedules').document(event_id).get()
+        if not doc.exists:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+        db.collection('event_schedules').document(event_id).delete()
+        return {"message": "Schedule deleted successfully"}
     except HTTPException:
         raise
     except Exception as e:

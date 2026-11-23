@@ -587,6 +587,57 @@ class Sponsor(BaseModel):
     event_id: str
     created_at: Optional[str] = None
 
+# Match schedule generator models (issue #77)
+class ScheduleGroup(BaseModel):
+    name: str
+    teams: List[str]
+
+class ScheduleConditions(BaseModel):
+    groups: List[ScheduleGroup]
+    finals_per_group: bool = True
+    matches_per_day: int = 4
+    overs: int = 12
+    start_date: Optional[str] = None  # YYYY-MM-DD
+    days: Optional[int] = None
+
+class ScheduleMatch(BaseModel):
+    match: int
+    day: int
+    date: Optional[str] = None
+    group: str
+    team_a: str
+    team_b: str
+    stage: str  # group | final
+    overs: int
+
+class ScheduleDay(BaseModel):
+    day: int
+    date: Optional[str] = None
+    matches: List[ScheduleMatch]
+
+class GeneratedSchedule(BaseModel):
+    conditions: ScheduleConditions
+    days: List[ScheduleDay]
+    total_matches: int
+
+class SaveScheduleRequest(BaseModel):
+    conditions: ScheduleConditions
+    schedule: GeneratedSchedule
+
+class EventSchedule(BaseModel):
+    id: str
+    event_id: str
+    conditions: ScheduleConditions
+    schedule: GeneratedSchedule
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+class InterpretScheduleRequest(BaseModel):
+    text: str
+
+class InterpretScheduleResponse(BaseModel):
+    conditions: ScheduleConditions
+
 # Analytics Models
 class TeamAnalytics(BaseModel):
     team_id: str

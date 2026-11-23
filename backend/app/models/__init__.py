@@ -6,6 +6,7 @@ from app.models.entities import (
     Bid,
     Category,
     Event,
+    EventSchedule,
     MigrationQuarantine,
     MigrationRun,
     OrganizerMember,
@@ -40,4 +41,5 @@ __all__ = [
     "MigrationQuarantine",
     "Voucher",
     "OrganizerMember",
+    "EventSchedule",
 ]

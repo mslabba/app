@@ -148,6 +148,11 @@ const AppShell = ({ children, title, subtitle, hideSidebar = false }) => {
               icon: DollarSign,
             },
             {
+              to: `/admin/events/${activeEventId}/schedule`,
+              label: 'Schedule',
+              icon: Calendar,
+            },
+            {
               to: `/admin/analytics/${activeEventId}`,
               label: 'Analytics',
               icon: BarChart3,
