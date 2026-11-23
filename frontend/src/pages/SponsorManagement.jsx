@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Plus,
   Edit,
@@ -28,6 +27,13 @@ import { useAuth } from '@/lib/AuthContext';
 import ImageUpload from '@/components/ImageUpload';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// The four preset tiers. The tier field is a combobox (free text +
+// datalist suggestions), not a fixed dropdown, so the organiser can add
+// a custom tier (e.g. 'Title sponsor', 'Jersey sponsor') or rename one.
+// The backend stores tier as a plain string, so no backend change is
+// needed — a custom tier just needs to fit the 64-char column.
+const STANDARD_TIERS = ['platinum', 'gold', 'silver', 'bronze'];
 
 const SponsorManagement = () => {
   const { eventId } = useParams();
@@ -101,8 +107,14 @@ const SponsorManagement = () => {
     try {
       setLoading(true);
 
+      // Normalise the tier to the stored convention (lowercase, trimmed)
+      // so 'Title Sponsor' and 'title sponsor' do not become two tiers.
+      // An empty tier falls back to 'bronze'.
+      const tier = (formData.tier || '').trim().toLowerCase() || 'bronze';
+
       const sponsorData = {
         ...formData,
+        tier,
         event_id: eventId,
         sponsorship_amount: formData.sponsorship_amount ? parseInt(formData.sponsorship_amount) : null
       };
@@ -187,6 +199,18 @@ const SponsorManagement = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Tier suggestions for the combobox: the four presets first, then any
+  // custom tier already used by a sponsor in this event, so a custom tier
+  // is reusable for the next sponsor instead of being retyped.
+  const tierSuggestions = [
+    ...STANDARD_TIERS,
+    ...[...new Set(
+      sponsors
+        .map((s) => (s.tier || '').trim().toLowerCase())
+        .filter((t) => t && !STANDARD_TIERS.includes(t))
+    )].sort(),
+  ];
+
   const getTierColor = (tier) => {
     switch (tier) {
       case 'platinum': return 'bg-gray-300 text-gray-800';
@@ -250,17 +274,21 @@ const SponsorManagement = () => {
                     </div>
                     <div>
                       <Label htmlFor="tier">Sponsorship Tier</Label>
-                      <Select value={formData.tier} onValueChange={(value) => handleChange('tier', value)}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select tier" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="platinum">💎 Platinum</SelectItem>
-                          <SelectItem value="gold">🥇 Gold</SelectItem>
-                          <SelectItem value="silver">🥈 Silver</SelectItem>
-                          <SelectItem value="bronze">🥉 Bronze</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <Input
+                        id="tier"
+                        list="sponsor-tiers"
+                        value={formData.tier}
+                        onChange={(e) => handleChange('tier', e.target.value)}
+                        placeholder="e.g. Title sponsor, Jersey sponsor"
+                      />
+                      <datalist id="sponsor-tiers">
+                        {tierSuggestions.map((t) => (
+                          <option key={t} value={t} />
+                        ))}
+                      </datalist>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Pick a tier above, or type a new one — it will be available for the next sponsor too.
+                      </p>
                     </div>
                   </div>
                   <div>
