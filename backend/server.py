@@ -78,6 +78,8 @@ from app.schedule import validate_schedule as _validate_schedule
 # GROQ_API_KEY from the environment itself; without a key the interpret
 # endpoint fails gracefully and the manual form keeps working.
 from app.schedule_ai import AINotConfiguredError as _AINotConfiguredError
+from app.schedule_ai import AIGenerationError as _AIGenerationError
+from app.schedule_ai import generate_schedule_ai_or_fallback as _generate_schedule_ai_or_fallback
 from app.schedule_ai import interpret_conditions as _interpret_conditions
 
 logger.info(f"DATA_BACKEND={'postgres' if _USE_POSTGRES else 'firestore'}")
@@ -5968,6 +5970,43 @@ async def interpret_event_schedule(event_id: str, payload: InterpretScheduleRequ
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         return InterpretScheduleResponse(conditions=ScheduleConditions(**conditions))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.post("/events/{event_id}/schedule/generate-ai", response_model=GenerateAIScheduleResponse)
+async def generate_ai_event_schedule(event_id: str, conditions: ScheduleConditions, current_user: dict = Depends(require_event_organizer)):
+    """Generate a match schedule with the AI (issue #79) — preview only, not saved.
+
+    Hybrid: Groq generates the full schedule (with start/end times
+    and rest-aware ordering), the deterministic validator checks it,
+    a failed validation is fed back to the AI once, and if it still
+    fails the deterministic generator is the fallback — an invalid
+    schedule is never returned. The response names which generator
+    produced the schedule. Without GROQ_API_KEY this fails with a
+    clear "not configured" error; the deterministic generate endpoint
+    keeps working with no key.
+    """
+    try:
+        if not await check_event_ownership(event_id, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only generate a schedule for events you created",
+            )
+        try:
+            schedule, generated_by, notes = _generate_schedule_ai_or_fallback(
+                conditions.model_dump()
+            )
+        except _AINotConfiguredError as e:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return GenerateAIScheduleResponse(
+            schedule=GeneratedSchedule(**schedule),
+            generated_by=generated_by,
+            notes=notes,
+        )
     except HTTPException:
         raise
     except Exception as e:

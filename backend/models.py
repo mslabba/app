@@ -599,6 +599,14 @@ class ScheduleConditions(BaseModel):
     overs: int = 12
     start_date: Optional[str] = None  # YYYY-MM-DD
     days: Optional[int] = None
+    # Soft preferences (issue #79) — the AI generation works with
+    # these; the deterministic generator ignores them except for
+    # assigning times when a day window is given.
+    day_start_time: Optional[str] = None  # HH:MM
+    day_end_time: Optional[str] = None  # HH:MM
+    match_duration_minutes: int = 90
+    min_rest_minutes: int = 30
+    avoid_consecutive_matches: bool = True
 
 class ScheduleMatch(BaseModel):
     match: int
@@ -609,6 +617,8 @@ class ScheduleMatch(BaseModel):
     team_b: str
     stage: str  # group | final
     overs: int
+    start_time: Optional[str] = None  # HH:MM, when a day window is given
+    end_time: Optional[str] = None  # HH:MM
 
 class ScheduleDay(BaseModel):
     day: int
@@ -637,6 +647,11 @@ class InterpretScheduleRequest(BaseModel):
 
 class InterpretScheduleResponse(BaseModel):
     conditions: ScheduleConditions
+
+class GenerateAIScheduleResponse(BaseModel):
+    schedule: GeneratedSchedule
+    generated_by: str  # "ai" | "deterministic-fallback"
+    notes: List[str] = []
 
 # Analytics Models
 class TeamAnalytics(BaseModel):
