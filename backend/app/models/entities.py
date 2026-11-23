@@ -244,6 +244,29 @@ class Sponsor(Base):
     raw_firestore: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
 
+class EventSchedule(Base):
+    """One saved match schedule per event (issue #77).
+
+    The organiser generates a schedule from tournament conditions and
+    saves it. `conditions` is the input that produced it, `schedule`
+    is the generated day-by-day fixture list. Regenerating replaces
+    the row (event_id is unique). The schedule is validated against
+    its conditions by app.schedule before it is saved.
+    """
+
+    __tablename__ = "event_schedules"
+    __table_args__ = (Index("ix_event_schedules_event_id", "event_id"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("events.id"), nullable=False, unique=True
+    )
+    conditions: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    schedule: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+
 class AuctionState(Base):
     __tablename__ = "auction_states"
 

@@ -171,6 +171,17 @@ def sponsor_to_dict(s) -> dict[str, Any]:
     }
 
 
+def event_schedule_to_dict(s) -> dict[str, Any]:
+    return {
+        "id": s.id,
+        "event_id": s.event_id,
+        "conditions": s.conditions or {},
+        "schedule": s.schedule or {},
+        "created_at": _iso(s.created_at),
+        "updated_at": _iso(s.updated_at),
+    }
+
+
 def auction_state_to_dict(a) -> dict[str, Any]:
     meta = a.raw_firestore if isinstance(a.raw_firestore, dict) else {}
     last_result = meta.get("last_result") if isinstance(meta, dict) else None

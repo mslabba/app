@@ -484,6 +484,11 @@ const EventManagement = () => {
                       Sponsors
                     </Button>
                   </Link>
+                  <Link to={`/admin/events/${event.id}/schedule`} className="col-span-2">
+                    <Button size="sm" variant="outline" className="w-full border-white/15 bg-white/5 text-white/85 hover:bg-white/10">
+                      Schedule
+                    </Button>
+                  </Link>
                 </div>
 
                 <Button
