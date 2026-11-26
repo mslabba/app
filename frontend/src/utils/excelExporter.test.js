@@ -151,3 +151,47 @@ describe('excel export cell-length guard', () => {
     expect(firstSheetRows()[0]['Category']).toBe('Senior');
   });
 });
+
+describe('Amount Paid column (issue #81)', () => {
+  beforeEach(() => {
+    XLSX.writeFile.mockClear();
+  });
+
+  test('a registration with amount_paid: 2500 shows 2500 as a number', () => {
+    const reg = makeReg({ amount_paid: 2500 });
+
+    exportRegistrationsToExcel([reg], [], categories, event, 'all');
+
+    const value = firstSheetRows()[0]['Amount Paid'];
+    expect(value).toBe(2500);
+    expect(typeof value).toBe('number');
+  });
+
+  test('a free registration with amount_paid: 0 shows 0, not blank', () => {
+    const reg = makeReg({ amount_paid: 0 });
+
+    exportRegistrationsToExcel([reg], [], categories, event, 'all');
+
+    expect(firstSheetRows()[0]['Amount Paid']).toBe(0);
+  });
+
+  test('a registration without amount_paid shows blank', () => {
+    const reg = makeReg();
+    delete reg.amount_paid;
+
+    exportRegistrationsToExcel([reg], [], categories, event, 'all');
+
+    // A blank cell reads back as '' or is absent from the row object —
+    // either way the column shows nothing for this row.
+    expect(firstSheetRows()[0]['Amount Paid'] ?? '').toBe('');
+  });
+
+  test('exportAllToExcel also carries the Amount Paid column', () => {
+    const reg = makeReg({ amount_paid: 2500 });
+
+    exportAllToExcel([reg], [], categories, event);
+
+    expect(firstSheetRows()[0]['Amount Paid']).toBe(2500);
+  });
+});
+

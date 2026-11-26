@@ -75,6 +75,10 @@ const mapRegistrationToExcelRow = (item, index, categories, event, isPlayer = fa
     'District': item.district || '',
     'Previous Team': item.previous_team || '',
     'Category': resolveCategoryName(item, categories),
+    // Amount paid in rupees, as a raw number so the column is summable
+    // in Excel. Nullish check, not `|| ''` — 0 is a real value (a free
+    // or voucher-covered registration) and must show as 0, not blank.
+    'Amount Paid': item.amount_paid ?? '',
   };
 
   // Add base price for players
@@ -187,6 +191,7 @@ export const exportRegistrationsToExcel = (registrations, players, categories, e
     { wch: 15 },  // District
     { wch: 20 },  // Previous Team
     { wch: 15 },  // Category
+    { wch: 12 },  // Amount Paid
     { wch: 12 },  // Base Price (if players)
     { wch: 10 },  // Matches
     { wch: 12 },  // Runs/Goals
@@ -230,7 +235,7 @@ export const exportAllToExcel = (registrations, players, categories, event) => {
   const columnWidths = [
     { wch: 5 }, { wch: 25 }, { wch: 12 }, { wch: 30 }, { wch: 15 },
     { wch: 8 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 20 },
-    { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 15 },
+    { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 15 },
     { wch: 40 }, { wch: 50 }, { wch: 50 }, { wch: 20 }
   ];
 
