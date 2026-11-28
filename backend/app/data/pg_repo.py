@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.data.serializers import (
@@ -368,6 +368,64 @@ def list_players_for_event(
                     q2 = q2.where(Player.status.in_(statuses))
                 players = list(s.scalars(q2).all())
         return [player_to_dict(p) for p in players]
+
+
+def get_player_counts(event_id: str) -> dict[str, int]:
+    """Cheap counts for the display-board serial number (issue #83).
+
+    Returns {"total": <players in event>, "completed": <sold + unsold>}.
+    The player on the block is serial completed + 1; a just-sold/unsold
+    player is serial completed. Mirrors list_players_for_event: players
+    linked only via category count when none carries the event_id.
+    """
+    with _session() as s:
+        total = (
+            s.scalar(
+                select(func.count())
+                .select_from(Player)
+                .where(Player.event_id == event_id)
+            )
+            or 0
+        )
+        completed = (
+            s.scalar(
+                select(func.count())
+                .select_from(Player)
+                .where(
+                    Player.event_id == event_id,
+                    Player.status.in_(["sold", "unsold"]),
+                )
+            )
+            or 0
+        )
+        if total == 0:
+            cat_ids = [
+                c.id
+                for c in s.scalars(
+                    select(Category).where(Category.event_id == event_id)
+                ).all()
+            ]
+            if cat_ids:
+                total = (
+                    s.scalar(
+                        select(func.count())
+                        .select_from(Player)
+                        .where(Player.category_id.in_(cat_ids))
+                    )
+                    or 0
+                )
+                completed = (
+                    s.scalar(
+                        select(func.count())
+                        .select_from(Player)
+                        .where(
+                            Player.category_id.in_(cat_ids),
+                            Player.status.in_(["sold", "unsold"]),
+                        )
+                    )
+                    or 0
+                )
+        return {"total": int(total), "completed": int(completed)}
 
 
 def get_player(player_id: str) -> Optional[dict[str, Any]]:

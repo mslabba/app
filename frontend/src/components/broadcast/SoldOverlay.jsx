@@ -14,6 +14,8 @@ export default function SoldOverlay({
   teamName,
   price,
   photoUrl,
+  playerNumber,
+  totalPlayers,
   className,
   onDismiss,
 }) {
@@ -239,6 +241,16 @@ export default function SoldOverlay({
             style={{ animationDelay: '0.22s' }}
           >
             {playerName}
+          </p>
+        )}
+
+        {playerNumber != null && (
+          <p
+            className="sold-fade-up text-sm font-semibold tracking-wide text-white/60 sm:text-base"
+            style={{ animationDelay: '0.28s' }}
+          >
+            Player {playerNumber}
+            {totalPlayers != null ? ` of ${totalPlayers}` : ''}
           </p>
         )}
 
