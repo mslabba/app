@@ -423,3 +423,18 @@ main button:hover, main a.card-hover:hover {
 .block-fade-up {
   animation: block-fade-up 0.5s ease-out both;
 }
+
+/* Light bid-change glow for the display board (issue #83) — a soft amber
+   ring that expands and fades once when the current bid moves. */
+@keyframes block-bid-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 16px rgba(251, 191, 36, 0);
+  }
+}
+
+.block-bid-glow {
+  animation: block-bid-glow 0.6s ease-out both;
+}

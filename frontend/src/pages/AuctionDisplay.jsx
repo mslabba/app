@@ -39,6 +39,8 @@ const AuctionDisplay = () => {
   const [soldFlash, setSoldFlash] = useState(null);
   const prevPlayerRef = useRef(null);
   const prevBidRef = useRef(null);
+  const [bidPulse, setBidPulse] = useState(false);
+  const prevBidAmountRef = useRef(null);
 
   useEffect(() => {
     if (!eventId) return undefined;
@@ -85,6 +87,8 @@ const AuctionDisplay = () => {
               price: lr.price,
               photoUrl: convertGoogleDriveUrl(lr.photo_url),
               key: lr.at,
+              playerNumber: state.player_number ?? null,
+              totalPlayers: state.total_players ?? null,
             });
           }
         }
@@ -108,6 +112,8 @@ const AuctionDisplay = () => {
                 price: prevBidRef.current?.bid || p.sold_price,
                 photoUrl: convertGoogleDriveUrl(p.photo_url),
                 key: String(Date.now()),
+                playerNumber: state.player_number ?? null,
+                totalPlayers: state.total_players ?? null,
               });
             }
           }
@@ -208,6 +214,18 @@ const AuctionDisplay = () => {
   const bidAmount =
     auctionState?.current_bid ?? currentPlayer?.base_price ?? currentPlayer?.current_price;
 
+  // Light glow pulse on the bid card when the current bid moves (issue #83)
+  useEffect(() => {
+    if (bidAmount == null) return;
+    if (prevBidAmountRef.current != null && prevBidAmountRef.current !== bidAmount) {
+      setBidPulse(true);
+      const t = setTimeout(() => setBidPulse(false), 600);
+      prevBidAmountRef.current = bidAmount;
+      return () => clearTimeout(t);
+    }
+    prevBidAmountRef.current = bidAmount;
+  }, [bidAmount]);
+
   const latestBids = Array.isArray(auctionState?.bid_history)
     ? [...auctionState.bid_history].slice(-2).reverse()
     : [];
@@ -273,6 +291,8 @@ const AuctionDisplay = () => {
             teamName={soldFlash.teamName}
             price={soldFlash.price}
             photoUrl={soldFlash.photoUrl}
+            playerNumber={soldFlash.playerNumber}
+            totalPlayers={soldFlash.totalPlayers}
           />
         )}
 
@@ -285,9 +305,20 @@ const AuctionDisplay = () => {
                 className="block-enter flex min-h-0 flex-1 flex-col rounded-2xl border border-white/15 bg-black/30 p-3 sm:p-4"
               >
                 <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
-                  <span className="flex items-center text-sm font-semibold text-white/80">
-                    <Trophy className="mr-1.5 h-4 w-4 text-red-300" />
-                    On the block
+                  <span className="flex items-center gap-2">
+                    <span className="flex items-center text-sm font-semibold text-white/80">
+                      <Trophy className="mr-1.5 h-4 w-4 text-red-300" />
+                      On the block
+                    </span>
+                    {auctionState.player_number != null &&
+                      auctionState.total_players != null && (
+                        <span
+                          className="block-fade-up rounded-full bg-white/10 px-3 py-1 text-xs font-bold tracking-wide text-white ring-1 ring-white/20"
+                          style={{ animationDelay: '0.06s' }}
+                        >
+                          Player {auctionState.player_number} of {auctionState.total_players}
+                        </span>
+                      )}
                   </span>
                   {showPaused && (
                     <span className="animate-pulse rounded-xl bg-amber-500/90 px-3 py-1 text-sm font-black uppercase tracking-widest text-black sm:text-base">
@@ -380,7 +411,10 @@ const AuctionDisplay = () => {
                     )}
 
                     <div
-                      className="block-fade-up rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2.5 sm:px-4 sm:py-3"
+                      className={cn(
+                        'block-fade-up rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2.5 sm:px-4 sm:py-3',
+                        bidPulse && 'block-bid-glow'
+                      )}
                       style={{ animationDelay: '0.3s' }}
                     >
                       <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-200/80">

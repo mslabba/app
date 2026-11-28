@@ -2187,6 +2187,8 @@ async def public_live_player_board(token: str):
         from app.public_live import public_player_payload
 
         event_id = _resolve_broadcast_event_id(token)
+        # Display-board serial number (issue #83)
+        serial_counts = _player_serial_counts(event_id)
 
         if _USE_POSTGRES and _pg:
             event = _pg.get_event(event_id)
@@ -2211,6 +2213,8 @@ async def public_live_player_board(token: str):
                 category=category,
                 sold_team=sold_team,
                 sponsors=sponsors,
+                completed_players=serial_counts["completed"],
+                total_players=serial_counts["total"],
             )
 
         if not db:
@@ -2251,6 +2255,8 @@ async def public_live_player_board(token: str):
             category=category,
             sold_team=sold_team,
             sponsors=sponsors,
+            completed_players=serial_counts["completed"],
+            total_players=serial_counts["total"],
         )
     except HTTPException:
         raise
@@ -4488,6 +4494,50 @@ async def fix_current_players(event_id: str, current_user: dict = Depends(requir
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+def _player_serial_counts(event_id: str) -> dict[str, int]:
+    """Total + completed (sold/unsold) player counts for the display-board
+    serial number (issue #83). The player on the block is serial
+    completed + 1; a just-sold/unsold player is serial completed.
+    Returns zeros when the counts cannot be read; callers hide the badge.
+    """
+    if _USE_POSTGRES and _pg:
+        try:
+            return _pg.get_player_counts(event_id)
+        except Exception as e:
+            logger.warning("player serial counts failed (postgres): %s", e)
+            return {"total": 0, "completed": 0}
+    if not db:
+        return {"total": 0, "completed": 0}
+    try:
+        players_ref = db.collection("players")
+        total = players_ref.where("event_id", "==", event_id).count().get()
+        completed = (
+            players_ref.where("event_id", "==", event_id)
+            .where("status", "in", ["sold", "unsold"])
+            .count()
+            .get()
+        )
+        return {
+            "total": int(total[0].value) if total else 0,
+            "completed": int(completed[0].value) if completed else 0,
+        }
+    except Exception as e:
+        logger.warning("player serial counts failed (firestore): %s", e)
+        return {"total": 0, "completed": 0}
+
+
+def _serial_for_player(counts: dict[str, int], player: Optional[dict]) -> Optional[int]:
+    """Serial number for a player from counts, or None when unavailable."""
+    if not counts.get("total"):
+        return None
+    if not player:
+        return None
+    status = (player.get("status") or "").lower()
+    if status in ("sold", "unsold"):
+        return counts["completed"]
+    return counts["completed"] + 1
+
+
 @api_router.get("/auction/state/{event_id}", response_model=AuctionState)
 async def get_auction_state(event_id: str):
     """Get current auction state"""
@@ -4504,6 +4554,17 @@ async def get_auction_state(event_id: str):
             # Ensure id field
             if 'id' not in state:
                 state['id'] = f"auction_{event_id}"
+            counts = _player_serial_counts(event_id)
+            state["total_players"] = counts["total"] or None
+            player = None
+            if state.get("current_player_id"):
+                player = _pg.get_player(state["current_player_id"])
+            serial = _serial_for_player(counts, player)
+            if serial is None and (state.get("last_result") or {}).get("player_id"):
+                # Celebration frame: the just-sold/unsold player is the
+                # completed count itself.
+                serial = counts["completed"] if counts.get("total") else None
+            state["player_number"] = serial
             return AuctionState(**state)
         if not db:
             raise HTTPException(status_code=503, detail="Database not available")
@@ -4519,7 +4580,19 @@ async def get_auction_state(event_id: str):
                 status=AuctionStatus.NOT_STARTED
             )
         
-        return AuctionState(**state_doc.to_dict())
+        state = state_doc.to_dict()
+        counts = _player_serial_counts(event_id)
+        state["total_players"] = counts["total"] or None
+        player = None
+        if state.get("current_player_id"):
+            pdoc = db.collection('players').document(state["current_player_id"]).get()
+            if pdoc.exists:
+                player = {**pdoc.to_dict(), 'id': pdoc.id}
+        serial = _serial_for_player(counts, player)
+        if serial is None and (state.get("last_result") or {}).get("player_id"):
+            serial = counts["completed"] if counts.get("total") else None
+        state["player_number"] = serial
+        return AuctionState(**state)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

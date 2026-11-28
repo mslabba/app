@@ -145,6 +145,8 @@ def public_player_payload(
     category: Optional[dict[str, Any]],
     sold_team: Optional[dict[str, Any]],
     sponsors: list[dict[str, Any]],
+    completed_players: Optional[int] = None,
+    total_players: Optional[int] = None,
 ) -> dict[str, Any]:
     auction = auction or {
         "status": "not_started",
@@ -206,6 +208,21 @@ def public_player_payload(
             "category_name": None,
             "stats": None,
         }
+
+    # Display-board serial number (issue #83): the player on the block is
+    # serial completed + 1; a just-sold/unsold player (synthetic, from
+    # last_result) is serial completed. Omitted when counts are unavailable.
+    if (
+        public_player is not None
+        and completed_players is not None
+        and total_players
+    ):
+        pstatus = (public_player.get("status") or "").lower()
+        if pstatus in ("sold", "unsold"):
+            public_player["player_number"] = completed_players
+        else:
+            public_player["player_number"] = completed_players + 1
+        public_player["total_players"] = total_players
 
     bid_history = auction.get("bid_history") or []
     if not isinstance(bid_history, list):

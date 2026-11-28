@@ -158,13 +158,16 @@ export default function LivePlayerBoard() {
             teamName={player.sold_to_team_name || auction.current_team_name}
             price={player.sold_price ?? bid}
             photoUrl={photoSrc}
+            playerNumber={player.player_number}
+            totalPlayers={player.total_players}
           />
         )}
 
         <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
-          <span
-            className={cn(
-              'rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest sm:text-xs',
+          <span className="flex flex-wrap items-center gap-2">
+            <span
+              className={cn(
+                'rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest sm:text-xs',
               display === 'sold' && 'bg-emerald-500 text-white',
               display === 'unsold' && 'bg-slate-500 text-white',
               display === 'bidding' && 'bg-red-600 text-white',
@@ -172,9 +175,18 @@ export default function LivePlayerBoard() {
               display === 'completed' && 'bg-sky-600 text-white',
               !['sold', 'unsold', 'bidding', 'paused', 'completed'].includes(display) &&
                 'bg-white/10 text-white/80 ring-1 ring-white/15'
+              )}
+            >
+              {stateLabel[display] || status || 'Live'}
+            </span>
+            {player?.player_number != null && player?.total_players != null && (
+              <span
+                className="block-fade-up rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold tracking-wide text-white ring-1 ring-white/20 sm:text-xs"
+                style={{ animationDelay: '0.06s' }}
+              >
+                Player {player.player_number} of {player.total_players}
+              </span>
             )}
-          >
-            {stateLabel[display] || status || 'Live'}
           </span>
           {showTimer && (
             <span

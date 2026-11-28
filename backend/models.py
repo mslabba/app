@@ -555,6 +555,12 @@ class AuctionState(BaseModel):
     # Ephemeral broadcast UI (stored in raw_firestore / firestore doc)
     last_result: Optional[Dict[str, Any]] = None
     spin: Optional[Dict[str, Any]] = None
+    # Display-board serial number (issue #83): the player on the block is
+    # serial completed + 1 (completed = sold + unsold in this event); a
+    # just-sold/unsold player is serial completed. total_players is all
+    # players in the event. None when the counts are unavailable.
+    player_number: Optional[int] = None
+    total_players: Optional[int] = None
     # Admin countdown control: {running, remaining, duration, updated_at}
     timer: Optional[Dict[str, Any]] = None
 
