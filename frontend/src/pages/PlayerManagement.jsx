@@ -428,22 +428,26 @@ const PlayerManagement = () => {
   const generatePlayerCardsPDF = async () => {
     try {
       const playersToExport = filteredPlayers.length > 0 ? filteredPlayers : players;
+      // Serial number = position in the event's full player list (issue #85).
+      // A filtered export must not renumber players.
+      const serialById = new Map(players.map((p, idx) => [p.id, idx + 1]));
       toast.info(`Loading ${playersToExport.length} player images...`);
 
       const doc = new jsPDF('p', 'mm', 'a4');
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
 
-      // Card dimensions - calculate based on actual content height needed
+      // Card dimensions - portrait cards, 4 across x 3 per A4 page (issue #85)
       const cardsPerRow = 4;
-      const rowsPerPage = 6;
-      const cardWidth = (pageWidth - 20) / cardsPerRow; // 20mm for margins
-      const cardHeight = 35; // Fixed height of 35mm
+      const rowsPerPage = 3;
+      const gap = 3;
       const margin = 10;
-      const cardPadding = 2;
+      const cardPadding = 3;
       const headerHeight = 25; // Space for logo and title
       const marginTop = headerHeight + 5; // Top margin after header
-      const gapBetweenRows = 3; // Small gap between rows
+      const cardWidth = (pageWidth - margin * 2 - (cardsPerRow - 1) * gap) / cardsPerRow;
+      const cardHeight =
+        (pageHeight - marginTop - margin - (rowsPerPage - 1) * gap) / rowsPerPage;
 
       // Helper function to load logo
       const loadLogo = () => {
@@ -624,72 +628,112 @@ const PlayerManagement = () => {
           drawHeader(); // Add header to new page
         }
 
-        const x = margin + col * cardWidth;
-        const y = marginTop + row * (cardHeight + gapBetweenRows); // Use fixed height + gap
+        const x = margin + col * (cardWidth + gap);
+        const y = marginTop + row * (cardHeight + gap);
 
-        // Draw card border with rounded corners
-        doc.setDrawColor(150, 150, 150);
-        doc.setLineWidth(0.3);
-        doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2);
-        doc.setLineWidth(0.3);
+        // Card face: dark navy, like the broadcast board (issue #85)
+        doc.setFillColor(13, 27, 62);
+        doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2, 'F');
+        doc.setDrawColor(251, 191, 36);
+        doc.setLineWidth(0.4);
         doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2);
 
-        // Add player photo if available
-        const photoY = y + cardPadding + 1;
-        const photoSize = 18; // 18mm square photo
+        // Serial badge, top-left (two digits, e.g. 08)
+        const serial = String(serialById.get(player.id) ?? i + 1).padStart(2, '0');
+        doc.setFillColor(251, 191, 36);
+        doc.roundedRect(x + 2.5, y + 2.5, 11, 6.5, 1.5, 1.5, 'F');
+        doc.setTextColor(13, 27, 62);
+        doc.setFontSize(8.5);
+        doc.setFont(undefined, 'bold');
+        doc.text(serial, x + 8, y + 7.2, { align: 'center' });
+
+        // Event label, top-right
+        const eventLabel = doc.splitTextToSize(event?.name || 'PowerAuction', 24)[0] || '';
+        doc.setTextColor(180, 190, 210);
+        doc.setFontSize(6);
+        doc.setFont(undefined, 'bold');
+        doc.text(eventLabel, x + cardWidth - 2.5, y + 7, { align: 'right' });
+
+        // Player photo
+        const photoSize = 26;
+        const photoY = y + 11;
         const photoX = x + (cardWidth - photoSize) / 2;
 
         // Use cached image or draw placeholder
         const imageData = imageCache[player.id];
         if (imageData) {
-          // Add subtle shadow effect
-          doc.setFillColor(240, 240, 240);
-          doc.roundedRect(photoX + 0.5, photoY + 0.5, photoSize, photoSize, 1, 1, 'F');
           doc.addImage(imageData, 'JPEG', photoX, photoY, photoSize, photoSize);
         } else {
           // Draw placeholder circle with initial
-          doc.setFillColor(128, 90, 213); // Purple
+          doc.setFillColor(225, 29, 46); // PowerAuction red
           doc.circle(photoX + photoSize / 2, photoY + photoSize / 2, photoSize / 2, 'F');
           doc.setTextColor(255, 255, 255);
-          doc.setFontSize(13);
+          doc.setFontSize(14);
           doc.setFont(undefined, 'bold');
-          doc.text(player.name.charAt(0).toUpperCase(), photoX + photoSize / 2, photoY + photoSize / 2 + 2.8, { align: 'center' });
+          doc.text((player.name || '?').charAt(0).toUpperCase(), photoX + photoSize / 2, photoY + photoSize / 2 + 3, { align: 'center' });
         }
 
         // Player name
-        const textStartY = photoY + photoSize + 4;
-        doc.setTextColor(0, 0, 0);
-        doc.setFontSize(8.5);
+        let currentY = photoY + photoSize + 5;
+        doc.setTextColor(251, 191, 36);
+        doc.setFontSize(9.5);
         doc.setFont(undefined, 'bold');
-        const nameLines = doc.splitTextToSize(player.name, cardWidth - 2 * cardPadding);
-        doc.text(nameLines, x + cardWidth / 2, textStartY, { align: 'center', maxWidth: cardWidth - 2 * cardPadding });
+        const nameLines = doc.splitTextToSize(player.name, cardWidth - 2 * cardPadding).slice(0, 2);
+        doc.text(nameLines, x + cardWidth / 2, currentY, { align: 'center', maxWidth: cardWidth - 2 * cardPadding });
+        currentY += nameLines.length * 3.4;
 
-        // Position
-        let currentY = textStartY + (nameLines.length * 3);
+        // Playing role
         if (player.position) {
-          doc.setFontSize(7);
+          doc.setFontSize(8);
           doc.setFont(undefined, 'normal');
-          doc.setTextColor(80, 80, 80);
+          doc.setTextColor(255, 255, 255);
           doc.text(player.position, x + cardWidth / 2, currentY, { align: 'center', maxWidth: cardWidth - 2 * cardPadding });
-          currentY += 2.5;
+          currentY += 3.2;
         }
 
-        // Specialty
+        // Batting / bowling style
         if (player.specialty) {
           doc.setFontSize(7);
           doc.setFont(undefined, 'italic');
-          doc.setTextColor(100, 100, 100);
-          const specialtyLines = doc.splitTextToSize(player.specialty, cardWidth - 2 * cardPadding);
+          doc.setTextColor(180, 190, 210);
+          const specialtyLines = doc.splitTextToSize(player.specialty, cardWidth - 2 * cardPadding).slice(0, 2);
           doc.text(specialtyLines, x + cardWidth / 2, currentY, { align: 'center', maxWidth: cardWidth - 2 * cardPadding });
-          currentY += (specialtyLines.length * 2.5);
+          currentY += specialtyLines.length * 2.8;
         }
 
-        // Mobile Number
-        if (player.contact_number) {
-          doc.setFontSize(6.5);
+        // Stats box at the bottom of the card (no phone number on a handout)
+        const stats = player.stats || {};
+        const statPairs = [];
+        if (stats.runs != null || stats.wickets != null) {
+          if (stats.runs != null) statPairs.push({ value: String(stats.runs), label: 'RUNS' });
+          if (stats.wickets != null) statPairs.push({ value: String(stats.wickets), label: 'WICKETS' });
+        } else if (stats.goals != null || stats.assists != null) {
+          if (stats.goals != null) statPairs.push({ value: String(stats.goals), label: 'GOALS' });
+          if (stats.assists != null) statPairs.push({ value: String(stats.assists), label: 'ASSISTS' });
+        }
+        const boxH = 13;
+        const boxY = y + cardHeight - boxH - 3;
+        doc.setFillColor(30, 58, 95);
+        doc.roundedRect(x + 3, boxY, cardWidth - 6, boxH, 1.5, 1.5, 'F');
+        if (statPairs.length > 0) {
+          statPairs.forEach((s, idx) => {
+            const cx = x + 3 + ((cardWidth - 6) * (idx + 0.5)) / statPairs.length;
+            doc.setTextColor(251, 191, 36);
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'bold');
+            doc.text(s.value, cx, boxY + 5.5, { align: 'center' });
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(6);
+            doc.setFont(undefined, 'normal');
+            doc.text(s.label, cx, boxY + 10, { align: 'center' });
+          });
+        } else {
+          // No stats: show the category instead
+          const categoryName = categories.find((c) => c.id === player.category_id)?.name || '';
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(7.5);
           doc.setFont(undefined, 'normal');
-          doc.setTextColor(60, 60, 60);
-          doc.text(player.contact_number, x + cardWidth / 2, currentY, { align: 'center', maxWidth: cardWidth - 2 * cardPadding });
+          doc.text(categoryName, x + cardWidth / 2, boxY + 8, { align: 'center', maxWidth: cardWidth - 8 });
         }
       }
 
